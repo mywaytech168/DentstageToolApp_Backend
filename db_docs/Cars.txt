@@ -1,0 +1,14 @@
+CREATE TABLE Cars (
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50),
+    CarUID                 VARCHAR(100) PRIMARY KEY,
+    CarNo                  VARCHAR(50),
+    CarNo_query            VARCHAR(50),
+    Brand                  VARCHAR(50),
+    Model                  VARCHAR(50),
+    Color                  VARCHAR(50),
+    Car_Remark             VARCHAR(255),
+    Brand_Model            VARCHAR(100)
+);

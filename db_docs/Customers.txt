@@ -1,0 +1,21 @@
+CREATE TABLE Customers (
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50),
+    CustomerUID            VARCHAR(100) PRIMARY KEY,
+    Name                   VARCHAR(100),
+    CustomerType           VARCHAR(50),
+    Gender                 VARCHAR(10),
+    Connect                VARCHAR(100),
+    Phone                  VARCHAR(20),
+    Phone_query            VARCHAR(20),
+    Email                  VARCHAR(100),
+    AgeRange               VARCHAR(50),
+    County                 VARCHAR(50),
+    Township               VARCHAR(50),
+    Source                 VARCHAR(100),
+    Reason                 VARCHAR(255),
+    Connect_Remark         VARCHAR(255),
+    ConnectSameAsName      VARCHAR(10)
+);

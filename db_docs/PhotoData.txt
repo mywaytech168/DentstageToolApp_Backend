@@ -1,0 +1,13 @@
+CREATE TABLE PhotoData (
+    PhotoUID            VARCHAR(100) PRIMARY KEY,
+    QuotationUID        VARCHAR(100),
+    RelatedUID          VARCHAR(100),
+    Posion              VARCHAR(50),
+    Comment             TEXT,
+    Photo_shape         VARCHAR(50),
+    Photo_shape_other   VARCHAR(50),
+    Photo_shape_show    VARCHAR(50),
+    Cost                DECIMAL(10,2),
+    Flag_Finish         BOOLEAN,
+    Finish_Cost         DECIMAL(10,2)
+);

@@ -1,0 +1,21 @@
+CREATE TABLE BlackLists (
+    CreationTimestamp       DATETIME,
+    CreatedBy               VARCHAR(50),
+    ModificationTimestamp   DATETIME,
+    ModifiedBy              VARCHAR(50),
+    ID                      INT PRIMARY KEY,
+    StoreUID                VARCHAR(100),
+    UserUID                 VARCHAR(100),
+    Status                  VARCHAR(50),
+    CancelDate              DATE,
+    BookDate                DATE,
+    FixDate                 DATE,
+    CustomerUID             VARCHAR(100),
+    CustomerName            VARCHAR(100),
+    CustomerPhone           VARCHAR(20),
+    CustomerPhone_filter    VARCHAR(20),
+    Flag_Black              BOOLEAN,
+    Reason                  VARCHAR(255),
+    QuotationUID            VARCHAR(100),
+    UserName                VARCHAR(100)
+);
