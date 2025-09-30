@@ -9,12 +9,12 @@ namespace DentstageToolApp.Api.Quotations;
 public class QuotationListQuery
 {
     /// <summary>
-    /// 指定維修類型，對應資料表欄位 FixType。
+    /// 指定維修類型，對應資料表欄位 FixType。 ALL->(null) 凹痕 美容 鈑烤 其他
     /// </summary>
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 指定估價單狀態碼，對應資料表欄位 Status。
+    /// 指定估價單狀態碼，對應資料表欄位 Status。 ALL->(null) 110 180 190 191 195
     /// </summary>
     public string? Status { get; set; }
 

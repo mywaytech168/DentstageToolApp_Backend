@@ -34,6 +34,10 @@ public class AuthController : ControllerBase
     /// <summary>
     /// 透過裝置機碼進行登入，若驗證成功則回傳權杖。
     /// </summary>
+    /// <remarks>
+    /// CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C 直營店測試 &#10;
+    /// BFC29A95-885C-CF45-A91C-F0DD3F1DDD7B 加盟店測試 &#10;
+    /// </remarks>
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

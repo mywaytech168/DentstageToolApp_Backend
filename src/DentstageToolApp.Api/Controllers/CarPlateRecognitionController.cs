@@ -38,8 +38,6 @@ public class CarPlateRecognitionController : ControllerBase
     /// <summary>
     /// 上傳車牌影像並回傳車牌、車輛資料與維修紀錄。
     /// </summary>
-    /// <param name="request">包含影像檔案或 Base64 的請求物件。</param>
-    /// <param name="cancellationToken">取消權杖，用於前端中止等待時終止作業。</param>
     [HttpPost("recognitions")]
     [ProducesResponseType(typeof(CarPlateRecognitionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

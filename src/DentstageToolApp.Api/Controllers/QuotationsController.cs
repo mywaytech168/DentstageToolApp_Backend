@@ -1,10 +1,11 @@
-using System.Threading;
-using System.Threading.Tasks;
 using DentstageToolApp.Api.Quotations;
 using DentstageToolApp.Api.Services.Quotation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -13,6 +14,7 @@ namespace DentstageToolApp.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/quotations")]
+[Authorize]
 public class QuotationsController : ControllerBase
 {
     private readonly IQuotationService _quotationService;

@@ -74,7 +74,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 // 讀取 Swagger 組態，提供後續中介層調整依據
 var swaggerSection = builder.Configuration.GetSection("Swagger");
-var swaggerEnabled = swaggerSection.GetValue<bool?>("Enabled") ?? builder.Environment.IsDevelopment();
+var swaggerEnabled = true;
 var swaggerRoutePrefix = swaggerSection.GetValue<string?>("RoutePrefix") ?? "swagger";
 var swaggerEndpointName = swaggerSection.GetValue<string?>("EndpointName") ?? "Dentstage Tool App API v1";
 var swaggerDocumentTitle = swaggerSection.GetValue<string?>("DocumentTitle") ?? "Dentstage Tool App 後端 API 文件";
