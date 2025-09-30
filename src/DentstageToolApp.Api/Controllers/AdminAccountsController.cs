@@ -53,12 +53,12 @@ public class AdminAccountsController : ControllerBase
         catch (AccountAdminException ex)
         {
             _logger.LogWarning(ex, "建立帳號失敗：{Message}", ex.Message);
-            return BuildErrorResponse(ex.StatusCode, ex.Message);
+            return BuildErrorResponse(ex.StatusCode, ex.Message, "建立帳號失敗");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "建立帳號流程發生未預期錯誤。");
-            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。");
+            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "建立帳號失敗");
         }
     }
 
@@ -67,12 +67,12 @@ public class AdminAccountsController : ControllerBase
     /// <summary>
     /// 統一建立 ProblemDetails 物件，確保錯誤輸出一致。
     /// </summary>
-    private ActionResult BuildErrorResponse(HttpStatusCode statusCode, string message)
+    private ActionResult BuildErrorResponse(HttpStatusCode statusCode, string message, string title)
     {
         var problem = new ProblemDetails
         {
             Status = (int)statusCode,
-            Title = "建立帳號失敗",
+            Title = title,
             Detail = message,
             Instance = HttpContext.Request.Path
         };
