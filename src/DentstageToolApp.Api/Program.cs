@@ -1,5 +1,8 @@
+using System.IO;
+using System.Reflection;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +11,29 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // 啟用 Swagger 方便初期開發與溝通 API 規格
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // 建立 API 說明文件的基本資訊，方便協作與客戶對齊規格
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Dentstage Tool App API",
+        Version = "v1",
+        Description = "提供凹痕工廠後台系統所需的後端服務介面與健康檢查端點。",
+        Contact = new OpenApiContact
+        {
+            Name = "Dentstage Tool App Team",
+            Email = "support@dentstage.com"
+        }
+    });
+
+    // 讀取 XML 註解檔案，讓 Swagger UI 可以呈現中文摘要說明
+    var xmlFilename = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFilename);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+    }
+});
 // 設定資料庫內容類別，利用 DB First 模型對應實際資料表結構
 builder.Services.AddDbContext<DentstageToolAppContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DentstageToolAppDatabase")));
@@ -19,8 +44,14 @@ var app = builder.Build();
 // 在開發階段顯示 Swagger UI，方便快速驗證 API
 if (app.Environment.IsDevelopment())
 {
+    // 以具名文件來源呈現 Swagger UI，並提供友善的 API 首頁描述
     app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Dentstage Tool App API v1");
+        options.DocumentTitle = "Dentstage Tool App 後端 API 文件";
+        options.RoutePrefix = "swagger";
+    });
 }
 
 // 啟用 HTTPS 重新導向，確保外部存取使用安全通道

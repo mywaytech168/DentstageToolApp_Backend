@@ -8,6 +8,9 @@
 DentstageToolApp_Backend/
 ├─ DentstageToolApp_Backend.sln        # 方案檔，統一管理所有後端模組
 ├─ global.json                          # 指定 .NET SDK 版本，確保環境一致
+├─ docs/
+│  └─ swagger/                          # 匯出的 Swagger 規格文件
+│     └─ dentstage-tool-app-api-v1.json # 初始健康檢查 API 文件
 ├─ src/
 │  ├─ DentstageToolApp.Api/             # Web API 專案目錄
 │  │  ├─ Controllers/
@@ -31,6 +34,7 @@ DentstageToolApp_Backend/
 3. 依據實際環境調整 `appsettings.json` 或 `appsettings.Development.json` 的 `DentstageToolAppDatabase` 連線字串。
 4. 以 `dotnet run --project src/DentstageToolApp.Api` 啟動後端服務。
 5. 服務啟動後，可透過 `https://localhost:7249/swagger` 瀏覽 API 說明文件。
+6. 若需離線瀏覽 API，可打開 `docs/swagger/dentstage-tool-app-api-v1.json` 於 Swagger UI 或 Postman 匯入檢視。
 
 > 若在本地環境使用 Visual Studio 或 Rider，請直接開啟 `DentstageToolApp_Backend.sln` 方案檔。
 
@@ -39,6 +43,15 @@ DentstageToolApp_Backend/
 - 所有程式碼請維持中文註解，清楚說明邏輯與目的。
 - 新增模組時，建議以資料夾劃分領域 (例如 `Modules/Orders`)，方便維護。
 - 若需調整資料表結構，可在 `DentstageToolApp.Infrastructure` 專案中修改 EF Core 實體或 `DentstageToolAppContext` 對應設定。
+
+## Swagger 文件使用指引
+
+1. **本機預覽**：啟動 API 專案後造訪 `/swagger`，即可檢視包含控制器摘要與範例的即時文件。
+2. **離線分享**：匯出自動產生的文件時，可複製 `docs/swagger/dentstage-tool-app-api-v1.json` 提供給前端或外部廠商。
+3. **驗收清單**：
+   - [ ] Swagger UI 能正常開啟且顯示 `Dentstage Tool App API v1`。
+   - [ ] 健康檢查端點擁有中文摘要與範例回應。
+   - [ ] `docs/swagger` 目錄內文件版本與服務端口一致，避免文件落後。
 
 歡迎依據專案需求持續擴充功能與測試。若需更多背景資訊，請參考 `db_docs/` 與原始 API 規格文件。
 
