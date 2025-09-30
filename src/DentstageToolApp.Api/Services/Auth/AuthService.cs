@@ -94,11 +94,11 @@ public class AuthService : IAuthService
             device.ExpireAt = refreshTokenExpireAt;
         }
         device.ModificationTimestamp = now;
-        device.ModifiedBy = user.Account;
+        device.ModifiedBy = GetUserIdentityLabel(user);
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("使用者 {Account} 的裝置 {Device} 成功登入。", user.Account, device.DeviceRegistrationUid);
+        _logger.LogInformation("使用者 {Account} 的裝置 {Device} 成功登入。", GetUserIdentityLabel(user), device.DeviceRegistrationUid);
 
         return new LoginResponse
         {
@@ -177,7 +177,7 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("使用者 {Account} 透過裝置 {Device} 更新 Token。", user.Account, device.DeviceRegistrationUid);
+        _logger.LogInformation("使用者 {Account} 透過裝置 {Device} 更新 Token。", GetUserIdentityLabel(user), device.DeviceRegistrationUid);
 
         return new LoginResponse
         {
@@ -204,7 +204,7 @@ public class AuthService : IAuthService
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.UserUid),
-            new(JwtRegisteredClaimNames.UniqueName, user.Account),
+            new(JwtRegisteredClaimNames.UniqueName, user.UserUid),
             new("displayName", user.DisplayName ?? string.Empty),
             new("device", device.DeviceRegistrationUid)
         };
@@ -239,13 +239,22 @@ public class AuthService : IAuthService
             DeviceRegistrationUid = device.DeviceRegistrationUid,
             ExpireAt = expireAt,
             CreationTimestamp = now,
-            CreatedBy = user.Account,
+            CreatedBy = GetUserIdentityLabel(user),
             UserAccount = user,
             DeviceRegistration = device
         };
 
         _context.RefreshTokens.Add(refreshToken);
         return refreshToken;
+    }
+
+    /// <summary>
+    /// 取得使用者顯示標籤，優先採用顯示名稱，若無則回退至唯一識別碼。
+    /// </summary>
+    private static string GetUserIdentityLabel(UserAccount user)
+    {
+        // 針對缺乏顯示名稱的使用者，改用 UID 以利追蹤
+        return string.IsNullOrWhiteSpace(user.DisplayName) ? user.UserUid : user.DisplayName!;
     }
 
     /// <summary>

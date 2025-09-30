@@ -131,16 +131,8 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("UserUID");
         entity.Property(e => e.CreatedBy).HasMaxLength(50);
         entity.Property(e => e.ModifiedBy).HasMaxLength(50);
-        entity.Property(e => e.Account)
-            .IsRequired()
-            .HasMaxLength(100);
-        entity.Property(e => e.PasswordHash)
-            .IsRequired()
-            .HasMaxLength(200);
         entity.Property(e => e.DisplayName).HasMaxLength(100);
         entity.Property(e => e.Role).HasMaxLength(50);
-        entity.HasIndex(e => e.Account)
-            .IsUnique();
         entity.HasMany(e => e.DeviceRegistrations)
             .WithOne(e => e.UserAccount)
             .HasForeignKey(e => e.UserUid)

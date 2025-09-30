@@ -34,16 +34,6 @@ public class UserAccount
     public string UserUid { get; set; } = null!;
 
     /// <summary>
-    /// 帳號名稱，供登入時輸入使用。
-    /// </summary>
-    public string Account { get; set; } = null!;
-
-    /// <summary>
-    /// 密碼雜湊值，採用雜湊後字串而非明碼保存。
-    /// </summary>
-    public string PasswordHash { get; set; } = null!;
-
-    /// <summary>
     /// 顯示名稱，提供前端顯示使用。
     /// </summary>
     public string? DisplayName { get; set; }
