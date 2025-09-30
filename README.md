@@ -71,7 +71,7 @@ DentstageToolApp_Backend/
    - 服務啟動後，透過下列範例指令進行驗證：
 
      ```bash
-     curl -X POST "https://localhost:7249/api/license-plates/recognitions" \
+    curl -X POST "https://localhost:7249/api/car-plates/recognitions" \
        -H "Authorization: Bearer <JWT_TOKEN>" \
        -F "image=@/path/to/license.jpg"
      ```
@@ -80,7 +80,7 @@ DentstageToolApp_Backend/
    - 影像辨識取得車牌號後，可進一步呼叫維修紀錄查詢 API：
 
      ```bash
-     curl -X POST "https://localhost:7249/api/license-plates/search" \
+    curl -X POST "https://localhost:7249/api/car-plates/search" \
        -H "Authorization: Bearer <JWT_TOKEN>" \
        -H "Content-Type: application/json" \
        -d '{

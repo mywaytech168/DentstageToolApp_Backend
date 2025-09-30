@@ -1,11 +1,11 @@
 using System.Collections.Generic;
 
-namespace DentstageToolApp.Api.LicensePlates;
+namespace DentstageToolApp.Api.CarPlates;
 
 /// <summary>
 /// 車牌維修紀錄查詢的回應資料，提供車輛與維修紀錄清單。
 /// </summary>
-public class LicensePlateMaintenanceHistoryResponse
+public class CarPlateMaintenanceHistoryResponse
 {
     /// <summary>
     /// 查詢後使用的正規化車牌號碼，方便前端顯示與後續查詢。
@@ -35,7 +35,7 @@ public class LicensePlateMaintenanceHistoryResponse
     /// <summary>
     /// 維修紀錄清單，按照時間新至舊排序。
     /// </summary>
-    public IReadOnlyCollection<LicensePlateMaintenanceRecordDto> Records { get; set; } = new List<LicensePlateMaintenanceRecordDto>();
+    public IReadOnlyCollection<CarPlateMaintenanceRecordDto> Records { get; set; } = new List<CarPlateMaintenanceRecordDto>();
 
     /// <summary>
     /// 服務端提供的提示訊息，用於顯示在畫面上。
