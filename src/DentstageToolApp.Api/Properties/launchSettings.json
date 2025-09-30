@@ -3,8 +3,8 @@
   "profiles": {
     "DentstageToolApp.Api": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
-      "launchBrowser": true,
+      "dotnetRunMessages": false,
+      "launchBrowser": false,
       "applicationUrl": "http://localhost:5249",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
