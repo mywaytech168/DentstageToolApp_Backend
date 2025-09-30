@@ -48,24 +48,31 @@ DentstageToolApp_Backend/
 
 為了支援車牌辨識流程，專案已整合 OpenALPR。部署前請依照以下步驟準備環境與測試：
 
-1. **準備 OpenALPR 資源檔**
+1. **準備 OpenALPR CLI**
+   - 於伺服器安裝 OpenALPR（社群版或商業版皆可），並確認 `alpr` 指令可於命令列執行。
    - 將 `openalpr.conf` 與 `runtime_data` 目錄放置於伺服器可讀取的位置，例如 Linux `/opt/openalpr`、Windows `C:/openalpr`。
-   - 若使用商業版或雲端授權，請向官方申請 API Key 並填入 `appsettings*.json`。
 
 2. **設定組態檔**
    - 編輯 `src/DentstageToolApp.Api/appsettings.json` 或對應環境檔，調整 `OpenAlpr` 區段：
 
      ```json
      "OpenAlpr": {
+       "ExecutablePath": "/usr/bin/alpr",
        "Country": "tw",
        "Region": "tw",
        "ConfigFilePath": "/opt/openalpr/openalpr.conf",
        "RuntimeDataDirectory": "/opt/openalpr/runtime_data",
-       "ApiKey": ""
+       "ProcessTimeoutSeconds": 15,
+       "TemporaryImageDirectory": "/var/tmp/openalpr",
+       "AdditionalArguments": [
+         "-n",
+         "5"
+       ]
      }
      ```
 
-   - `Country` 與 `Region` 可依實際辨識車牌的國家／地區調整。
+   - `ExecutablePath` 指向 OpenALPR CLI 的完整路徑；`Country`、`Region` 可依實際辨識車牌的國家／地區調整。
+   - 如需限制候選數量、套用自訂 Pattern，可透過 `AdditionalArguments` 陣列逐一傳入 CLI 參數。
 
 3. **測試 API**
    - 服務啟動後，透過下列範例指令進行驗證：

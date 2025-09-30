@@ -101,6 +101,26 @@ public class LicensePlateRecognitionController : ControllerBase
                 Status = StatusCodes.Status400BadRequest
             });
         }
+        catch (TimeoutException ex)
+        {
+            _logger.LogError(ex, "OpenALPR CLI 辨識逾時。");
+            return StatusCode(StatusCodes.Status504GatewayTimeout, new ProblemDetails
+            {
+                Title = "車牌辨識逾時",
+                Detail = "OpenALPR 執行時間過長，請稍後再試或檢查伺服器資源。",
+                Status = StatusCodes.Status504GatewayTimeout
+            });
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogError(ex, "找不到 OpenALPR 執行檔。");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Title = "車牌辨識環境未就緒",
+                Detail = "伺服器缺少 OpenALPR 執行檔，請聯絡系統管理員安裝或更新設定。",
+                Status = StatusCodes.Status500InternalServerError
+            });
+        }
         catch (InvalidOperationException ex)
         {
             _logger.LogError(ex, "車牌辨識服務組態錯誤。");
