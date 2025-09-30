@@ -113,6 +113,77 @@ public class LicensePlateRecognitionController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 依據車牌號碼查詢歷史維修資料，提供工單清單與車輛資訊。
+    /// </summary>
+    /// <param name="request">包含欲查詢車牌號碼的請求物件。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpPost("search")]
+    [ProducesResponseType(typeof(LicensePlateMaintenanceHistoryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<LicensePlateMaintenanceHistoryResponse>> SearchAsync(
+        [FromBody] LicensePlateMaintenanceHistoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null || string.IsNullOrWhiteSpace(request.LicensePlateNumber))
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "車牌搜尋條件不足",
+                Detail = "請輸入欲查詢的車牌號碼。",
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+
+        try
+        {
+            var result = await _licensePlateRecognitionService.GetMaintenanceHistoryAsync(request.LicensePlateNumber, cancellationToken);
+
+            if (!result.HasMaintenanceRecords)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Title = "查無維修紀錄",
+                    Detail = "資料庫沒有找到該車牌的維修紀錄，請確認車牌是否正確或尚未維修過。",
+                    Status = StatusCodes.Status404NotFound
+                });
+            }
+
+            return Ok(result);
+        }
+        catch (InvalidDataException ex)
+        {
+            _logger.LogWarning(ex, "車牌號碼格式錯誤。");
+            return BadRequest(new ProblemDetails
+            {
+                Title = "車牌格式錯誤",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "車牌搜尋參數錯誤。");
+            return BadRequest(new ProblemDetails
+            {
+                Title = "車牌搜尋參數錯誤",
+                Detail = ex.Message,
+                Status = StatusCodes.Status400BadRequest
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "查詢車牌維修紀錄時發生例外。");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ProblemDetails
+            {
+                Title = "車牌維修紀錄查詢異常",
+                Detail = ex.Message,
+                Status = StatusCodes.Status500InternalServerError
+            });
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
