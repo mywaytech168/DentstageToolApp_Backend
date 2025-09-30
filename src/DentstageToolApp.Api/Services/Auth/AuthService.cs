@@ -192,6 +192,36 @@ public class AuthService : IAuthService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<AuthInfoResponse> GetUserInfoAsync(string userUid, CancellationToken cancellationToken)
+    {
+        // 先修剪輸入避免只含空白，確保查詢有效
+        var normalizedUserUid = (userUid ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedUserUid))
+        {
+            // 缺少有效識別碼時回傳 400，提示呼叫端重新登入
+            throw new AuthException(HttpStatusCode.BadRequest, "權杖缺少使用者識別碼，請重新登入後再試。");
+        }
+
+        // 查詢使用者帳號並以唯讀方式取得顯示名稱與角色
+        var user = await _context.UserAccounts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.UserUid == normalizedUserUid, cancellationToken);
+
+        if (user is null)
+        {
+            // 找不到資料時回傳 404，避免洩漏其他帳號資訊
+            throw new AuthException(HttpStatusCode.NotFound, "找不到對應的使用者帳號。");
+        }
+
+        return new AuthInfoResponse
+        {
+            DisplayName = user.DisplayName,
+            Role = user.Role
+        };
+    }
+
     /// <summary>
     /// 產生 Access Token，並設定必要的 Claims。
     /// </summary>

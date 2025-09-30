@@ -111,34 +111,4 @@ public class AccountAdminService : IAccountAdminService
         };
     }
 
-    /// <inheritdoc />
-    public async Task<AdminAccountDetailResponse> GetAccountAsync(string userUid, CancellationToken cancellationToken)
-    {
-        // 先行修剪輸入，避免僅輸入空白造成查詢錯誤。
-        var normalizedUserUid = (userUid ?? string.Empty).Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedUserUid))
-        {
-            // 若未提供有效識別碼，回傳 400 提醒呼叫端補足參數。
-            throw new AccountAdminException(HttpStatusCode.BadRequest, "使用者識別碼不可為空白。");
-        }
-
-        // 只需顯示基本資料，因此不載入裝置等相關導覽屬性以提升查詢效能。
-        var user = await _context.UserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UserUid == normalizedUserUid, cancellationToken);
-
-        if (user == null)
-        {
-            // 查無資料時以 404 告知前端，便於顯示友善訊息。
-            throw new AccountAdminException(HttpStatusCode.NotFound, "找不到指定的使用者帳號。");
-        }
-
-        // 將資料庫欄位直接對應至回應模型，維持與 useraccounts 表一致。
-        return new AdminAccountDetailResponse
-        {
-            DisplayName = user.DisplayName,
-            Role = user.Role
-        };
-    }
 }

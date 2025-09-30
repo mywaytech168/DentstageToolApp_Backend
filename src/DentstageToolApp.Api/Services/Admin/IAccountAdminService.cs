@@ -14,8 +14,4 @@ public interface IAccountAdminService
     /// </summary>
     Task<CreateUserDeviceResponse> CreateUserWithDeviceAsync(CreateUserDeviceRequest request, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// 依照使用者識別碼查詢帳號資訊與裝置清單。
-    /// </summary>
-    Task<AdminAccountDetailResponse> GetAccountAsync(string userUid, CancellationToken cancellationToken);
 }

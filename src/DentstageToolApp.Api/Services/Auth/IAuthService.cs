@@ -16,4 +16,9 @@ public interface IAuthService
     /// 透過 Refresh Token 重新取得新的存取權杖。
     /// </summary>
     Task<LoginResponse> RefreshTokenAsync(RefreshTokenRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 依使用者識別碼取得登入者的顯示名稱與角色資訊。
+    /// </summary>
+    Task<AuthInfoResponse> GetUserInfoAsync(string userUid, CancellationToken cancellationToken);
 }
