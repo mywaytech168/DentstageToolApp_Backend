@@ -9,12 +9,17 @@ DentstageToolApp_Backend/
 ├─ DentstageToolApp_Backend.sln        # 方案檔，統一管理所有後端模組
 ├─ global.json                          # 指定 .NET SDK 版本，確保環境一致
 ├─ src/
-│  └─ DentstageToolApp.Api/             # Web API 專案目錄
-│     ├─ Controllers/
-│     │  └─ HealthCheckController.cs    # 健康檢查 API，提供服務狀態
-│     ├─ Program.cs                     # 服務啟動與中介層設定
-│     ├─ appsettings*.json              # 組態檔，可依環境調整
-│     └─ Properties/launchSettings.json # 開發階段啟動設定
+│  ├─ DentstageToolApp.Api/             # Web API 專案目錄
+│  │  ├─ Controllers/
+│  │  │  └─ HealthCheckController.cs    # 健康檢查 API，提供服務狀態
+│  │  ├─ Program.cs                     # 服務啟動、中介層與 DbContext 註冊
+│  │  ├─ appsettings*.json              # 組態檔，可依環境調整與設定連線字串
+│  │  └─ Properties/launchSettings.json # 開發階段啟動設定
+│  └─ DentstageToolApp.Infrastructure/  # DB First 產生的實體與資料庫內容類別
+│     ├─ DentstageToolApp.Infrastructure.csproj
+│     ├─ Data/
+│     │  └─ DentstageToolAppContext.cs  # EF Core DbContext，對應資料表結構
+│     └─ Entities/                      # 各資料表實體類別
 ├─ db_docs/                             # 既有資料庫文件
 └─ 卓越-凹痕工廠APP重製-頁面規劃-API表 - 後台.csv
 ```
@@ -23,8 +28,9 @@ DentstageToolApp_Backend/
 
 1. 安裝 [.NET SDK 8.0](https://dotnet.microsoft.com/download/dotnet/8.0)。
 2. 於專案根目錄執行 `dotnet restore` 下載所需套件。
-3. 以 `dotnet run --project src/DentstageToolApp.Api` 啟動後端服務。
-4. 服務啟動後，可透過 `https://localhost:7249/swagger` 瀏覽 API 說明文件。
+3. 依據實際環境調整 `appsettings.json` 或 `appsettings.Development.json` 的 `DentstageToolAppDatabase` 連線字串。
+4. 以 `dotnet run --project src/DentstageToolApp.Api` 啟動後端服務。
+5. 服務啟動後，可透過 `https://localhost:7249/swagger` 瀏覽 API 說明文件。
 
 > 若在本地環境使用 Visual Studio 或 Rider，請直接開啟 `DentstageToolApp_Backend.sln` 方案檔。
 
@@ -32,6 +38,6 @@ DentstageToolApp_Backend/
 
 - 所有程式碼請維持中文註解，清楚說明邏輯與目的。
 - 新增模組時，建議以資料夾劃分領域 (例如 `Modules/Orders`)，方便維護。
-- 若需串接資料庫，請優先建立資料夾 `Infrastructure/` 並撰寫對應的 Repository 或 DbContext。
+- 若需調整資料表結構，可在 `DentstageToolApp.Infrastructure` 專案中修改 EF Core 實體或 `DentstageToolAppContext` 對應設定。
 
 歡迎依據專案需求持續擴充功能與測試。若需更多背景資訊，請參考 `db_docs/` 與原始 API 規格文件。
