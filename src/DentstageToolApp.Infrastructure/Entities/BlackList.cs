@@ -48,19 +48,19 @@ public class BlackList
     public string? Status { get; set; }
 
     /// <summary>
-    /// 取消日期。
+    /// 取消日期（以字串儲存，沿用舊系統格式）。
     /// </summary>
-    public DateOnly? CancelDate { get; set; }
+    public string? CancelDate { get; set; }
 
     /// <summary>
-    /// 預約日期。
+    /// 預約日期（以字串儲存，沿用舊系統格式）。
     /// </summary>
-    public DateOnly? BookDate { get; set; }
+    public string? BookDate { get; set; }
 
     /// <summary>
-    /// 修復日期。
+    /// 修復日期（以字串儲存，沿用舊系統格式）。
     /// </summary>
-    public DateOnly? FixDate { get; set; }
+    public string? FixDate { get; set; }
 
     /// <summary>
     /// 顧客識別碼。
