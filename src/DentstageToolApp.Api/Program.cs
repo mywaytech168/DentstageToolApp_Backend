@@ -3,6 +3,7 @@ using System.Reflection;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,23 +35,44 @@ builder.Services.AddSwaggerGen(options =>
         options.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
     }
 });
-// 設定資料庫內容類別，利用 DB First 模型對應實際資料表結構
+// 讀取 Swagger 組態，提供後續中介層調整依據
+var swaggerSection = builder.Configuration.GetSection("Swagger");
+var swaggerEnabled = swaggerSection.GetValue<bool?>("Enabled") ?? builder.Environment.IsDevelopment();
+var swaggerRoutePrefix = swaggerSection.GetValue<string?>("RoutePrefix") ?? "swagger";
+var swaggerEndpointName = swaggerSection.GetValue<string?>("EndpointName") ?? "Dentstage Tool App API v1";
+var swaggerDocumentTitle = swaggerSection.GetValue<string?>("DocumentTitle") ?? "Dentstage Tool App 後端 API 文件";
+
+// 設定資料庫內容類別，改用 MySQL 連線並確保連線字串存在
+var connectionString = builder.Configuration.GetConnectionString("DentstageToolAppDatabase");
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException("未設定 DentstageToolAppDatabase 連線字串，無法啟動資料庫服務。");
+}
+
+// 透過 Pomelo 偵測伺服器版本，並設定重試策略提升穩定度
+var serverVersion = ServerVersion.AutoDetect(connectionString);
 builder.Services.AddDbContext<DentstageToolAppContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DentstageToolAppDatabase")));
+    options.UseMySql(connectionString, serverVersion, mySqlOptions =>
+    {
+        // 啟用自動重試，避免瞬斷造成的連線失敗
+        mySqlOptions.EnableRetryOnFailure();
+    }));
 
 var app = builder.Build();
 
 // ---------- 中介層設定區 ----------
-// 在開發階段顯示 Swagger UI，方便快速驗證 API
-if (app.Environment.IsDevelopment())
+// 依組態判斷是否顯示 Swagger UI，方便快速驗證 API
+if (swaggerEnabled)
 {
     // 以具名文件來源呈現 Swagger UI，並提供友善的 API 首頁描述
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Dentstage Tool App API v1");
-        options.DocumentTitle = "Dentstage Tool App 後端 API 文件";
-        options.RoutePrefix = "swagger";
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", swaggerEndpointName);
+        options.DocumentTitle = swaggerDocumentTitle;
+        options.RoutePrefix = string.IsNullOrWhiteSpace(swaggerRoutePrefix)
+            ? string.Empty
+            : swaggerRoutePrefix.Trim('/');
     });
 }
 

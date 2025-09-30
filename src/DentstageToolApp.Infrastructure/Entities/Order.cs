@@ -188,9 +188,9 @@ public class Order
     public string? QuatationUid { get; set; }
 
     /// <summary>
-    /// 預約日期。
+    /// 預約日期（以字串儲存，方便對應 MySQL VARCHAR 欄位）。
     /// </summary>
-    public DateOnly? BookDate { get; set; }
+    public string? BookDate { get; set; }
 
     /// <summary>
     /// 預約方式。
@@ -198,9 +198,9 @@ public class Order
     public string? BookMethod { get; set; }
 
     /// <summary>
-    /// 預計施工日期。
+    /// 預計施工日期（以字串儲存，保留原始填寫格式）。
     /// </summary>
-    public DateOnly? WorkDate { get; set; }
+    public string? WorkDate { get; set; }
 
     /// <summary>
     /// 施工日期備註。
