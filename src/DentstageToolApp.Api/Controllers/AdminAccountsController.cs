@@ -63,7 +63,7 @@ public class AdminAccountsController : ControllerBase
     }
 
     /// <summary>
-    /// 依使用者識別碼查詢帳號資訊與裝置清單。
+    /// 依使用者識別碼查詢帳號資訊，目前僅回傳 DisplayName 與 Role。
     /// </summary>
     [HttpGet("{userUid}")]
     [ProducesResponseType(typeof(AdminAccountDetailResponse), StatusCodes.Status200OK)]
@@ -73,7 +73,7 @@ public class AdminAccountsController : ControllerBase
     {
         try
         {
-            // 呼叫服務取得帳號詳情，供前端顯示店家與裝置資料。
+            // 呼叫服務取得帳號基本資料，提供前端顯示顯示名稱與角色。
             var response = await _accountAdminService.GetAccountAsync(userUid, cancellationToken);
             return Ok(response);
         }
