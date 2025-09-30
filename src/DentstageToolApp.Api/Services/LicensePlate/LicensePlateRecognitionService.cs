@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 using DentstageToolApp.Api.LicensePlates;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Infrastructure.Data;
+using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -103,6 +105,103 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
             Message = car is null
                 ? "資料庫無相符車輛，請確認車牌是否正確或需新增車輛資料。"
                 : "辨識成功，已回傳車輛基本資料與維修紀錄。",
+        };
+
+        return response;
+    }
+
+    /// <inheritdoc />
+    public async Task<LicensePlateMaintenanceHistoryResponse> GetMaintenanceHistoryAsync(string licensePlate, CancellationToken cancellationToken)
+    {
+        // ---------- 參數檢核區 ----------
+        if (string.IsNullOrWhiteSpace(licensePlate))
+        {
+            throw new ArgumentException("車牌號碼不可為空，請輸入欲查詢的車牌號碼。", nameof(licensePlate));
+        }
+
+        var trimmedPlate = licensePlate.Trim();
+        var normalizedPlate = NormalizePlate(trimmedPlate);
+
+        if (string.IsNullOrWhiteSpace(normalizedPlate))
+        {
+            throw new InvalidDataException("車牌號碼格式不正確，請確認僅輸入英數字組成的車牌。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料庫查詢區 ----------
+        var car = await _dbContext.Cars
+            .Include(c => c.Orders)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                c => c.CarNo == normalizedPlate
+                    || c.CarNo == trimmedPlate
+                    || c.CarNoQuery == normalizedPlate
+                    || c.CarNoQuery == trimmedPlate,
+                cancellationToken);
+
+        var orders = new List<Order>();
+
+        if (car?.Orders is { Count: > 0 })
+        {
+            // 將車輛底下的工單加入集合，作為初始資料。
+            orders.AddRange(car.Orders);
+        }
+
+        var additionalOrders = await _dbContext.Orders
+            .AsNoTracking()
+            .Where(o =>
+                o.CarNo == normalizedPlate
+                || o.CarNo == trimmedPlate
+                || o.CarNoInput == normalizedPlate
+                || o.CarNoInput == trimmedPlate
+                || o.CarNoInputGlobal == trimmedPlate)
+            .ToListAsync(cancellationToken);
+
+        foreach (var order in additionalOrders)
+        {
+            if (orders.Any(existing => existing.OrderUid == order.OrderUid))
+            {
+                continue;
+            }
+
+            orders.Add(order);
+        }
+
+        // ---------- 組裝回應區 ----------
+        var recordItems = orders
+            .Select(order => new
+            {
+                Record = MapToMaintenanceRecord(order),
+                SortKey = ResolveRecordDate(order)
+            })
+            .OrderByDescending(item => item.SortKey ?? DateTime.MinValue)
+            .ThenByDescending(item => item.Record.CreatedAt ?? DateTime.MinValue)
+            .Select(item => item.Record)
+            .ToList();
+
+        if (recordItems.Count == 0)
+        {
+            _logger.LogInformation("查無車牌 {LicensePlate} 的維修紀錄。", normalizedPlate);
+        }
+        else
+        {
+            _logger.LogInformation("查詢車牌 {LicensePlate} 的維修紀錄共 {Count} 筆。", normalizedPlate, recordItems.Count);
+        }
+
+        var referenceOrder = orders.FirstOrDefault();
+
+        var response = new LicensePlateMaintenanceHistoryResponse
+        {
+            LicensePlateNumber = normalizedPlate,
+            Brand = car?.Brand ?? referenceOrder?.Brand,
+            Model = car?.Model ?? referenceOrder?.Model,
+            Color = car?.Color ?? referenceOrder?.Color,
+            HasMaintenanceRecords = recordItems.Count > 0,
+            Records = recordItems,
+            Message = recordItems.Count > 0
+                ? "查詢成功，已列出歷史維修資料。"
+                : "查無維修紀錄，請確認車牌是否正確或尚未建立維修單。"
         };
 
         return response;
@@ -211,5 +310,66 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
             .ToUpperInvariant();
 
         return normalized;
+    }
+
+    /// <summary>
+    /// 將資料庫工單物件轉換成維修紀錄 DTO。
+    /// </summary>
+    /// <param name="order">資料庫工單資料。</param>
+    /// <returns>維修紀錄 DTO。</returns>
+    private static LicensePlateMaintenanceRecordDto MapToMaintenanceRecord(Order order)
+    {
+        return new LicensePlateMaintenanceRecordDto
+        {
+            OrderUid = order.OrderUid,
+            OrderNo = order.OrderNo,
+            OrderDate = order.Date,
+            CreatedAt = order.CreationTimestamp,
+            Status = order.Status,
+            FixType = order.FixType,
+            Amount = order.Amount,
+            WorkDate = order.WorkDate,
+            Remark = order.Remark
+        };
+    }
+
+    /// <summary>
+    /// 解析工單可用的排序日期，優先使用工單日期，其次為排程開工日與建立時間。
+    /// </summary>
+    /// <param name="order">資料庫工單資料。</param>
+    /// <returns>排序使用的日期時間。</returns>
+    private static DateTime? ResolveRecordDate(Order order)
+    {
+        if (order.Date.HasValue)
+        {
+            return order.Date.Value.ToDateTime(TimeOnly.MinValue);
+        }
+
+        if (!string.IsNullOrWhiteSpace(order.WorkDate) && DateTime.TryParse(order.WorkDate, out var workDate))
+        {
+            return workDate;
+        }
+
+        if (order.Status210Date.HasValue)
+        {
+            return order.Status210Date;
+        }
+
+        if (order.Status220Date.HasValue)
+        {
+            return order.Status220Date;
+        }
+
+        if (order.Status290Date.HasValue)
+        {
+            return order.Status290Date;
+        }
+
+        if (order.Status295Timestamp.HasValue)
+        {
+            return order.Status295Timestamp;
+        }
+
+        return order.CreationTimestamp;
     }
 }

@@ -77,9 +77,22 @@ DentstageToolApp_Backend/
      ```
 
    - 若需改用 Base64，可改用 `-F "imageBase64=$(cat encoded.txt)"` 方式提交，不需額外提供檔案欄位。
+   - 影像辨識取得車牌號後，可進一步呼叫維修紀錄查詢 API：
+
+     ```bash
+     curl -X POST "https://localhost:7249/api/license-plates/search" \
+       -H "Authorization: Bearer <JWT_TOKEN>" \
+       -H "Content-Type: application/json" \
+       -d '{
+         "licensePlateNumber": "ABC1234"
+       }'
+     ```
+
+     成功時會回傳車牌正規化結果、車輛資訊與維修紀錄清單；若查無資料則回傳 404 問題詳情。
 
 4. **驗收清單**
    - [ ] 成功回傳車牌號碼、品牌、型號、顏色與維修紀錄旗標。
+   - [ ] 車牌搜尋 API 可依照車牌回傳歷史維修紀錄清單。
    - [ ] 錯誤情境（影像模糊、Base64 格式錯誤、組態缺失）能得到中文錯誤訊息。
    - [ ] 已於伺服器安裝 Tesseract 並放置所需語系訓練資料，服務啟動時無錯誤紀錄。
 
