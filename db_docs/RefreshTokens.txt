@@ -1,0 +1,23 @@
+CREATE TABLE RefreshTokens (
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50),
+    RefreshTokenUID        VARCHAR(100) PRIMARY KEY,
+    Token                  VARCHAR(500) NOT NULL,
+    UserUID                VARCHAR(100) NOT NULL,
+    DeviceRegistrationUID  VARCHAR(100),
+    ExpireAt               DATETIME      NOT NULL,
+    LastUsedAt             DATETIME,
+    IsRevoked              TINYINT(1)    NOT NULL DEFAULT 0,
+    RevokedAt              DATETIME,
+    CONSTRAINT FK_RefreshTokens_UserAccounts FOREIGN KEY (UserUID)
+        REFERENCES UserAccounts (UserUID)
+        ON DELETE CASCADE,
+    CONSTRAINT FK_RefreshTokens_DeviceRegistrations FOREIGN KEY (DeviceRegistrationUID)
+        REFERENCES DeviceRegistrations (DeviceRegistrationUID)
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IX_RefreshTokens_Token
+    ON RefreshTokens (Token);
