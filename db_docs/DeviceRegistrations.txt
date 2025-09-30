@@ -1,0 +1,20 @@
+CREATE TABLE DeviceRegistrations (
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50),
+    DeviceRegistrationUID  VARCHAR(100) PRIMARY KEY,
+    UserUID                VARCHAR(100) NOT NULL,
+    DeviceKey              VARCHAR(150) NOT NULL,
+    DeviceName             VARCHAR(100),
+    Status                 VARCHAR(20)  NOT NULL,
+    IsBlackListed          TINYINT(1)   NOT NULL DEFAULT 0,
+    LastSignInAt           DATETIME,
+    ExpireAt               DATETIME,
+    CONSTRAINT FK_DeviceRegistrations_UserAccounts FOREIGN KEY (UserUID)
+        REFERENCES UserAccounts (UserUID)
+        ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IX_DeviceRegistrations_UserUID_DeviceKey
+    ON DeviceRegistrations (UserUID, DeviceKey);
