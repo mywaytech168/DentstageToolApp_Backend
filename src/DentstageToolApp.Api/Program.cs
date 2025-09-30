@@ -6,6 +6,7 @@ using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
+using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -128,6 +129,7 @@ builder.Services.AddAuthorization();
 // ---------- 自訂服務註冊 ----------
 builder.Services.AddScoped<IAccountAdminService, AccountAdminService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IQuotationService, QuotationService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
