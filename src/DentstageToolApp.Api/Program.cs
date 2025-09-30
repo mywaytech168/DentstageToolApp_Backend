@@ -1,7 +1,13 @@
 using System.IO;
 using System.Reflection;
+using System.Text;
+using DentstageToolApp.Api.BackgroundJobs;
+using DentstageToolApp.Api.Options;
+using DentstageToolApp.Api.Services.Auth;
 using DentstageToolApp.Infrastructure.Data;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
@@ -58,6 +64,42 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
         mySqlOptions.EnableRetryOnFailure();
     }));
 
+// ---------- JWT 與身份驗證設定 ----------
+builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
+if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
+{
+    throw new InvalidOperationException("未設定 Jwt.Secret，無法產生簽章金鑰。");
+}
+
+var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));
+
+builder.Services
+    .AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = signingKey,
+            ClockSkew = TimeSpan.Zero
+        };
+    });
+
+builder.Services.AddAuthorization();
+
+// ---------- 自訂服務註冊 ----------
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddHostedService<RefreshTokenCleanupService>();
+
 var app = builder.Build();
 
 // ---------- 中介層設定區 ----------
@@ -79,7 +121,8 @@ if (swaggerEnabled)
 // 啟用 HTTPS 重新導向，確保外部存取使用安全通道
 app.UseHttpsRedirection();
 
-// 啟用授權流程，後續可延伸加入身份驗證
+// 啟用身份驗證與授權流程，確保保護後續 API
+app.UseAuthentication();
 app.UseAuthorization();
 
 // 將控制器路由對應到實際的端點

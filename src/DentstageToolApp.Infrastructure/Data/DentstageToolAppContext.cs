@@ -52,6 +52,21 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<BlackList> BlackLists => Set<BlackList>();
 
     /// <summary>
+    /// 使用者帳號資料集。
+    /// </summary>
+    public virtual DbSet<UserAccount> UserAccounts => Set<UserAccount>();
+
+    /// <summary>
+    /// 裝置註冊資料集。
+    /// </summary>
+    public virtual DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
+
+    /// <summary>
+    /// Refresh Token 資料集。
+    /// </summary>
+    public virtual DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    /// <summary>
     /// 建立資料模型對應設定。
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -63,6 +78,9 @@ public class DentstageToolAppContext : DbContext
         ConfigureCarBeauty(modelBuilder);
         ConfigurePhotoData(modelBuilder);
         ConfigureBlackList(modelBuilder);
+        ConfigureUserAccount(modelBuilder);
+        ConfigureDeviceRegistration(modelBuilder);
+        ConfigureRefreshToken(modelBuilder);
     }
 
     /// <summary>
@@ -98,6 +116,98 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.ConnectSameAsName)
             .HasMaxLength(10)
             .HasColumnName("ConnectSameAsName");
+    }
+
+    /// <summary>
+    /// 設定使用者帳號資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigureUserAccount(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<UserAccount>();
+        entity.ToTable("UserAccounts");
+        entity.HasKey(e => e.UserUid);
+        entity.Property(e => e.UserUid)
+            .HasMaxLength(100)
+            .HasColumnName("UserUID");
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.Property(e => e.Account)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.PasswordHash)
+            .IsRequired()
+            .HasMaxLength(200);
+        entity.Property(e => e.DisplayName).HasMaxLength(100);
+        entity.Property(e => e.Role).HasMaxLength(50);
+        entity.HasIndex(e => e.Account)
+            .IsUnique();
+        entity.HasMany(e => e.DeviceRegistrations)
+            .WithOne(e => e.UserAccount)
+            .HasForeignKey(e => e.UserUid)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasMany(e => e.RefreshTokens)
+            .WithOne(e => e.UserAccount)
+            .HasForeignKey(e => e.UserUid)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
+    /// 設定裝置註冊資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigureDeviceRegistration(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<DeviceRegistration>();
+        entity.ToTable("DeviceRegistrations");
+        entity.HasKey(e => e.DeviceRegistrationUid);
+        entity.Property(e => e.DeviceRegistrationUid)
+            .HasMaxLength(100)
+            .HasColumnName("DeviceRegistrationUID");
+        entity.Property(e => e.UserUid)
+            .IsRequired()
+            .HasMaxLength(100)
+            .HasColumnName("UserUID");
+        entity.Property(e => e.DeviceKey)
+            .IsRequired()
+            .HasMaxLength(150);
+        entity.Property(e => e.DeviceName).HasMaxLength(100);
+        entity.Property(e => e.Status)
+            .IsRequired()
+            .HasMaxLength(20);
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.HasIndex(e => new { e.UserUid, e.DeviceKey })
+            .IsUnique();
+        entity.HasMany(e => e.RefreshTokens)
+            .WithOne(e => e.DeviceRegistration)
+            .HasForeignKey(e => e.DeviceRegistrationUid)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
+    /// 設定 Refresh Token 資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigureRefreshToken(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<RefreshToken>();
+        entity.ToTable("RefreshTokens");
+        entity.HasKey(e => e.RefreshTokenUid);
+        entity.Property(e => e.RefreshTokenUid)
+            .HasMaxLength(100)
+            .HasColumnName("RefreshTokenUID");
+        entity.Property(e => e.Token)
+            .IsRequired()
+            .HasMaxLength(500);
+        entity.Property(e => e.UserUid)
+            .IsRequired()
+            .HasMaxLength(100)
+            .HasColumnName("UserUID");
+        entity.Property(e => e.DeviceRegistrationUid)
+            .HasMaxLength(100)
+            .HasColumnName("DeviceRegistrationUID");
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.HasIndex(e => e.Token)
+            .IsUnique();
     }
 
     /// <summary>
