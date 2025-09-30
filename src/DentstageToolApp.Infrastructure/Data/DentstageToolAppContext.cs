@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace DentstageToolApp.Infrastructure.Data;
 
 /// <summary>
-/// 系統資料庫內容類別，透過 DB First 設定對應資料表結構。
+/// 系統資料庫內容類別，對應 MySQL 資料表結構與欄位限制。
 /// </summary>
 public class DentstageToolAppContext : DbContext
 {
@@ -146,7 +146,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
         entity.Property(e => e.Status).HasMaxLength(20);
-        entity.Property(e => e.FixType).HasMaxLength(50);
+        entity.Property(e => e.FixType)
+            .HasMaxLength(50)
+            .HasColumnName("Fix_Type");
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)
             .HasColumnName("CarUID");
@@ -201,6 +203,7 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(255)
             .HasColumnName("Discount_reason");
         entity.Property(e => e.BookDate)
+            .HasMaxLength(20)
             .HasColumnName("Book_Date");
         entity.Property(e => e.BookMethod)
             .HasMaxLength(50)
@@ -252,6 +255,8 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("CurrentStatus_User");
         entity.Property(e => e.FixExpect)
             .HasMaxLength(50);
+        entity.Property(e => e.Reject)
+            .HasColumnType("tinyint(1)");
         entity.Property(e => e.RejectReason)
             .HasMaxLength(255)
             .HasColumnName("Reject_reason");
@@ -269,6 +274,7 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FixExpectHour)
             .HasColumnName("FixExpect_Hour");
         entity.Property(e => e.FlagRegularCustomer)
+            .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_RegularCustomer");
 
         entity.HasOne(d => d.Customer)
@@ -347,16 +353,20 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(100)
             .HasColumnName("QuatationUID");
         entity.Property(e => e.BookDate)
+            .HasMaxLength(20)
             .HasColumnName("Book_Date");
         entity.Property(e => e.BookMethod)
             .HasMaxLength(50)
             .HasColumnName("Book_method");
         entity.Property(e => e.WorkDate)
+            .HasMaxLength(20)
             .HasColumnName("Work_Date");
         entity.Property(e => e.WorkDateRemark)
             .HasMaxLength(255)
             .HasColumnName("Work_Date_remark");
-        entity.Property(e => e.FixType).HasMaxLength(50);
+        entity.Property(e => e.FixType)
+            .HasMaxLength(50)
+            .HasColumnName("Fix_Type");
         entity.Property(e => e.Content).HasColumnType("text");
         entity.Property(e => e.CarReserved).HasMaxLength(50);
         entity.Property(e => e.Remark).HasColumnType("text");
@@ -408,8 +418,10 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.Rebate)
             .HasColumnType("decimal(10,2)");
         entity.Property(e => e.FlagRegularCustomer)
+            .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_RegularCustomer");
         entity.Property(e => e.FlagExternalCooperation)
+            .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_ExternalCooperation");
 
         entity.HasOne(d => d.Quatation)
@@ -542,6 +554,7 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.Cost)
             .HasColumnType("decimal(10,2)");
         entity.Property(e => e.FlagFinish)
+            .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_Finish");
         entity.Property(e => e.FinishCost)
             .HasColumnType("decimal(10,2)")
@@ -567,6 +580,12 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreUid).HasMaxLength(100);
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.Status).HasMaxLength(50);
+        entity.Property(e => e.CancelDate)
+            .HasMaxLength(20);
+        entity.Property(e => e.BookDate)
+            .HasMaxLength(20);
+        entity.Property(e => e.FixDate)
+            .HasMaxLength(20);
         entity.Property(e => e.CustomerUid)
             .HasMaxLength(100)
             .HasColumnName("CustomerUID");
@@ -578,6 +597,7 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(20)
             .HasColumnName("CustomerPhone_filter");
         entity.Property(e => e.FlagBlack)
+            .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_Black");
         entity.Property(e => e.Reason)
             .HasMaxLength(255);
