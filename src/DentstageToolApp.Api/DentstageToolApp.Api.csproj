@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>DentstageToolApp.Api</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../DentstageToolApp.Infrastructure/DentstageToolApp.Infrastructure.csproj" />
+  </ItemGroup>
 </Project>

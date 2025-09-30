@@ -1,3 +1,6 @@
+using DentstageToolApp.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // ---------- 服務註冊區 ----------
@@ -6,6 +9,9 @@ builder.Services.AddControllers();
 // 啟用 Swagger 方便初期開發與溝通 API 規格
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+// 設定資料庫內容類別，利用 DB First 模型對應實際資料表結構
+builder.Services.AddDbContext<DentstageToolAppContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DentstageToolAppDatabase")));
 
 var app = builder.Build();
 
