@@ -1,11 +1,11 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace DentstageToolApp.Api.Admin;
+namespace DentstageToolApp.Api.Auth;
 
 /// <summary>
-/// 管理者查詢帳號時的精簡回應模型，只揭露前端需要的基本資訊。
+/// 提供登入者查詢個人資訊時所需的基本資料模型。
 /// </summary>
-public class AdminAccountDetailResponse
+public class AuthInfoResponse
 {
     /// <summary>
     /// 使用者顯示名稱，對應 useraccounts.DisplayName 欄位。
@@ -14,7 +14,7 @@ public class AdminAccountDetailResponse
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// 使用者角色字串，直接對應 useraccounts.Role 欄位。
+    /// 使用者角色字串，對應 useraccounts.Role 欄位。
     /// </summary>
     [AllowNull]
     public string? Role { get; set; }
