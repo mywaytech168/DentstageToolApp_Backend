@@ -1,8 +1,11 @@
 using System.Net;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Permissions;
 using DentstageToolApp.Api.Services.Admin;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -36,15 +39,19 @@ public class PermissionMenusController : ControllerBase
     /// 取得指定帳號的角色資訊，供前端決定顯示哪些選單項目。
     /// </summary>
     [HttpGet]
+    [Authorize]
     [ProducesResponseType(typeof(PermissionRoleResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<PermissionRoleResponse>> GetRole([FromQuery] string? userUid, CancellationToken cancellationToken)
+    public async Task<ActionResult<PermissionRoleResponse>> GetRole(CancellationToken cancellationToken)
     {
+        // 直接自 JWT 解析登入者識別碼，避免查詢參數洩漏敏感資訊。
+        var userUid = GetCurrentUserUid();
+
         if (string.IsNullOrWhiteSpace(userUid))
         {
-            // 未提供 userUid 時直接回傳 400，避免送出無效查詢。
-            return BuildErrorResponse(HttpStatusCode.BadRequest, "請提供使用者識別碼以取得角色資訊。", "取得角色資訊失敗");
+            // 權杖若無合法識別碼，回傳 401 要求重新登入。
+            return BuildErrorResponse(HttpStatusCode.Unauthorized, "無法取得登入者資訊，請重新登入。", "取得角色資訊失敗");
         }
 
         try
@@ -86,6 +93,29 @@ public class PermissionMenusController : ControllerBase
         };
 
         return StatusCode(problem.Status.Value, problem);
+    }
+
+    /// <summary>
+    /// 自 ClaimsPrincipal 解析目前登入者的唯一識別碼，支援多種 Claim 型別。
+    /// </summary>
+    private string? GetCurrentUserUid()
+    {
+        // 優先採用 JWT 內的 Sub 與 UniqueName，保持與權杖簽發欄位一致。
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        // 最後回退至通用的 NameIdentifier，確保可支援不同簽發來源。
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
     }
 
     // ---------- 生命週期 ----------
