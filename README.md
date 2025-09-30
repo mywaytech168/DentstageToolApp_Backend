@@ -46,33 +46,26 @@ DentstageToolApp_Backend/
 
 ## 車牌辨識模組使用指引
 
-為了支援車牌辨識流程，專案已整合 OpenALPR。部署前請依照以下步驟準備環境與測試：
+為了支援車牌辨識流程，專案已改用 Tesseract OCR。部署前請依照以下步驟準備環境與測試：
 
-1. **準備 OpenALPR CLI**
-   - 於伺服器安裝 OpenALPR（社群版或商業版皆可），並確認 `alpr` 指令可於命令列執行。
-   - 將 `openalpr.conf` 與 `runtime_data` 目錄放置於伺服器可讀取的位置，例如 Linux `/opt/openalpr`、Windows `C:/openalpr`。
+1. **準備 Tesseract OCR 執行環境**
+   - 於伺服器安裝 Tesseract（建議 4.x 以上版本），並確認系統可找到對應的 `tesseract` 程式及 `tessdata` 目錄。
+   - 將需使用的語系訓練資料（例如英數混合的 `eng.traineddata`、臺灣車牌常用的 `chi_tra.traineddata`）放置在指定的 `tessdata` 資料夾中。
 
 2. **設定組態檔**
-   - 編輯 `src/DentstageToolApp.Api/appsettings.json` 或對應環境檔，調整 `OpenAlpr` 區段：
+   - 編輯 `src/DentstageToolApp.Api/appsettings.json` 或對應環境檔，調整 `TesseractOcr` 區段：
 
      ```json
-     "OpenAlpr": {
-       "ExecutablePath": "/usr/bin/alpr",
-       "Country": "tw",
-       "Region": "tw",
-       "ConfigFilePath": "/opt/openalpr/openalpr.conf",
-       "RuntimeDataDirectory": "/opt/openalpr/runtime_data",
-       "ProcessTimeoutSeconds": 15,
-       "TemporaryImageDirectory": "/var/tmp/openalpr",
-       "AdditionalArguments": [
-         "-n",
-         "5"
-       ]
+     "TesseractOcr": {
+       "TessDataPath": "/usr/share/tesseract-ocr/4.00/tessdata",
+       "Language": "eng",
+       "CharacterWhitelist": "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+       "PageSegmentationMode": "SingleBlock"
      }
      ```
 
-   - `ExecutablePath` 指向 OpenALPR CLI 的完整路徑；`Country`、`Region` 可依實際辨識車牌的國家／地區調整。
-   - 如需限制候選數量、套用自訂 Pattern，可透過 `AdditionalArguments` 陣列逐一傳入 CLI 參數。
+   - `TessDataPath` 為 tessdata 資料夾的完整路徑；`Language` 可使用 `eng+chi_tra` 形式載入多種語系。
+   - 若車牌僅包含英數字，建議設定 `CharacterWhitelist`，可降低誤判率；`PageSegmentationMode` 可依影像拍攝情境調整。
 
 3. **測試 API**
    - 服務啟動後，透過下列範例指令進行驗證：
@@ -88,7 +81,7 @@ DentstageToolApp_Backend/
 4. **驗收清單**
    - [ ] 成功回傳車牌號碼、品牌、型號、顏色與維修紀錄旗標。
    - [ ] 錯誤情境（影像模糊、Base64 格式錯誤、組態缺失）能得到中文錯誤訊息。
-   - [ ] 已於伺服器放置 OpenALPR 模型與授權檔案，且服務啟動時無錯誤紀錄。
+   - [ ] 已於伺服器安裝 Tesseract 並放置所需語系訓練資料，服務啟動時無錯誤紀錄。
 
 ## Swagger 文件使用指引
 

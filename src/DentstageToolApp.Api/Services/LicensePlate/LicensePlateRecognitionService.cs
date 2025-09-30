@@ -1,8 +1,7 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.LicensePlates;
@@ -11,23 +10,26 @@ using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tesseract;
 
 namespace DentstageToolApp.Api.Services.LicensePlate;
 
 /// <summary>
-/// 使用 OpenALPR CLI 實作的車牌辨識服務，整合資料庫查詢車輛資訊。
+/// 使用 Tesseract OCR 實作的車牌辨識服務，負責整合影像辨識與資料庫查詢。
 /// </summary>
 public class LicensePlateRecognitionService : ILicensePlateRecognitionService
 {
-    private readonly OpenAlprOptions _options;
+    private static readonly Regex PlateCandidateRegex = new("[A-Z0-9]{4,10}", RegexOptions.Compiled);
+
+    private readonly TesseractOcrOptions _options;
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<LicensePlateRecognitionService> _logger;
 
     /// <summary>
-    /// 建構子，注入 OpenALPR 組態與資料庫內容類別。
+    /// 建構子，注入 Tesseract 組態與資料庫內容類別。
     /// </summary>
     public LicensePlateRecognitionService(
-        IOptions<OpenAlprOptions> options,
+        IOptions<TesseractOcrOptions> options,
         DentstageToolAppContext dbContext,
         ILogger<LicensePlateRecognitionService> logger)
     {
@@ -50,299 +52,149 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
             throw new InvalidDataException("影像內容為空，請重新上傳清晰的車牌照片。");
         }
 
-        if (string.IsNullOrWhiteSpace(_options.ExecutablePath))
+        if (string.IsNullOrWhiteSpace(_options.TessDataPath) || !Directory.Exists(_options.TessDataPath))
         {
-            throw new InvalidOperationException("OpenALPR 執行檔路徑未設定，請於組態填入 ExecutablePath。");
+            throw new InvalidOperationException("Tesseract tessdata 路徑未設定或不存在，請於組態確認 TessDataPath。");
         }
 
-        if (!File.Exists(_options.ExecutablePath))
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- OCR 解析區 ----------
+        var (rawText, confidence) = await RunTesseractAsync(imageSource.ImageBytes, cancellationToken);
+        if (string.IsNullOrWhiteSpace(rawText))
         {
-            throw new FileNotFoundException("找不到設定的 OpenALPR 執行檔，請確認伺服器是否已安裝。", _options.ExecutablePath);
+            _logger.LogWarning("Tesseract 未從影像讀取到任何文字，檔案名稱：{FileName}", imageSource.FileName);
+            return null;
         }
 
-        var tempDirectory = PrepareTemporaryDirectory();
-        var tempFilePath = Path.Combine(tempDirectory, $"openalpr-{Guid.NewGuid():N}.jpg");
-
-        // ---------- OpenALPR 呼叫區 ----------
-        await File.WriteAllBytesAsync(tempFilePath, imageSource.ImageBytes, cancellationToken);
-
-        try
+        var candidatePlate = ExtractPlateCandidate(rawText);
+        if (string.IsNullOrWhiteSpace(candidatePlate))
         {
-            var (rawPlate, confidence) = await ExecuteOpenAlprAsync(tempFilePath, cancellationToken);
-            if (string.IsNullOrWhiteSpace(rawPlate))
-            {
-                _logger.LogWarning("OpenALPR 未辨識出車牌，檔案名稱：{FileName}", imageSource.FileName);
-                return null;
-            }
-
-            var normalizedPlate = NormalizePlate(rawPlate);
-            if (string.IsNullOrWhiteSpace(normalizedPlate))
-            {
-                _logger.LogWarning("OpenALPR 辨識結果為空白，檔案名稱：{FileName}", imageSource.FileName);
-                return null;
-            }
-
-            var formattedPlate = rawPlate.ToUpperInvariant();
-
-            // ---------- 資料庫查詢區 ----------
-            var car = await _dbContext.Cars
-                .Include(c => c.Orders)
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    c => c.CarNo == formattedPlate
-                        || c.CarNo == normalizedPlate
-                        || c.CarNoQuery == normalizedPlate,
-                    cancellationToken);
-
-            // ---------- 組裝回應區 ----------
-            var response = new LicensePlateRecognitionResponse
-            {
-                LicensePlateNumber = normalizedPlate,
-                Confidence = Math.Round(confidence, 2),
-                Brand = car?.Brand,
-                Model = car?.Model,
-                Color = car?.Color,
-                HasMaintenanceHistory = car?.Orders?.Any() == true,
-                Message = car is null
-                    ? "資料庫無相符車輛，請確認車牌是否正確或需新增車輛資料。"
-                    : "辨識成功，已回傳車輛基本資料與維修紀錄。",
-            };
-
-            return response;
+            _logger.LogWarning("Tesseract 雖取得文字但未找到符合格式的車牌，檔案名稱：{FileName}", imageSource.FileName);
+            return null;
         }
-        finally
+
+        var normalizedPlate = NormalizePlate(candidatePlate);
+        if (string.IsNullOrWhiteSpace(normalizedPlate))
         {
-            // ---------- 資源清理區 ----------
-            try
-            {
-                if (File.Exists(tempFilePath))
-                {
-                    File.Delete(tempFilePath);
-                }
-            }
-            catch (Exception cleanupException)
-            {
-                _logger.LogWarning(cleanupException, "刪除暫存影像檔時發生例外：{FilePath}", tempFilePath);
-            }
+            _logger.LogWarning("正規化車牌後為空值，原始候選：{Candidate}", candidatePlate);
+            return null;
         }
+
+        // ---------- 資料庫查詢區 ----------
+        var car = await _dbContext.Cars
+            .Include(c => c.Orders)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                c => c.CarNo == normalizedPlate
+                    || c.CarNo == candidatePlate
+                    || c.CarNoQuery == normalizedPlate,
+                cancellationToken);
+
+        // ---------- 組裝回應區 ----------
+        var response = new LicensePlateRecognitionResponse
+        {
+            LicensePlateNumber = normalizedPlate,
+            Confidence = Math.Round(confidence, 2),
+            Brand = car?.Brand,
+            Model = car?.Model,
+            Color = car?.Color,
+            HasMaintenanceHistory = car?.Orders?.Any() == true,
+            Message = car is null
+                ? "資料庫無相符車輛，請確認車牌是否正確或需新增車輛資料。"
+                : "辨識成功，已回傳車輛基本資料與維修紀錄。",
+        };
+
+        return response;
     }
 
     // ---------- 方法區 ----------
 
     /// <summary>
-    /// 依據組態建立暫存資料夾，確保 OpenALPR 可以存取影像檔案。
+    /// 以 Tesseract 分析影像，回傳完整文字與信心度。
     /// </summary>
-    /// <returns>暫存資料夾路徑。</returns>
-    private string PrepareTemporaryDirectory()
-    {
-        var directory = string.IsNullOrWhiteSpace(_options.TemporaryImageDirectory)
-            ? Path.GetTempPath()
-            : _options.TemporaryImageDirectory;
-
-        if (!Directory.Exists(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
-        return directory;
-    }
-
-    /// <summary>
-    /// 執行 OpenALPR CLI，解析 JSON 回傳並取得最佳候選車牌。
-    /// </summary>
-    /// <param name="imagePath">暫存影像檔案路徑。</param>
+    /// <param name="imageBytes">影像的位元組陣列。</param>
     /// <param name="cancellationToken">取消權杖。</param>
-    /// <returns>最佳候選車牌與信心度。</returns>
-    private async Task<(string? Plate, double Confidence)> ExecuteOpenAlprAsync(string imagePath, CancellationToken cancellationToken)
+    /// <returns>影像中的文字與信心度百分比。</returns>
+    private async Task<(string Text, double Confidence)> RunTesseractAsync(byte[] imageBytes, CancellationToken cancellationToken)
     {
-        var startInfo = BuildProcessStartInfo(imagePath);
-
-        using var process = new Process
-        {
-            StartInfo = startInfo,
-            EnableRaisingEvents = false,
-        };
-
-        if (!process.Start())
-        {
-            throw new InvalidOperationException("OpenALPR 程序無法啟動，請檢查執行檔權限。");
-        }
-
-        var standardOutputTask = process.StandardOutput.ReadToEndAsync();
-        var standardErrorTask = process.StandardError.ReadToEndAsync();
-
-        using var timeoutCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(_options.ProcessTimeoutSeconds));
-        using var linkedCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCancellation.Token);
+        cancellationToken.ThrowIfCancellationRequested();
 
         try
         {
-            await process.WaitForExitAsync(linkedCancellation.Token);
-        }
-        catch (OperationCanceledException) when (timeoutCancellation.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
-        {
-            TryKillProcess(process);
-            throw new TimeoutException("OpenALPR 辨識逾時，請檢查伺服器效能或調整 ProcessTimeoutSeconds。");
-        }
-        catch (OperationCanceledException)
-        {
-            TryKillProcess(process);
-            throw;
-        }
+            return await Task.Run(() =>
+            {
+                using var engine = CreateEngine();
+                using var pix = Pix.LoadFromMemory(imageBytes);
+                using var page = engine.Process(pix);
 
-        var output = await standardOutputTask;
-        var error = await standardErrorTask;
+                var text = page.GetText() ?? string.Empty;
+                var meanConfidence = page.GetMeanConfidence() * 100d;
 
-        if (process.ExitCode != 0)
-        {
-            _logger.LogError("OpenALPR CLI 回傳錯誤碼 {ExitCode}，訊息：{Error}", process.ExitCode, error);
-            throw new InvalidOperationException($"OpenALPR CLI 執行失敗：{error}");
+                return (text, meanConfidence);
+            }, cancellationToken);
         }
-
-        if (string.IsNullOrWhiteSpace(output))
+        catch (TesseractException ex)
         {
-            return (null, 0);
+            throw new InvalidOperationException("Tesseract OCR 執行失敗，請檢查 tessdata 與語系設定。", ex);
         }
-
-        var (plate, confidence) = ParseRecognitionResult(output);
-        return (plate, confidence);
     }
 
     /// <summary>
-    /// 建立 OpenALPR CLI 所需的啟動參數，確保路徑與額外參數完整。
+    /// 建立 Tesseract 引擎，套用字元白名單與版面模式設定。
     /// </summary>
-    /// <param name="imagePath">暫存影像檔路徑。</param>
-    /// <returns>完成設定的 <see cref="ProcessStartInfo"/>。</returns>
-    private ProcessStartInfo BuildProcessStartInfo(string imagePath)
+    /// <returns>可用的 <see cref="TesseractEngine"/> 實例。</returns>
+    private TesseractEngine CreateEngine()
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _options.ExecutablePath,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var engine = new TesseractEngine(_options.TessDataPath, _options.Language, EngineMode.Default);
 
-        startInfo.ArgumentList.Add("-j");
-
-        if (!string.IsNullOrWhiteSpace(_options.Country))
+        if (!string.IsNullOrWhiteSpace(_options.CharacterWhitelist))
         {
-            startInfo.ArgumentList.Add("-c");
-            startInfo.ArgumentList.Add(_options.Country);
+            engine.SetVariable("tessedit_char_whitelist", _options.CharacterWhitelist);
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.Region))
+        if (!string.IsNullOrWhiteSpace(_options.PageSegmentationMode) && Enum.TryParse<PageSegMode>(_options.PageSegmentationMode, true, out var mode))
         {
-            startInfo.ArgumentList.Add("--region");
-            startInfo.ArgumentList.Add(_options.Region);
+            engine.DefaultPageSegMode = mode;
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.ConfigFilePath))
-        {
-            startInfo.ArgumentList.Add("--config");
-            startInfo.ArgumentList.Add(_options.ConfigFilePath);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_options.RuntimeDataDirectory))
-        {
-            startInfo.ArgumentList.Add("--runtime-dir");
-            startInfo.ArgumentList.Add(_options.RuntimeDataDirectory);
-        }
-
-        if (_options.AdditionalArguments is { Length: > 0 })
-        {
-            foreach (var argument in _options.AdditionalArguments)
-            {
-                if (!string.IsNullOrWhiteSpace(argument))
-                {
-                    startInfo.ArgumentList.Add(argument);
-                }
-            }
-        }
-
-        startInfo.ArgumentList.Add(imagePath);
-
-        return startInfo;
+        return engine;
     }
 
     /// <summary>
-    /// 將 OpenALPR CLI 回傳的 JSON 轉換為最佳候選車牌資訊。
+    /// 從 Tesseract 結果中挑選符合車牌格式的候選文字。
     /// </summary>
-    /// <param name="json">OpenALPR CLI 的輸出。</param>
-    /// <returns>最佳候選車牌與信心度。</returns>
-    private (string? Plate, double Confidence) ParseRecognitionResult(string json)
+    /// <param name="rawText">Tesseract 輸出的完整文字。</param>
+    /// <returns>符合格式的車牌字串。</returns>
+    private static string? ExtractPlateCandidate(string rawText)
     {
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-
-        if (!root.TryGetProperty("results", out var resultsElement) || resultsElement.ValueKind != JsonValueKind.Array)
+        if (string.IsNullOrWhiteSpace(rawText))
         {
-            return (null, 0);
+            return null;
         }
 
-        var bestPlate = default(string?);
-        var bestConfidence = double.MinValue;
+        var uppercaseText = rawText.ToUpperInvariant();
+        var matches = PlateCandidateRegex.Matches(uppercaseText);
 
-        foreach (var result in resultsElement.EnumerateArray())
+        foreach (Match match in matches)
         {
-            // ---------- 候選名單解析區 ----------
-            if (result.TryGetProperty("candidates", out var candidatesElement) && candidatesElement.ValueKind == JsonValueKind.Array)
+            if (!match.Success)
             {
-                foreach (var candidate in candidatesElement.EnumerateArray())
-                {
-                    var plate = candidate.TryGetProperty("plate", out var plateElement)
-                        ? plateElement.GetString()
-                        : null;
-
-                    var confidence = candidate.TryGetProperty("confidence", out var confidenceElement)
-                        ? confidenceElement.GetDouble()
-                        : double.MinValue;
-
-                    if (!string.IsNullOrWhiteSpace(plate) && confidence > bestConfidence)
-                    {
-                        bestPlate = plate;
-                        bestConfidence = confidence;
-                    }
-                }
+                continue;
             }
-            else if (result.TryGetProperty("plate", out var fallbackPlateElement))
+
+            var normalized = NormalizePlate(match.Value);
+            if (!string.IsNullOrWhiteSpace(normalized) && normalized.Length is >= 5 and <= 8)
             {
-                // 若無 candidates，直接取主結果
-                var plate = fallbackPlateElement.GetString();
-                if (!string.IsNullOrWhiteSpace(plate))
-                {
-                    bestPlate = plate;
-                    bestConfidence = result.TryGetProperty("confidence", out var fallbackConfidenceElement)
-                        ? fallbackConfidenceElement.GetDouble()
-                        : 0d;
-                }
+                return normalized;
             }
         }
 
-        return (bestPlate, bestConfidence == double.MinValue ? 0 : bestConfidence);
+        return matches.Count > 0 ? NormalizePlate(matches[0].Value) : null;
     }
 
     /// <summary>
-    /// 嘗試終止逾時的 OpenALPR 程序，避免資源佔用。
-    /// </summary>
-    /// <param name="process">要終止的程序。</param>
-    private void TryKillProcess(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-            }
-        }
-        catch (Exception killException)
-        {
-            _logger.LogWarning(killException, "終止 OpenALPR 程序時發生例外。");
-        }
-    }
-
-    /// <summary>
-    /// 將車牌號碼統一轉成大寫並移除空白與連字號，方便比對。
+    /// 將車牌號碼統一轉成大寫並移除非字母數字字元，方便比對。
     /// </summary>
     /// <param name="plate">原始車牌號碼。</param>
     /// <returns>正規化後的車牌字串。</returns>

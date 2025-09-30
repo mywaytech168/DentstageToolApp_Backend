@@ -97,11 +97,17 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 
 // ---------- JWT 與身份驗證設定 ----------
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-builder.Services.Configure<OpenAlprOptions>(builder.Configuration.GetSection("OpenAlpr"));
+builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
     throw new InvalidOperationException("未設定 Jwt.Secret，無法產生簽章金鑰。");
+}
+
+var tesseractOptions = builder.Configuration.GetSection("TesseractOcr").Get<TesseractOcrOptions>();
+if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessDataPath))
+{
+    throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
 }
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));

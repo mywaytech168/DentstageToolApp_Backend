@@ -10,7 +10,7 @@ namespace DentstageToolApp.Api.Services.LicensePlate;
 public interface ILicensePlateRecognitionService
 {
     /// <summary>
-    /// 將上傳影像送交 OpenALPR 辨識，並回傳包含車輛資訊的結果。
+    /// 將上傳影像送交 Tesseract OCR 辨識，並回傳包含車輛資訊的結果。
     /// </summary>
     /// <param name="imageSource">封裝影像位元組與檔名的資料物件。</param>
     /// <param name="cancellationToken">用於取消執行的權杖，配合前端互動。</param>
