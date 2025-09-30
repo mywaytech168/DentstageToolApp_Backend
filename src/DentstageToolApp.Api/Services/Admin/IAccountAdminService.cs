@@ -13,4 +13,5 @@ public interface IAccountAdminService
     /// 建立新的使用者與對應裝置機碼。
     /// </summary>
     Task<CreateUserDeviceResponse> CreateUserWithDeviceAsync(CreateUserDeviceRequest request, CancellationToken cancellationToken);
+
 }
