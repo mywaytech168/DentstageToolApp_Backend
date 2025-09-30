@@ -53,12 +53,39 @@ public class AdminAccountsController : ControllerBase
         catch (AccountAdminException ex)
         {
             _logger.LogWarning(ex, "建立帳號失敗：{Message}", ex.Message);
-            return BuildErrorResponse(ex.StatusCode, ex.Message);
+            return BuildErrorResponse(ex.StatusCode, ex.Message, "建立帳號失敗");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "建立帳號流程發生未預期錯誤。");
-            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。");
+            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "建立帳號失敗");
+        }
+    }
+
+    /// <summary>
+    /// 依使用者識別碼查詢帳號資訊與裝置清單。
+    /// </summary>
+    [HttpGet("{userUid}")]
+    [ProducesResponseType(typeof(AdminAccountDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<AdminAccountDetailResponse>> GetAccountDetail(string userUid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // 呼叫服務取得帳號詳情，供前端顯示店家與裝置資料。
+            var response = await _accountAdminService.GetAccountAsync(userUid, cancellationToken);
+            return Ok(response);
+        }
+        catch (AccountAdminException ex)
+        {
+            _logger.LogWarning(ex, "查詢帳號失敗：{Message}", ex.Message);
+            return BuildErrorResponse(ex.StatusCode, ex.Message, "查詢帳號失敗");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "查詢帳號流程發生未預期錯誤。");
+            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢帳號失敗");
         }
     }
 
@@ -67,12 +94,12 @@ public class AdminAccountsController : ControllerBase
     /// <summary>
     /// 統一建立 ProblemDetails 物件，確保錯誤輸出一致。
     /// </summary>
-    private ActionResult BuildErrorResponse(HttpStatusCode statusCode, string message)
+    private ActionResult BuildErrorResponse(HttpStatusCode statusCode, string message, string title)
     {
         var problem = new ProblemDetails
         {
             Status = (int)statusCode,
-            Title = "建立帳號失敗",
+            Title = title,
             Detail = message,
             Instance = HttpContext.Request.Path
         };

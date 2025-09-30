@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -108,6 +109,61 @@ public class AccountAdminService : IAccountAdminService
             Status = device.Status,
             ExpireAt = device.ExpireAt,
             Message = "已建立帳號與裝置機碼。"
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<AdminAccountDetailResponse> GetAccountAsync(string userUid, CancellationToken cancellationToken)
+    {
+        // 先行修剪輸入，避免僅輸入空白造成查詢錯誤。
+        var normalizedUserUid = (userUid ?? string.Empty).Trim();
+
+        if (string.IsNullOrWhiteSpace(normalizedUserUid))
+        {
+            // 若未提供有效識別碼，回傳 400 提醒呼叫端補足參數。
+            throw new AccountAdminException(HttpStatusCode.BadRequest, "使用者識別碼不可為空白。");
+        }
+
+        // 使用 AsNoTracking 避免查詢造成快取追蹤，提升查詢效能。
+        var user = await _context.UserAccounts
+            .AsNoTracking()
+            .Include(x => x.DeviceRegistrations)
+            .FirstOrDefaultAsync(x => x.UserUid == normalizedUserUid, cancellationToken);
+
+        if (user == null)
+        {
+            // 查無資料時以 404 告知前端，便於顯示友善訊息。
+            throw new AccountAdminException(HttpStatusCode.NotFound, "找不到指定的使用者帳號。");
+        }
+
+        // 依修改時間排序裝置清單，優先呈現最近異動的設備。
+        var devices = user.DeviceRegistrations
+            .OrderByDescending(d => d.ModificationTimestamp ?? d.CreationTimestamp ?? DateTime.MinValue)
+            .Select(d => new AdminAccountDeviceInfo
+            {
+                DeviceRegistrationUid = d.DeviceRegistrationUid,
+                DeviceKey = d.DeviceKey,
+                DeviceName = d.DeviceName,
+                Status = d.Status,
+                IsBlackListed = d.IsBlackListed,
+                ExpireAt = d.ExpireAt,
+                LastSignInAt = d.LastSignInAt
+            })
+            .ToList();
+
+        return new AdminAccountDetailResponse
+        {
+            UserUid = user.UserUid,
+            DisplayName = user.DisplayName,
+            Role = user.Role,
+            IsActive = user.IsActive,
+            LastLoginAt = user.LastLoginAt,
+            Store = new AdminAccountStoreInfo
+            {
+                StoreName = user.DisplayName,
+                PermissionRole = user.Role
+            },
+            Devices = devices
         };
     }
 }
