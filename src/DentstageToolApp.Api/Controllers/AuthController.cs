@@ -29,7 +29,7 @@ public class AuthController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 使用帳號、密碼與裝置機碼進行登入，並回傳權杖。
+    /// 透過裝置機碼進行登入，若驗證成功則回傳權杖。
     /// </summary>
     [HttpPost("login")]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]

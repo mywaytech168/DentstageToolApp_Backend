@@ -16,7 +16,7 @@ using Microsoft.IdentityModel.Tokens;
 namespace DentstageToolApp.Api.Services.Auth;
 
 /// <summary>
-/// 身份驗證服務實作，負責處理帳號驗證、裝置綁定與 Token 發放。
+/// 身份驗證服務實作，專責處理裝置機碼驗證與 Token 發放。
 /// </summary>
 public class AuthService : IAuthService
 {
@@ -45,37 +45,26 @@ public class AuthService : IAuthService
     /// <inheritdoc />
     public async Task<LoginResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
-        // 以帳號為索引進行查詢，並一併載入裝置註冊與 Token 清單，方便後續檢查狀態
-        var user = await _context.UserAccounts
-            .Include(x => x.DeviceRegistrations)
+        // 以裝置機碼進行查詢，並載入使用者與既有 Token 資料
+        var device = await _context.DeviceRegistrations
+            .Include(x => x.UserAccount)
             .Include(x => x.RefreshTokens)
-            .FirstOrDefaultAsync(x => x.Account == request.Account, cancellationToken);
+            .FirstOrDefaultAsync(x => x.DeviceKey == request.DeviceKey, cancellationToken);
 
+        if (device is null)
+        {
+            throw new AuthException(HttpStatusCode.Unauthorized, "找不到對應裝置，請確認機碼是否正確。");
+        }
+
+        var user = device.UserAccount;
         if (user is null)
         {
-            throw new AuthException(HttpStatusCode.Unauthorized, "帳號或密碼錯誤。");
+            throw new AuthException(HttpStatusCode.InternalServerError, "裝置缺少對應的使用者資訊，請聯絡管理員。");
         }
 
         if (!user.IsActive)
         {
             throw new AuthException(HttpStatusCode.Forbidden, "帳號已被停用，請聯絡管理員。");
-        }
-
-        if (!VerifyPassword(request.Password, user.PasswordHash))
-        {
-            throw new AuthException(HttpStatusCode.Unauthorized, "帳號或密碼錯誤。");
-        }
-
-        // 檢查或建立裝置註冊資料，確保每台裝置都有綁定紀錄
-        var device = user.DeviceRegistrations.FirstOrDefault(x => x.DeviceKey == request.DeviceKey);
-        if (device is null)
-        {
-            device = CreateDeviceRegistration(user, request);
-            await _context.DeviceRegistrations.AddAsync(device, cancellationToken);
-        }
-        else
-        {
-            UpdateDeviceMetadata(device, request);
         }
 
         if (device.IsBlackListed || !string.Equals(device.Status, "Active", StringComparison.OrdinalIgnoreCase))
@@ -100,11 +89,16 @@ public class AuthService : IAuthService
 
         user.LastLoginAt = now;
         device.LastSignInAt = now;
-        device.ExpireAt ??= refreshTokenExpireAt;
+        if (!device.ExpireAt.HasValue || device.ExpireAt.Value < refreshTokenExpireAt)
+        {
+            device.ExpireAt = refreshTokenExpireAt;
+        }
+        device.ModificationTimestamp = now;
+        device.ModifiedBy = user.Account;
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("使用者 {Account} 從裝置 {Device} 成功登入。", user.Account, device.DeviceRegistrationUid);
+        _logger.LogInformation("使用者 {Account} 的裝置 {Device} 成功登入。", user.Account, device.DeviceRegistrationUid);
 
         return new LoginResponse
         {
@@ -199,35 +193,6 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
-    /// 根據登入資訊建立或更新裝置註冊資料。
-    /// </summary>
-    private static DeviceRegistration CreateDeviceRegistration(UserAccount user, LoginRequest request)
-    {
-        return new DeviceRegistration
-        {
-            DeviceRegistrationUid = Guid.NewGuid().ToString("N"),
-            UserUid = user.UserUid,
-            DeviceKey = request.DeviceKey,
-            DeviceName = request.DeviceName,
-            Status = "Active",
-            IsBlackListed = false,
-            CreationTimestamp = DateTime.UtcNow,
-            CreatedBy = user.Account,
-            UserAccount = user
-        };
-    }
-
-    /// <summary>
-    /// 更新既有裝置的描述資訊與最後修改時間。
-    /// </summary>
-    private static void UpdateDeviceMetadata(DeviceRegistration device, LoginRequest request)
-    {
-        device.DeviceName = request.DeviceName ?? device.DeviceName;
-        device.ModificationTimestamp = DateTime.UtcNow;
-        device.ModifiedBy = request.Account;
-    }
-
-    /// <summary>
     /// 產生 Access Token，並設定必要的 Claims。
     /// </summary>
     private string GenerateAccessToken(UserAccount user, DeviceRegistration device, DateTime generatedAt, DateTime expireAt)
@@ -281,37 +246,6 @@ public class AuthService : IAuthService
 
         _context.RefreshTokens.Add(refreshToken);
         return refreshToken;
-    }
-
-    /// <summary>
-    /// 驗證密碼是否符合資料庫儲存的雜湊值。
-    /// </summary>
-    private static bool VerifyPassword(string plainPassword, string storedHash)
-    {
-        if (string.IsNullOrWhiteSpace(storedHash))
-        {
-            return false;
-        }
-
-        // 先假設資料庫儲存 SHA256 雜湊，若比較失敗則回退至明碼比較（為舊資料相容性保留）
-        var sha256Hash = ComputeSha256Hash(plainPassword);
-        if (string.Equals(sha256Hash, storedHash, StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        return string.Equals(plainPassword, storedHash, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// 使用 SHA256 計算雜湊字串。
-    /// </summary>
-    private static string ComputeSha256Hash(string input)
-    {
-        using var sha256 = SHA256.Create();
-        var bytes = Encoding.UTF8.GetBytes(input);
-        var hashBytes = sha256.ComputeHash(bytes);
-        return Convert.ToHexString(hashBytes);
     }
 
     /// <summary>
