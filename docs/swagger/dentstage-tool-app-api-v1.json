@@ -1,0 +1,72 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "Dentstage Tool App API",
+    "version": "v1",
+    "description": "提供凹痕工廠後台系統的標準化 API 介面，包含服務狀態檢查。",
+    "contact": {
+      "name": "Dentstage Tool App Team",
+      "email": "support@dentstage.com"
+    }
+  },
+  "paths": {
+    "/api/HealthCheck": {
+      "get": {
+        "tags": [
+          "HealthCheck"
+        ],
+        "summary": "取得系統健康狀態",
+        "description": "回傳健康檢查資訊，確認服務是否正常運作。",
+        "responses": {
+          "200": {
+            "description": "成功取得健康檢查資訊。",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthCheckResponse"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "健康狀態範例",
+                    "value": {
+                      "status": "healthy",
+                      "message": "後端服務啟動成功",
+                      "timestamp": "2024-01-01T00:00:00Z"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HealthCheckResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "系統整體狀態描述。"
+          },
+          "message": {
+            "type": "string",
+            "description": "健康檢查的補充說明或提示訊息。"
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "產生健康檢查結果的時間 (UTC)。"
+          }
+        },
+        "required": [
+          "status",
+          "message",
+          "timestamp"
+        ]
+      }
+    }
+  }
+}
