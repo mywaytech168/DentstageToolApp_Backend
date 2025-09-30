@@ -44,6 +44,45 @@ DentstageToolApp_Backend/
 - 新增模組時，建議以資料夾劃分領域 (例如 `Modules/Orders`)，方便維護。
 - 若需調整資料表結構，可在 `DentstageToolApp.Infrastructure` 專案中修改 EF Core 實體或 `DentstageToolAppContext` 對應設定。
 
+## 車牌辨識模組使用指引
+
+為了支援車牌辨識流程，專案已整合 OpenALPR。部署前請依照以下步驟準備環境與測試：
+
+1. **準備 OpenALPR 資源檔**
+   - 將 `openalpr.conf` 與 `runtime_data` 目錄放置於伺服器可讀取的位置，例如 Linux `/opt/openalpr`、Windows `C:/openalpr`。
+   - 若使用商業版或雲端授權，請向官方申請 API Key 並填入 `appsettings*.json`。
+
+2. **設定組態檔**
+   - 編輯 `src/DentstageToolApp.Api/appsettings.json` 或對應環境檔，調整 `OpenAlpr` 區段：
+
+     ```json
+     "OpenAlpr": {
+       "Country": "tw",
+       "Region": "tw",
+       "ConfigFilePath": "/opt/openalpr/openalpr.conf",
+       "RuntimeDataDirectory": "/opt/openalpr/runtime_data",
+       "ApiKey": ""
+     }
+     ```
+
+   - `Country` 與 `Region` 可依實際辨識車牌的國家／地區調整。
+
+3. **測試 API**
+   - 服務啟動後，透過下列範例指令進行驗證：
+
+     ```bash
+     curl -X POST "https://localhost:7249/api/license-plates/recognitions" \
+       -H "Authorization: Bearer <JWT_TOKEN>" \
+       -F "image=@/path/to/license.jpg"
+     ```
+
+   - 若需改用 Base64，可改用 `-F "imageBase64=$(cat encoded.txt)"` 方式提交，不需額外提供檔案欄位。
+
+4. **驗收清單**
+   - [ ] 成功回傳車牌號碼、品牌、型號、顏色與維修紀錄旗標。
+   - [ ] 錯誤情境（影像模糊、Base64 格式錯誤、組態缺失）能得到中文錯誤訊息。
+   - [ ] 已於伺服器放置 OpenALPR 模型與授權檔案，且服務啟動時無錯誤紀錄。
+
 ## Swagger 文件使用指引
 
 1. **本機預覽**：啟動 API 專案後造訪 `/swagger`，即可檢視包含控制器摘要與範例的即時文件。
