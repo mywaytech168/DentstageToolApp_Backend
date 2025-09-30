@@ -151,6 +151,9 @@ public class AccountAdminService : IAccountAdminService
             })
             .ToList();
 
+        // 透過角色判斷店家型態，供前端決定顯示內容與權限。
+        var storeType = DeriveStoreTypeFromRole(user.Role);
+
         return new AdminAccountDetailResponse
         {
             UserUid = user.UserUid,
@@ -161,9 +164,37 @@ public class AccountAdminService : IAccountAdminService
             Store = new AdminAccountStoreInfo
             {
                 StoreName = user.DisplayName,
-                PermissionRole = user.Role
+                PermissionRole = user.Role,
+                StoreType = storeType
             },
             Devices = devices
         };
+    }
+
+    /// <summary>
+    /// 根據角色字串推論店家型態，若無法判斷則以原字串回傳。
+    /// </summary>
+    private static string DeriveStoreTypeFromRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            // 預設視為直營店，確保至少能回傳一個明確的型態。
+            return "直營店";
+        }
+
+        var normalizedRole = role.Trim();
+
+        if (normalizedRole.Contains("加盟", StringComparison.OrdinalIgnoreCase) || normalizedRole.Contains("franchise", StringComparison.OrdinalIgnoreCase))
+        {
+            return "加盟店";
+        }
+
+        if (normalizedRole.Contains("直營", StringComparison.OrdinalIgnoreCase) || normalizedRole.Contains("direct", StringComparison.OrdinalIgnoreCase))
+        {
+            return "直營店";
+        }
+
+        // 若角色名稱非預期字詞，直接回傳原字串保留資訊。
+        return normalizedRole;
     }
 }
