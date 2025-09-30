@@ -58,6 +58,11 @@ public class AdminAccountStoreInfo
     /// 權限角色，直接使用帳號角色欄位。
     /// </summary>
     public string? PermissionRole { get; set; }
+
+    /// <summary>
+    /// 店家型態（直營店或加盟店），用於決定顯示哪些功能選單。
+    /// </summary>
+    public string? StoreType { get; set; }
 }
 
 /// <summary>
