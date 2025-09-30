@@ -13,6 +13,11 @@ public class QuotationSummaryResponse
     public string? QuotationNo { get; set; }
 
     /// <summary>
+    /// 維修類型，協助前端根據 FixType 顯示不同標籤。
+    /// </summary>
+    public string? FixType { get; set; }
+
+    /// <summary>
     /// 估價單目前狀態碼，供前端依需求轉換顯示文字。
     /// </summary>
     public string? Status { get; set; }

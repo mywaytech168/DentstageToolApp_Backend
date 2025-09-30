@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Quotations;
@@ -31,16 +30,17 @@ public class QuotationsController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得估價單列表資料，後續可擴充查詢條件或分頁參數。
+    /// 取得估價單列表資料，可依維修類型、狀態、日期與關鍵字進行篩選，並支援分頁。
     /// </summary>
+    /// <param name="query">查詢參數，對應前端的搜尋條件與分頁設定。</param>
     /// <param name="cancellationToken">取消權杖，供前端在切換頁面時停止查詢。</param>
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<QuotationSummaryResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<QuotationSummaryResponse>>> GetQuotationsAsync(CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(QuotationListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationListResponse>> GetQuotationsAsync([FromQuery] QuotationListQuery query, CancellationToken cancellationToken)
     {
-        _logger.LogDebug("查詢估價單列表，準備呼叫服務取得資料。");
+        _logger.LogDebug("查詢估價單列表，參數：{@Query}", query);
 
-        var quotations = await _quotationService.GetQuotationsAsync(cancellationToken);
+        var quotations = await _quotationService.GetQuotationsAsync(query, cancellationToken);
 
         return Ok(quotations);
     }
