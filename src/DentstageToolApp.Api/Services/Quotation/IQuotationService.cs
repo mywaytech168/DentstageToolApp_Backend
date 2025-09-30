@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Quotations;
@@ -11,9 +10,10 @@ namespace DentstageToolApp.Api.Services.Quotation;
 public interface IQuotationService
 {
     /// <summary>
-    /// 取得估價單列表資料，後續可依需求加入查詢條件或分頁參數。
+    /// 依據查詢條件取得估價單列表資料。
     /// </summary>
+    /// <param name="query">查詢參數，包含維修類型、狀態、關鍵字與分頁設定。</param>
     /// <param name="cancellationToken">取消權杖，供呼叫端取消長時間查詢。</param>
-    /// <returns>估價單摘要資訊集合。</returns>
-    Task<IReadOnlyList<QuotationSummaryResponse>> GetQuotationsAsync(CancellationToken cancellationToken);
+    /// <returns>估價單列表與分頁資訊。</returns>
+    Task<QuotationListResponse> GetQuotationsAsync(QuotationListQuery query, CancellationToken cancellationToken);
 }
