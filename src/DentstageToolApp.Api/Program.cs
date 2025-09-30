@@ -6,6 +6,7 @@ using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
+using DentstageToolApp.Api.Services.LicensePlate;
 using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -96,6 +97,7 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 
 // ---------- JWT 與身份驗證設定 ----------
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
+builder.Services.Configure<OpenAlprOptions>(builder.Configuration.GetSection("OpenAlpr"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
@@ -130,6 +132,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<IAccountAdminService, AccountAdminService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
+builder.Services.AddScoped<ILicensePlateRecognitionService, LicensePlateRecognitionService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
