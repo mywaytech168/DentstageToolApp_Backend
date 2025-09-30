@@ -1,11 +1,11 @@
 using System;
 
-namespace DentstageToolApp.Api.LicensePlates;
+namespace DentstageToolApp.Api.CarPlates;
 
 /// <summary>
 /// 車牌維修紀錄項目，描述每一筆維修工單的重點資訊。
 /// </summary>
-public class LicensePlateMaintenanceRecordDto
+public class CarPlateMaintenanceRecordDto
 {
     /// <summary>
     /// 工單唯一識別碼，便於前端導向詳細資料頁面。

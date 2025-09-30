@@ -1,9 +1,9 @@
-namespace DentstageToolApp.Api.LicensePlates;
+namespace DentstageToolApp.Api.CarPlates;
 
 /// <summary>
 /// 車牌辨識結果資料傳輸物件，封裝辨識車牌與車輛資訊。
 /// </summary>
-public class LicensePlateRecognitionResponse
+public class CarPlateRecognitionResponse
 {
     /// <summary>
     /// 辨識出的車牌號碼。

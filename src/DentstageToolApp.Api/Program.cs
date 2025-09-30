@@ -6,7 +6,7 @@ using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
-using DentstageToolApp.Api.Services.LicensePlate;
+using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -138,7 +138,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<IAccountAdminService, AccountAdminService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
-builder.Services.AddScoped<ILicensePlateRecognitionService, LicensePlateRecognitionService>();
+builder.Services.AddScoped<ICarPlateRecognitionService, CarPlateRecognitionService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();

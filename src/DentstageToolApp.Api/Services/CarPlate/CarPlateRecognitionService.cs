@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.LicensePlates;
+using DentstageToolApp.Api.CarPlates;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
@@ -14,26 +14,26 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tesseract;
 
-namespace DentstageToolApp.Api.Services.LicensePlate;
+namespace DentstageToolApp.Api.Services.CarPlate;
 
 /// <summary>
 /// 使用 Tesseract OCR 實作的車牌辨識服務，負責整合影像辨識與資料庫查詢。
 /// </summary>
-public class LicensePlateRecognitionService : ILicensePlateRecognitionService
+public class CarPlateRecognitionService : ICarPlateRecognitionService
 {
     private static readonly Regex PlateCandidateRegex = new("[A-Z0-9]{4,10}", RegexOptions.Compiled);
 
     private readonly TesseractOcrOptions _options;
     private readonly DentstageToolAppContext _dbContext;
-    private readonly ILogger<LicensePlateRecognitionService> _logger;
+    private readonly ILogger<CarPlateRecognitionService> _logger;
 
     /// <summary>
     /// 建構子，注入 Tesseract 組態與資料庫內容類別。
     /// </summary>
-    public LicensePlateRecognitionService(
+    public CarPlateRecognitionService(
         IOptions<TesseractOcrOptions> options,
         DentstageToolAppContext dbContext,
-        ILogger<LicensePlateRecognitionService> logger)
+        ILogger<CarPlateRecognitionService> logger)
     {
         _options = options.Value ?? throw new ArgumentNullException(nameof(options));
         _dbContext = dbContext;
@@ -41,7 +41,7 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
     }
 
     /// <inheritdoc />
-    public async Task<LicensePlateRecognitionResponse?> RecognizeAsync(LicensePlateImageSource imageSource, CancellationToken cancellationToken)
+    public async Task<CarPlateRecognitionResponse?> RecognizeAsync(CarPlateImageSource imageSource, CancellationToken cancellationToken)
     {
         // ---------- 參數檢核區 ----------
         if (imageSource is null)
@@ -94,7 +94,7 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
                 cancellationToken);
 
         // ---------- 組裝回應區 ----------
-        var response = new LicensePlateRecognitionResponse
+        var response = new CarPlateRecognitionResponse
         {
             LicensePlateNumber = normalizedPlate,
             Confidence = Math.Round(confidence, 2),
@@ -111,7 +111,7 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
     }
 
     /// <inheritdoc />
-    public async Task<LicensePlateMaintenanceHistoryResponse> GetMaintenanceHistoryAsync(string licensePlate, CancellationToken cancellationToken)
+    public async Task<CarPlateMaintenanceHistoryResponse> GetMaintenanceHistoryAsync(string licensePlate, CancellationToken cancellationToken)
     {
         // ---------- 參數檢核區 ----------
         if (string.IsNullOrWhiteSpace(licensePlate))
@@ -191,7 +191,7 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
 
         var referenceOrder = orders.FirstOrDefault();
 
-        var response = new LicensePlateMaintenanceHistoryResponse
+        var response = new CarPlateMaintenanceHistoryResponse
         {
             LicensePlateNumber = normalizedPlate,
             Brand = car?.Brand ?? referenceOrder?.Brand,
@@ -317,9 +317,9 @@ public class LicensePlateRecognitionService : ILicensePlateRecognitionService
     /// </summary>
     /// <param name="order">資料庫工單資料。</param>
     /// <returns>維修紀錄 DTO。</returns>
-    private static LicensePlateMaintenanceRecordDto MapToMaintenanceRecord(Order order)
+    private static CarPlateMaintenanceRecordDto MapToMaintenanceRecord(Order order)
     {
-        return new LicensePlateMaintenanceRecordDto
+        return new CarPlateMaintenanceRecordDto
         {
             OrderUid = order.OrderUid,
             OrderNo = order.OrderNo,

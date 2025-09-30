@@ -2,8 +2,8 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.LicensePlates;
-using DentstageToolApp.Api.Services.LicensePlate;
+using DentstageToolApp.Api.CarPlates;
+using DentstageToolApp.Api.Services.CarPlate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -15,21 +15,21 @@ namespace DentstageToolApp.Api.Controllers;
 /// 車牌辨識控制器，提供前端上傳影像並取得車輛資訊的端點。
 /// </summary>
 [ApiController]
-[Route("api/license-plates")]
+[Route("api/car-plates")]
 [Authorize]
-public class LicensePlateRecognitionController : ControllerBase
+public class CarPlateRecognitionController : ControllerBase
 {
-    private readonly ILicensePlateRecognitionService _licensePlateRecognitionService;
-    private readonly ILogger<LicensePlateRecognitionController> _logger;
+    private readonly ICarPlateRecognitionService _carPlateRecognitionService;
+    private readonly ILogger<CarPlateRecognitionController> _logger;
 
     /// <summary>
     /// 建構子，注入車牌辨識服務與記錄器。
     /// </summary>
-    public LicensePlateRecognitionController(
-        ILicensePlateRecognitionService licensePlateRecognitionService,
-        ILogger<LicensePlateRecognitionController> logger)
+    public CarPlateRecognitionController(
+        ICarPlateRecognitionService carPlateRecognitionService,
+        ILogger<CarPlateRecognitionController> logger)
     {
-        _licensePlateRecognitionService = licensePlateRecognitionService;
+        _carPlateRecognitionService = carPlateRecognitionService;
         _logger = logger;
     }
 
@@ -41,11 +41,11 @@ public class LicensePlateRecognitionController : ControllerBase
     /// <param name="request">包含影像檔案或 Base64 的請求物件。</param>
     /// <param name="cancellationToken">取消權杖，用於前端中止等待時終止作業。</param>
     [HttpPost("recognitions")]
-    [ProducesResponseType(typeof(LicensePlateRecognitionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CarPlateRecognitionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<LicensePlateRecognitionResponse>> RecognizeAsync(
-        [FromForm] LicensePlateRecognitionRequest request,
+    public async Task<ActionResult<CarPlateRecognitionResponse>> RecognizeAsync(
+        [FromForm] CarPlateRecognitionRequest request,
         CancellationToken cancellationToken)
     {
         try
@@ -61,13 +61,13 @@ public class LicensePlateRecognitionController : ControllerBase
             }
 
             var imageBytes = await ConvertToBytesAsync(request.Image, request.ImageBase64, cancellationToken);
-            var imageSource = new LicensePlateImageSource
+            var imageSource = new CarPlateImageSource
             {
                 FileName = request.Image?.FileName,
                 ImageBytes = imageBytes
             };
 
-            var recognition = await _licensePlateRecognitionService.RecognizeAsync(imageSource, cancellationToken);
+            var recognition = await _carPlateRecognitionService.RecognizeAsync(imageSource, cancellationToken);
 
             if (recognition is null)
             {
@@ -119,11 +119,11 @@ public class LicensePlateRecognitionController : ControllerBase
     /// <param name="request">包含欲查詢車牌號碼的請求物件。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpPost("search")]
-    [ProducesResponseType(typeof(LicensePlateMaintenanceHistoryResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(CarPlateMaintenanceHistoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<LicensePlateMaintenanceHistoryResponse>> SearchAsync(
-        [FromBody] LicensePlateMaintenanceHistoryRequest request,
+    public async Task<ActionResult<CarPlateMaintenanceHistoryResponse>> SearchAsync(
+        [FromBody] CarPlateMaintenanceHistoryRequest request,
         CancellationToken cancellationToken)
     {
         if (request is null || string.IsNullOrWhiteSpace(request.LicensePlateNumber))
@@ -138,7 +138,7 @@ public class LicensePlateRecognitionController : ControllerBase
 
         try
         {
-            var result = await _licensePlateRecognitionService.GetMaintenanceHistoryAsync(request.LicensePlateNumber, cancellationToken);
+            var result = await _carPlateRecognitionService.GetMaintenanceHistoryAsync(request.LicensePlateNumber, cancellationToken);
 
             if (!result.HasMaintenanceRecords)
             {
