@@ -1,0 +1,11 @@
+CREATE TABLE UserAccounts (
+    CreationTimestamp     DATETIME,
+    CreatedBy             VARCHAR(50),
+    ModificationTimestamp DATETIME,
+    ModifiedBy            VARCHAR(50),
+    UserUID               VARCHAR(100) PRIMARY KEY,
+    DisplayName           VARCHAR(100),
+    Role                  VARCHAR(50),
+    IsActive              TINYINT(1) NOT NULL DEFAULT 1,
+    LastLoginAt           DATETIME
+);
