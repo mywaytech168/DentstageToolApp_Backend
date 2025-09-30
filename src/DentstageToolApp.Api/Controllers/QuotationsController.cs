@@ -45,6 +45,25 @@ public class QuotationsController : ControllerBase
         return Ok(quotations);
     }
 
+    /// <summary>
+    /// 透過 POST 傳遞查詢條件以取得估價單列表，適合參數較多或需要 Body 傳遞時使用。
+    /// </summary>
+    /// <param name="request">查詢參數，與 GET 版本相同但由 Body 傳遞。</param>
+    /// <param name="cancellationToken">取消權杖，供前端於離開頁面時停止查詢。</param>
+    [HttpPost]
+    [ProducesResponseType(typeof(QuotationListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationListResponse>> SearchQuotationsAsync([FromBody] QuotationListQuery request, CancellationToken cancellationToken)
+    {
+        // 若 Body 未帶入資料，建立預設查詢參數避免空參考例外。
+        var query = request ?? new QuotationListQuery();
+
+        _logger.LogDebug("POST 查詢估價單列表，參數：{@Query}", query);
+
+        var quotations = await _quotationService.GetQuotationsAsync(query, cancellationToken);
+
+        return Ok(quotations);
+    }
+
     // ---------- 方法區 ----------
     // 目前無額外私有方法，預留區塊供後續擴充篩選或轉換邏輯。
 
