@@ -1,10 +1,8 @@
-using System.Collections.Generic;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Permissions;
 using DentstageToolApp.Api.Services.Admin;
-using DentstageToolApp.Api.Services.Permissions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -12,25 +10,22 @@ using Microsoft.Extensions.Logging;
 namespace DentstageToolApp.Api.Controllers;
 
 /// <summary>
-/// 帳號權限選單控制器，根據店家型態派送對應功能清單。
+/// 權限選單控制器，目前僅提供查詢使用者角色字串的需求。
 /// </summary>
 [ApiController]
 [Route("api/permission-menus")]
 public class PermissionMenusController : ControllerBase
 {
-    private readonly IPermissionMenuService _permissionMenuService;
     private readonly IAccountAdminService _accountAdminService;
     private readonly ILogger<PermissionMenusController> _logger;
 
     /// <summary>
-    /// 建構子，注入權限選單服務與帳號服務。
+    /// 建構子，注入帳號服務與記錄器。
     /// </summary>
     public PermissionMenusController(
-        IPermissionMenuService permissionMenuService,
         IAccountAdminService accountAdminService,
         ILogger<PermissionMenusController> logger)
     {
-        _permissionMenuService = permissionMenuService;
         _accountAdminService = accountAdminService;
         _logger = logger;
     }
@@ -38,49 +33,40 @@ public class PermissionMenusController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得指定店家型態可用的權限選單。若未提供店型，需透過使用者識別碼推論。
+    /// 取得指定帳號的角色資訊，供前端決定顯示哪些選單項目。
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyCollection<PermissionMenuItemDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PermissionRoleResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<IReadOnlyCollection<PermissionMenuItemDto>>> GetMenus([FromQuery] string? storeType, [FromQuery] string? userUid, CancellationToken cancellationToken)
+    public async Task<ActionResult<PermissionRoleResponse>> GetRole([FromQuery] string? userUid, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(userUid))
+        {
+            // 未提供 userUid 時直接回傳 400，避免送出無效查詢。
+            return BuildErrorResponse(HttpStatusCode.BadRequest, "請提供使用者識別碼以取得角色資訊。", "取得角色資訊失敗");
+        }
+
         try
         {
-            string resolvedStoreType;
-            string? resolvedRole = null;
-
-            if (!string.IsNullOrWhiteSpace(storeType))
+            // 查詢帳號資料並擷取角色字串回傳給前端。
+            var account = await _accountAdminService.GetAccountAsync(userUid, cancellationToken);
+            var response = new PermissionRoleResponse
             {
-                // 直接使用傳入的店型字串，支援查詢特定選單。
-                resolvedStoreType = storeType;
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(userUid))
-                {
-                    return BuildErrorResponse(HttpStatusCode.BadRequest, "請提供店家型態或使用者識別碼，以取得權限選單。", "取得權限選單失敗");
-                }
+                Role = account.Role
+            };
 
-                // 透過帳號資訊推論店型，確保與前端顯示一致。
-                var account = await _accountAdminService.GetAccountAsync(userUid, cancellationToken);
-                resolvedStoreType = account.Store.StoreType ?? account.Role ?? string.Empty;
-                resolvedRole = account.Role;
-            }
-
-            var menus = await _permissionMenuService.GetMenuByStoreTypeAsync(resolvedStoreType, resolvedRole, cancellationToken);
-            return Ok(menus);
+            return Ok(response);
         }
         catch (AccountAdminException ex)
         {
-            _logger.LogWarning(ex, "透過帳號取得選單失敗：{Message}", ex.Message);
-            return BuildErrorResponse(ex.StatusCode, ex.Message, "取得權限選單失敗");
+            _logger.LogWarning(ex, "查詢角色資訊失敗：{Message}", ex.Message);
+            return BuildErrorResponse(ex.StatusCode, ex.Message, "取得角色資訊失敗");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "查詢權限選單發生未預期錯誤。");
-            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取得權限選單失敗");
+            _logger.LogError(ex, "查詢角色資訊流程發生未預期錯誤。");
+            return BuildErrorResponse(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取得角色資訊失敗");
         }
     }
 

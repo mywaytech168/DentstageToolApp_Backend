@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -124,10 +123,9 @@ public class AccountAdminService : IAccountAdminService
             throw new AccountAdminException(HttpStatusCode.BadRequest, "使用者識別碼不可為空白。");
         }
 
-        // 使用 AsNoTracking 避免查詢造成快取追蹤，提升查詢效能。
+        // 只需顯示基本資料，因此不載入裝置等相關導覽屬性以提升查詢效能。
         var user = await _context.UserAccounts
             .AsNoTracking()
-            .Include(x => x.DeviceRegistrations)
             .FirstOrDefaultAsync(x => x.UserUid == normalizedUserUid, cancellationToken);
 
         if (user == null)
@@ -136,65 +134,11 @@ public class AccountAdminService : IAccountAdminService
             throw new AccountAdminException(HttpStatusCode.NotFound, "找不到指定的使用者帳號。");
         }
 
-        // 依修改時間排序裝置清單，優先呈現最近異動的設備。
-        var devices = user.DeviceRegistrations
-            .OrderByDescending(d => d.ModificationTimestamp ?? d.CreationTimestamp ?? DateTime.MinValue)
-            .Select(d => new AdminAccountDeviceInfo
-            {
-                DeviceRegistrationUid = d.DeviceRegistrationUid,
-                DeviceKey = d.DeviceKey,
-                DeviceName = d.DeviceName,
-                Status = d.Status,
-                IsBlackListed = d.IsBlackListed,
-                ExpireAt = d.ExpireAt,
-                LastSignInAt = d.LastSignInAt
-            })
-            .ToList();
-
-        // 透過角色判斷店家型態，供前端決定顯示內容與權限。
-        var storeType = DeriveStoreTypeFromRole(user.Role);
-
+        // 將資料庫欄位直接對應至回應模型，維持與 useraccounts 表一致。
         return new AdminAccountDetailResponse
         {
-            UserUid = user.UserUid,
             DisplayName = user.DisplayName,
-            Role = user.Role,
-            IsActive = user.IsActive,
-            LastLoginAt = user.LastLoginAt,
-            Store = new AdminAccountStoreInfo
-            {
-                StoreName = user.DisplayName,
-                PermissionRole = user.Role,
-                StoreType = storeType
-            },
-            Devices = devices
+            Role = user.Role
         };
-    }
-
-    /// <summary>
-    /// 根據角色字串推論店家型態，若無法判斷則以原字串回傳。
-    /// </summary>
-    private static string DeriveStoreTypeFromRole(string? role)
-    {
-        if (string.IsNullOrWhiteSpace(role))
-        {
-            // 預設視為直營店，確保至少能回傳一個明確的型態。
-            return "直營店";
-        }
-
-        var normalizedRole = role.Trim();
-
-        if (normalizedRole.Contains("加盟", StringComparison.OrdinalIgnoreCase) || normalizedRole.Contains("franchise", StringComparison.OrdinalIgnoreCase))
-        {
-            return "加盟店";
-        }
-
-        if (normalizedRole.Contains("直營", StringComparison.OrdinalIgnoreCase) || normalizedRole.Contains("direct", StringComparison.OrdinalIgnoreCase))
-        {
-            return "直營店";
-        }
-
-        // 若角色名稱非預期字詞，直接回傳原字串保留資訊。
-        return normalizedRole;
     }
 }
