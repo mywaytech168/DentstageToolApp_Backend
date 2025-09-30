@@ -11,7 +11,7 @@ public class LicensePlateRecognitionResponse
     public string? LicensePlateNumber { get; set; }
 
     /// <summary>
-    /// OpenALPR 產生的信心度，範圍為 0-100。
+    /// Tesseract 產生的信心度百分比，範圍約為 0-100。
     /// </summary>
     public double Confidence { get; set; }
 
