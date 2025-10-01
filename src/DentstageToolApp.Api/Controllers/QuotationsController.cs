@@ -4,6 +4,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using System;
+using System.IdentityModel.Tokens.Jwt;
+using System.Net;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -66,8 +70,144 @@ public class QuotationsController : ControllerBase
         return Ok(quotations);
     }
 
+    /// <summary>
+    /// 新增估價單，並回傳建立結果與編號資訊。
+    /// </summary>
+    [HttpPost("create")]
+    [ProducesResponseType(typeof(CreateQuotationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CreateQuotationResponse>> CreateQuotationAsync([FromBody] CreateQuotationRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.CreateQuotationAsync(request, operatorName, cancellationToken);
+            return StatusCode(StatusCodes.Status201Created, response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "新增估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "新增估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("新增估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未建立。", "新增估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "新增估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "新增估價單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 取得單一估價單的詳細資料。
+    /// </summary>
+    [HttpPost("detail")]
+    [ProducesResponseType(typeof(QuotationDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<QuotationDetailResponse>> GetQuotationDetailAsync([FromBody] GetQuotationRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var quotation = await _quotationService.GetQuotationAsync(request, cancellationToken);
+            return Ok(quotation);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "取得估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "取得估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("取得估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，無法取得估價單。", "取得估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取得估價單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 編輯估價單資料，更新車輛、客戶與類別備註。
+    /// </summary>
+    [HttpPost("edit")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateQuotationAsync([FromBody] UpdateQuotationRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            await _quotationService.UpdateQuotationAsync(request, operatorName, cancellationToken);
+            return NoContent();
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "更新估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "更新估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("更新估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "更新估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "更新估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "更新估價單失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
-    // 目前無額外私有方法，預留區塊供後續擴充篩選或轉換邏輯。
+    /// <summary>
+    /// 將例外轉換為 ProblemDetails，統一錯誤輸出格式。
+    /// </summary>
+    private ActionResult BuildProblemDetails(HttpStatusCode statusCode, string message, string title)
+    {
+        var problem = new ProblemDetails
+        {
+            Status = (int)statusCode,
+            Title = title,
+            Detail = message,
+            Instance = HttpContext.Request.Path
+        };
+
+        return StatusCode(problem.Status ?? StatusCodes.Status500InternalServerError, problem);
+    }
+
+    /// <summary>
+    /// 從 JWT 權杖中取得操作人員名稱，優先顯示名稱再回退至識別碼。
+    /// </summary>
+    private string GetCurrentOperatorName()
+    {
+        var displayName = User.FindFirstValue("displayName");
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            return displayName;
+        }
+
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
+    }
 
     // ---------- 生命週期 ----------
     // 控制器不涉及生命週期事件，保留區塊以符合專案結構規範。
