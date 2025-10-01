@@ -8,5 +8,5 @@ public class CarPlateMaintenanceHistoryRequest
     /// <summary>
     /// 欲查詢的車牌號碼。
     /// </summary>
-    public string LicensePlateNumber { get; set; } = string.Empty;
+    public string CarPlateNumber { get; set; } = string.Empty;
 }
