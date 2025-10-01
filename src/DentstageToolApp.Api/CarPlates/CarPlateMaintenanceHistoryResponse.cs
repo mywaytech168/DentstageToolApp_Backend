@@ -10,7 +10,7 @@ public class CarPlateMaintenanceHistoryResponse
     /// <summary>
     /// 查詢後使用的正規化車牌號碼，方便前端顯示與後續查詢。
     /// </summary>
-    public string LicensePlateNumber { get; set; } = string.Empty;
+    public string CarPlateNumber { get; set; } = string.Empty;
 
     /// <summary>
     /// 車輛品牌。

@@ -1,6 +1,10 @@
 using DentstageToolApp.Api.Quotations;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
+using CarEntity = DentstageToolApp.Infrastructure.Entities.Car;
+using CustomerEntity = DentstageToolApp.Infrastructure.Entities.Customer;
+using StoreEntity = DentstageToolApp.Infrastructure.Entities.Store;
+using TechnicianEntity = DentstageToolApp.Infrastructure.Entities.Technician;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -515,8 +519,8 @@ public class QuotationService : IQuotationService
     /// </summary>
     private async Task<int?> ResolveStoreIdAsync(
         QuotationStoreInfo storeInfo,
-        Technician? technician,
-        Store? storeEntity,
+        TechnicianEntity? technician,
+        StoreEntity? storeEntity,
         string storeName,
         CancellationToken cancellationToken)
     {
@@ -551,7 +555,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 依據技師識別碼載入技師與所屬門市資料，若未提供識別碼則回傳 null。
     /// </summary>
-    private async Task<Technician?> GetTechnicianEntityAsync(int? technicianId, CancellationToken cancellationToken)
+    private async Task<TechnicianEntity?> GetTechnicianEntityAsync(int? technicianId, CancellationToken cancellationToken)
     {
         if (!technicianId.HasValue)
         {
@@ -574,7 +578,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 根據技師或門市識別碼取得門市主檔資料，確保後續可自動帶入店鋪名稱。
     /// </summary>
-    private async Task<Store?> GetStoreEntityAsync(QuotationStoreInfo storeInfo, Technician? technician, CancellationToken cancellationToken)
+    private async Task<StoreEntity?> GetStoreEntityAsync(QuotationStoreInfo storeInfo, TechnicianEntity? technician, CancellationToken cancellationToken)
     {
         if (technician is not null)
         {
@@ -615,7 +619,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 依據車輛識別碼取得車輛主檔資料，若未提供識別碼則回傳 null。
     /// </summary>
-    private async Task<Car?> GetCarEntityAsync(string? carUid, CancellationToken cancellationToken)
+    private async Task<CarEntity?> GetCarEntityAsync(string? carUid, CancellationToken cancellationToken)
     {
         var normalizedUid = NormalizeOptionalText(carUid);
         if (normalizedUid is null)
@@ -638,7 +642,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 依據客戶識別碼取得客戶主檔資料，若未提供識別碼則回傳 null。
     /// </summary>
-    private async Task<Customer?> GetCustomerEntityAsync(string? customerUid, CancellationToken cancellationToken)
+    private async Task<CustomerEntity?> GetCustomerEntityAsync(string? customerUid, CancellationToken cancellationToken)
     {
         var normalizedUid = NormalizeOptionalText(customerUid);
         if (normalizedUid is null)

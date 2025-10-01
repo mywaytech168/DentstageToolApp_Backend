@@ -8,7 +8,7 @@ public class CarPlateRecognitionResponse
     /// <summary>
     /// 辨識出的車牌號碼。
     /// </summary>
-    public string? LicensePlateNumber { get; set; }
+    public string? CarPlateNumber { get; set; }
 
     /// <summary>
     /// Tesseract 產生的信心度百分比，範圍約為 0-100。
