@@ -165,10 +165,17 @@ public class QuotationsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CreateQuotationResponse>> CreateQuotationAsync([FromBody] CreateQuotationRequest request, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            // 若傳入參數未通過驗證，直接回傳標準 ProblemDetails 結構。
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
-            var operatorName = GetCurrentOperatorName();
-            var response = await _quotationService.CreateQuotationAsync(request, operatorName, cancellationToken);
+            // 組裝目前登入者的上下文資訊，讓服務層可自動帶入使用者相關欄位。
+            var operatorContext = GetCurrentOperatorContext();
+            var response = await _quotationService.CreateQuotationAsync(request, operatorContext, cancellationToken);
             return StatusCode(StatusCodes.Status201Created, response);
         }
         catch (QuotationManagementException ex)
@@ -300,6 +307,18 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 組合目前登入者的估價單操作上下文，包含名稱與唯一識別碼。
+    /// </summary>
+    private QuotationOperatorContext GetCurrentOperatorContext()
+    {
+        return new QuotationOperatorContext
+        {
+            OperatorName = GetCurrentOperatorName(),
+            UserUid = GetCurrentUserUid()
+        };
+    }
+
+    /// <summary>
     /// 從 JWT 權杖中取得操作人員名稱，優先顯示名稱再回退至識別碼。
     /// </summary>
     private string GetCurrentOperatorName()
@@ -324,6 +343,27 @@ public class QuotationsController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
+    }
+
+    /// <summary>
+    /// 取得目前登入者的唯一識別碼，供建立估價單時寫入資料庫。
+    /// </summary>
+    private string? GetCurrentUserUid()
+    {
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
     }
 
     // ---------- 生命週期 ----------

@@ -65,6 +65,8 @@ public class QuotationStoreInfo
     /// <summary>
     /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
     /// </summary>
+    [Required(ErrorMessage = "請選擇估價技師。")]
+    [Range(1, int.MaxValue, ErrorMessage = "請選擇有效的估價技師。")]
     public int? TechnicianId { get; set; }
 
     /// <summary>
@@ -95,6 +97,7 @@ public class QuotationStoreInfo
     /// <summary>
     /// 維修來源。
     /// </summary>
+    [Required(ErrorMessage = "請輸入維修來源。")]
     public string? Source { get; set; }
 
     /// <summary>
@@ -111,6 +114,7 @@ public class QuotationCarInfo
     /// <summary>
     /// 車輛唯一識別碼，若提供則會自動帶出車牌與車況資訊。
     /// </summary>
+    [Required(ErrorMessage = "請選擇車輛資料。")]
     public string? CarUid { get; set; }
 
     /// <summary>
@@ -147,6 +151,7 @@ public class QuotationCustomerInfo
     /// <summary>
     /// 客戶唯一識別碼，若提供則會自動帶出客戶聯絡資料。
     /// </summary>
+    [Required(ErrorMessage = "請選擇客戶資料。")]
     public string? CustomerUid { get; set; }
 
     /// <summary>

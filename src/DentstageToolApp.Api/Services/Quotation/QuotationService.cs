@@ -180,11 +180,16 @@ public class QuotationService : IQuotationService
     }
 
     /// <inheritdoc />
-    public async Task<CreateQuotationResponse> CreateQuotationAsync(CreateQuotationRequest request, string operatorName, CancellationToken cancellationToken)
+    public async Task<CreateQuotationResponse> CreateQuotationAsync(CreateQuotationRequest request, QuotationOperatorContext operatorContext, CancellationToken cancellationToken)
     {
         if (request is null)
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單建立資料。");
+        }
+
+        if (operatorContext is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "缺少操作人員資訊，請重新登入。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -203,10 +208,12 @@ public class QuotationService : IQuotationService
 
         var storeEntity = await GetStoreEntityAsync(storeInfo, technicianEntity, cancellationToken);
         var storeName = NormalizeRequiredText(storeInfo.StoreName ?? storeEntity?.StoreName, "店鋪名稱");
-        var estimatorName = NormalizeOptionalText(storeInfo.EstimatorName ?? technicianEntity?.TechnicianName);
-        var creatorName = NormalizeOptionalText(storeInfo.CreatorName);
+        var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
+        var operatorUid = NormalizeOptionalText(operatorContext.UserUid);
+        var estimatorName = NormalizeOptionalText(storeInfo.EstimatorName ?? technicianEntity?.TechnicianName ?? operatorLabel);
+        var creatorName = NormalizeOptionalText(storeInfo.CreatorName ?? operatorLabel);
         var storeUid = NormalizeOptionalText(storeInfo.StoreUid);
-        var source = NormalizeOptionalText(storeInfo.Source);
+        var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
 
         // 透過車輛主檔自動帶出車牌與品牌資訊，若未選擇車輛則沿用前端輸入值。
         var carEntity = await GetCarEntityAsync(carInfo.CarUid, cancellationToken);
@@ -226,7 +233,6 @@ public class QuotationService : IQuotationService
         var customerSource = NormalizeOptionalText(customerInfo.Source ?? customerEntity?.Source);
         var customerRemark = NormalizeOptionalText(customerInfo.Remark ?? customerEntity?.ConnectRemark);
 
-        var operatorLabel = NormalizeOperator(operatorName);
         var plainRemark = NormalizeOptionalText(request.Remark);
 
         var createdAt = storeInfo.CreatedDate?.ToUniversalTime() ?? DateTime.UtcNow;
@@ -265,6 +271,7 @@ public class QuotationService : IQuotationService
             CreatedBy = creatorName ?? operatorLabel,
             ModificationTimestamp = createdAt,
             ModifiedBy = operatorLabel,
+            UserUid = operatorUid,
             Date = quotationDate,
             StoreId = storeId,
             StoreUid = storeUid,
