@@ -2,8 +2,8 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Cars;
-using DentstageToolApp.Api.Services.Car;
+using DentstageToolApp.Api.BrandModels;
+using DentstageToolApp.Api.Services.BrandModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,15 +19,15 @@ namespace DentstageToolApp.Api.Controllers;
 [Authorize]
 public class BrandModelsController : ControllerBase
 {
-    private readonly ICarManagementService _carManagementService;
+    private readonly IBrandModelQueryService _brandModelQueryService;
     private readonly ILogger<BrandModelsController> _logger;
 
     /// <summary>
-    /// 建構子，注入車輛維運服務與記錄器以利記錄例外。
+    /// 建構子，注入品牌型號查詢服務與記錄器以利記錄例外。
     /// </summary>
-    public BrandModelsController(ICarManagementService carManagementService, ILogger<BrandModelsController> logger)
+    public BrandModelsController(IBrandModelQueryService brandModelQueryService, ILogger<BrandModelsController> logger)
     {
-        _carManagementService = carManagementService;
+        _brandModelQueryService = brandModelQueryService;
         _logger = logger;
     }
 
@@ -37,17 +37,17 @@ public class BrandModelsController : ControllerBase
     /// 取得品牌與型號清單，供前端建立下拉選項使用。
     /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(CarBrandModelListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BrandModelListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<CarBrandModelListResponse>> GetBrandModelsAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<BrandModelListResponse>> GetBrandModelsAsync(CancellationToken cancellationToken)
     {
         try
         {
             // 委派服務層查詢品牌與型號主檔，保留排序與資料組裝邏輯。
-            var response = await _carManagementService.GetBrandModelsAsync(cancellationToken);
+            var response = await _brandModelQueryService.GetBrandModelsAsync(cancellationToken);
             return Ok(response);
         }
-        catch (CarManagementException ex)
+        catch (BrandModelQueryServiceException ex)
         {
             // 對自訂例外保留原始狀態碼與訊息，便於前端判斷錯誤。
             _logger.LogWarning(ex, "取得品牌型號失敗：{Message}", ex.Message);
