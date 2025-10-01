@@ -37,6 +37,21 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<Model> Models => Set<Model>();
 
     /// <summary>
+    /// 維修類型資料集。
+    /// </summary>
+    public virtual DbSet<FixType> FixTypes => Set<FixType>();
+
+    /// <summary>
+    /// 門市資料集。
+    /// </summary>
+    public virtual DbSet<Store> Stores => Set<Store>();
+
+    /// <summary>
+    /// 技師資料集。
+    /// </summary>
+    public virtual DbSet<Technician> Technicians => Set<Technician>();
+
+    /// <summary>
     /// 報價單資料集。
     /// </summary>
     public virtual DbSet<Quatation> Quatations => Set<Quatation>();
@@ -85,6 +100,9 @@ public class DentstageToolAppContext : DbContext
         ConfigureBrand(modelBuilder);
         ConfigureModel(modelBuilder);
         ConfigureCar(modelBuilder);
+        ConfigureFixType(modelBuilder);
+        ConfigureStore(modelBuilder);
+        ConfigureTechnician(modelBuilder);
         ConfigureQuatation(modelBuilder);
         ConfigureOrder(modelBuilder);
         ConfigureCarBeauty(modelBuilder);
@@ -279,6 +297,66 @@ public class DentstageToolAppContext : DbContext
     }
 
     /// <summary>
+    /// 設定維修類型主檔欄位與關聯。
+    /// </summary>
+    private static void ConfigureFixType(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<FixType>();
+        entity.ToTable("fix_types");
+        entity.HasKey(e => e.FixTypeId);
+        entity.Property(e => e.FixTypeName)
+            .IsRequired()
+            .HasMaxLength(50);
+        entity.HasMany(e => e.Quatations)
+            .WithOne(e => e.FixTypeNavigation)
+            .HasForeignKey(e => e.FixTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    /// <summary>
+    /// 設定門市主檔欄位與關聯。
+    /// </summary>
+    private static void ConfigureStore(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<Store>();
+        entity.ToTable("stores");
+        entity.HasKey(e => e.StoreId);
+        entity.Property(e => e.StoreName)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.HasMany(e => e.Technicians)
+            .WithOne(e => e.Store)
+            .HasForeignKey(e => e.StoreId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasMany(e => e.Quatations)
+            .WithOne(e => e.StoreNavigation)
+            .HasForeignKey(e => e.StoreId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    /// <summary>
+    /// 設定技師主檔欄位與關聯。
+    /// </summary>
+    private static void ConfigureTechnician(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<Technician>();
+        entity.ToTable("technicians");
+        entity.HasKey(e => e.TechnicianId);
+        entity.Property(e => e.TechnicianName)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.StoreId).IsRequired();
+        entity.HasOne(e => e.Store)
+            .WithMany(e => e.Technicians)
+            .HasForeignKey(e => e.StoreId)
+            .OnDelete(DeleteBehavior.Cascade);
+        entity.HasMany(e => e.Quatations)
+            .WithOne(e => e.TechnicianNavigation)
+            .HasForeignKey(e => e.TechnicianId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    /// <summary>
     /// 設定報價單資料表欄位與關聯。
     /// </summary>
     private static void ConfigureQuatation(ModelBuilder modelBuilder)
@@ -295,10 +373,16 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreUid).HasMaxLength(100);
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
+        entity.Property(e => e.StoreId)
+            .HasColumnName("StoreId");
+        entity.Property(e => e.TechnicianId)
+            .HasColumnName("TechnicianId");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.FixType)
             .HasMaxLength(50)
             .HasColumnName("Fix_Type");
+        entity.Property(e => e.FixTypeId)
+            .HasColumnName("FixTypeId");
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)
             .HasColumnName("CarUID");
@@ -329,6 +413,18 @@ public class DentstageToolAppContext : DbContext
         entity.HasOne(e => e.ModelNavigation)
             .WithMany(e => e.Quatations)
             .HasForeignKey(e => e.ModelId)
+            .OnDelete(DeleteBehavior.SetNull);
+        entity.HasOne(e => e.FixTypeNavigation)
+            .WithMany(e => e.Quatations)
+            .HasForeignKey(e => e.FixTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+        entity.HasOne(e => e.StoreNavigation)
+            .WithMany(e => e.Quatations)
+            .HasForeignKey(e => e.StoreId)
+            .OnDelete(DeleteBehavior.SetNull);
+        entity.HasOne(e => e.TechnicianNavigation)
+            .WithMany(e => e.Quatations)
+            .HasForeignKey(e => e.TechnicianId)
             .OnDelete(DeleteBehavior.SetNull);
         entity.Property(e => e.CustomerUid)
             .HasMaxLength(100)

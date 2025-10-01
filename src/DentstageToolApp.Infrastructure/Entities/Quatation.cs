@@ -59,6 +59,26 @@ public class Quatation
     public string? UserName { get; set; }
 
     /// <summary>
+    /// 所屬門市識別碼。
+    /// </summary>
+    public int? StoreId { get; set; }
+
+    /// <summary>
+    /// 導覽屬性：門市主檔資料。
+    /// </summary>
+    public Store? StoreNavigation { get; set; }
+
+    /// <summary>
+    /// 建立估價單的技師識別碼。
+    /// </summary>
+    public int? TechnicianId { get; set; }
+
+    /// <summary>
+    /// 導覽屬性：技師主檔資料。
+    /// </summary>
+    public Technician? TechnicianNavigation { get; set; }
+
+    /// <summary>
     /// 報價日期。
     /// </summary>
     public DateOnly? Date { get; set; }
@@ -72,6 +92,16 @@ public class Quatation
     /// 維修類型。
     /// </summary>
     public string? FixType { get; set; }
+
+    /// <summary>
+    /// 維修類型識別碼，對應 fix_types 表格主鍵。
+    /// </summary>
+    public int? FixTypeId { get; set; }
+
+    /// <summary>
+    /// 導覽屬性：維修類型主檔資料。
+    /// </summary>
+    public FixType? FixTypeNavigation { get; set; }
 
     /// <summary>
     /// 關聯車輛識別碼。

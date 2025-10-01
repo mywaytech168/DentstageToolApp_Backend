@@ -93,6 +93,7 @@ public class QuotationService : IQuotationService
 
         // ---------- 套用排序與分頁 ----------
         // 使用 LEFT JOIN 連結 Brands 與 Models 主檔，優先以主檔名稱回傳品牌與車型資訊。
+        // 透過多個 LEFT JOIN 串接主檔，優先取得標準化名稱供前端顯示。
         var orderedQuery =
             from quotation in quotationsQuery
             join brand in _context.Brands.AsNoTracking()
@@ -101,9 +102,18 @@ public class QuotationService : IQuotationService
             join model in _context.Models.AsNoTracking()
                 on quotation.ModelId equals model.ModelId into modelGroup
             from model in modelGroup.DefaultIfEmpty()
+            join fixType in _context.FixTypes.AsNoTracking()
+                on quotation.FixTypeId equals fixType.FixTypeId into fixTypeGroup
+            from fixType in fixTypeGroup.DefaultIfEmpty()
+            join store in _context.Stores.AsNoTracking()
+                on quotation.StoreId equals store.StoreId into storeGroup
+            from store in storeGroup.DefaultIfEmpty()
+            join technician in _context.Technicians.AsNoTracking()
+                on quotation.TechnicianId equals technician.TechnicianId into technicianGroup
+            from technician in technicianGroup.DefaultIfEmpty()
             orderby quotation.CreationTimestamp ?? DateTime.MinValue descending,
                 quotation.QuotationNo descending
-            select new { quotation, brand, model };
+            select new { quotation, brand, model, fixType, store, technician };
 
         var pagedQuery = orderedQuery
             .Skip((page - 1) * pageSize)
@@ -117,13 +127,15 @@ public class QuotationService : IQuotationService
                 CarBrand = result.brand != null ? result.brand.BrandName : result.quotation.Brand,
                 CarModel = result.model != null ? result.model.ModelName : result.quotation.Model,
                 CarPlateNumber = result.quotation.CarNo,
-                // 目前狀態使用名稱
-                StoreName = result.quotation.UserName,
-                EstimatorName = result.quotation.CurrentStatusUser,
+                // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
+                StoreName = result.store != null ? result.store.StoreName : result.quotation.CurrentStatusUser,
+                // 估價技師同樣先以主檔名稱為主。
+                EstimatorName = result.technician != null ? result.technician.TechnicianName : result.quotation.UserName,
                 // 建立人員暫做為製單技師資訊。
                 CreatorName = result.quotation.CreatedBy,
                 CreatedAt = result.quotation.CreationTimestamp,
-                FixType = result.quotation.FixType
+                // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
+                FixType = result.fixType != null ? result.fixType.FixTypeName : result.quotation.FixType
             });
 
         var items = await pagedQuery.ToListAsync(cancellationToken);
