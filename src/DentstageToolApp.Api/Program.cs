@@ -48,7 +48,7 @@ builder.Services.AddSwaggerGen(options =>
     // 設定 Bearer 驗證資訊，讓 Swagger UI 可以輸入 JWT 並套用到所有請求
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
-        Description = "請在此輸入 JWT，格式為：Bearer {token}",
+        Description = "請直接輸入 JWT",
         Name = "Authorization",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
