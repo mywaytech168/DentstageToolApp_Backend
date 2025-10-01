@@ -96,7 +96,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         // ---------- 組裝回應區 ----------
         var response = new CarPlateRecognitionResponse
         {
-            LicensePlateNumber = normalizedPlate,
+            CarPlateNumber = normalizedPlate,
             Confidence = Math.Round(confidence, 2),
             Brand = car?.Brand,
             Model = car?.Model,
@@ -111,15 +111,15 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
     }
 
     /// <inheritdoc />
-    public async Task<CarPlateMaintenanceHistoryResponse> GetMaintenanceHistoryAsync(string licensePlate, CancellationToken cancellationToken)
+    public async Task<CarPlateMaintenanceHistoryResponse> GetMaintenanceHistoryAsync(string carPlateNumber, CancellationToken cancellationToken)
     {
         // ---------- 參數檢核區 ----------
-        if (string.IsNullOrWhiteSpace(licensePlate))
+        if (string.IsNullOrWhiteSpace(carPlateNumber))
         {
-            throw new ArgumentException("車牌號碼不可為空，請輸入欲查詢的車牌號碼。", nameof(licensePlate));
+            throw new ArgumentException("車牌號碼不可為空，請輸入欲查詢的車牌號碼。", nameof(carPlateNumber));
         }
 
-        var trimmedPlate = licensePlate.Trim();
+        var trimmedPlate = carPlateNumber.Trim();
         var normalizedPlate = NormalizePlate(trimmedPlate);
 
         if (string.IsNullOrWhiteSpace(normalizedPlate))
@@ -193,7 +193,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         var response = new CarPlateMaintenanceHistoryResponse
         {
-            LicensePlateNumber = normalizedPlate,
+            CarPlateNumber = normalizedPlate,
             Brand = car?.Brand ?? referenceOrder?.Brand,
             Model = car?.Model ?? referenceOrder?.Model,
             Color = car?.Color ?? referenceOrder?.Color,
