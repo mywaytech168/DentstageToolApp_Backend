@@ -1,0 +1,165 @@
+using System;
+using System.ComponentModel.DataAnnotations;
+
+namespace DentstageToolApp.Api.Quotations;
+
+/// <summary>
+/// 建立估價單時前端需提供的欄位集合，涵蓋店家、車輛、客戶與估價資訊。
+/// </summary>
+public class CreateQuotationRequest
+{
+    /// <summary>
+    /// 店家相關資訊。
+    /// </summary>
+    [Required]
+    public QuotationStoreInfo Store { get; set; } = new();
+
+    /// <summary>
+    /// 車輛相關資訊。
+    /// </summary>
+    [Required]
+    public QuotationCarInfo Car { get; set; } = new();
+
+    /// <summary>
+    /// 客戶相關資訊。
+    /// </summary>
+    [Required]
+    public QuotationCustomerInfo Customer { get; set; } = new();
+
+    /// <summary>
+    /// 服務類別的明細資訊。
+    /// </summary>
+    public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
+
+    /// <summary>
+    /// 各類別金額總覽。
+    /// </summary>
+    public QuotationCategoryTotal? CategoryTotal { get; set; }
+
+    /// <summary>
+    /// 車體確認單資料。
+    /// </summary>
+    public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
+
+    /// <summary>
+    /// 估價單整體備註，會以 JSON 包裝儲存在資料庫中。
+    /// </summary>
+    public string? Remark { get; set; }
+}
+
+/// <summary>
+/// 估價單店家資訊欄位。
+/// </summary>
+public class QuotationStoreInfo
+{
+    /// <summary>
+    /// 門市識別碼，若有對應主檔可一併傳入。
+    /// </summary>
+    public int? StoreId { get; set; }
+
+    /// <summary>
+    /// 門市唯一代碼，可對應舊系統欄位。
+    /// </summary>
+    public string? StoreUid { get; set; }
+
+    /// <summary>
+    /// 店鋪名稱。
+    /// </summary>
+    [Required]
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// 估價技師。
+    /// </summary>
+    public string? EstimatorName { get; set; }
+
+    /// <summary>
+    /// 製單技師。
+    /// </summary>
+    public string? CreatorName { get; set; }
+
+    /// <summary>
+    /// 建立日期。
+    /// </summary>
+    public DateTime? CreatedDate { get; set; }
+
+    /// <summary>
+    /// 預約日期。
+    /// </summary>
+    public DateTime? ReservationDate { get; set; }
+
+    /// <summary>
+    /// 維修來源。
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
+    /// 預計維修日期。
+    /// </summary>
+    public DateTime? RepairDate { get; set; }
+}
+
+/// <summary>
+/// 車輛相關資料欄位。
+/// </summary>
+public class QuotationCarInfo
+{
+    /// <summary>
+    /// 車牌號碼。
+    /// </summary>
+    [Required]
+    public string? LicensePlate { get; set; }
+
+    /// <summary>
+    /// 車款或品牌名稱。
+    /// </summary>
+    public string? Brand { get; set; }
+
+    /// <summary>
+    /// 車型名稱。
+    /// </summary>
+    public string? Model { get; set; }
+
+    /// <summary>
+    /// 車色。
+    /// </summary>
+    public string? Color { get; set; }
+
+    /// <summary>
+    /// 車輛備註。
+    /// </summary>
+    public string? Remark { get; set; }
+}
+
+/// <summary>
+/// 客戶相關資料欄位。
+/// </summary>
+public class QuotationCustomerInfo
+{
+    /// <summary>
+    /// 客戶名稱。
+    /// </summary>
+    [Required]
+    public string? Name { get; set; }
+
+    /// <summary>
+    /// 聯絡電話。
+    /// </summary>
+    public string? Phone { get; set; }
+
+    /// <summary>
+    /// 性別。
+    /// </summary>
+    public string? Gender { get; set; }
+
+    /// <summary>
+    /// 消息來源。
+    /// </summary>
+    public string? Source { get; set; }
+
+    /// <summary>
+    /// 客戶備註。
+    /// </summary>
+    public string? Remark { get; set; }
+}
+

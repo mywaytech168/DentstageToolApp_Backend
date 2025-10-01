@@ -1,10 +1,17 @@
-using System;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using DentstageToolApp.Api.Quotations;
 using DentstageToolApp.Infrastructure.Data;
+using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DentstageToolApp.Api.Services.Quotation;
 
@@ -16,14 +23,24 @@ public class QuotationService : IQuotationService
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 200;
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = false
+    };
+
     private readonly DentstageToolAppContext _context;
+    private readonly ILogger<QuotationService> _logger;
 
     /// <summary>
     /// 建構子，注入資料庫內容物件以供查詢使用。
     /// </summary>
-    public QuotationService(DentstageToolAppContext context)
+    public QuotationService(DentstageToolAppContext context, ILogger<QuotationService> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -156,5 +173,616 @@ public class QuotationService : IQuotationService
             TotalCount = totalCount,
             Items = items
         };
+    }
+
+    /// <inheritdoc />
+    public async Task<CreateQuotationResponse> CreateQuotationAsync(CreateQuotationRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單建立資料。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 參數整理區 ----------
+        var storeInfo = request.Store ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供店家資訊。");
+        var carInfo = request.Car ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供車輛資訊。");
+        var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
+
+        var storeName = NormalizeRequiredText(storeInfo.StoreName, "店鋪名稱");
+        var licensePlate = NormalizeRequiredText(carInfo.LicensePlate, "車牌號碼").ToUpperInvariant();
+        var customerName = NormalizeRequiredText(customerInfo.Name, "客戶名稱");
+        var estimatorName = NormalizeOptionalText(storeInfo.EstimatorName);
+        var creatorName = NormalizeOptionalText(storeInfo.CreatorName);
+        var storeUid = NormalizeOptionalText(storeInfo.StoreUid);
+        var source = NormalizeOptionalText(storeInfo.Source);
+        var operatorLabel = NormalizeOperator(operatorName);
+        var brand = NormalizeOptionalText(carInfo.Brand);
+        var model = NormalizeOptionalText(carInfo.Model);
+        var color = NormalizeOptionalText(carInfo.Color);
+        var carRemark = NormalizeOptionalText(carInfo.Remark);
+        var customerPhone = NormalizeOptionalText(customerInfo.Phone);
+        var customerGender = NormalizeOptionalText(customerInfo.Gender);
+        var customerSource = NormalizeOptionalText(customerInfo.Source);
+        var customerRemark = NormalizeOptionalText(customerInfo.Remark);
+        var plainRemark = NormalizeOptionalText(request.Remark);
+
+        var createdAt = storeInfo.CreatedDate?.ToUniversalTime() ?? DateTime.UtcNow;
+        var quotationDate = DateOnly.FromDateTime((storeInfo.CreatedDate ?? DateTime.UtcNow).Date);
+        var reservationDate = ToDateOnly(storeInfo.ReservationDate);
+        var repairDate = ToDateOnly(storeInfo.RepairDate);
+        var phoneQuery = NormalizePhoneQuery(customerPhone);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 系統資料計算區 ----------
+        var serialNumber = await GenerateNextSerialNumberAsync(cancellationToken);
+        var quotationUid = BuildQuotationUid();
+        var quotationNo = BuildQuotationNo(serialNumber, createdAt);
+        var storeId = await ResolveStoreIdAsync(storeInfo, cancellationToken);
+
+        var extraData = new QuotationExtraData
+        {
+            ServiceCategories = request.ServiceCategories,
+            CategoryTotal = request.CategoryTotal,
+            CarBodyConfirmation = request.CarBodyConfirmation
+        };
+
+        var remarkPayload = SerializeRemark(plainRemark, extraData);
+        var valuation = CalculateTotalAmount(request.CategoryTotal, request.ServiceCategories);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 實體建立區 ----------
+        var quotationEntity = new Quatation
+        {
+            QuotationUid = quotationUid,
+            QuotationNo = quotationNo,
+            SerialNum = serialNumber,
+            CreationTimestamp = createdAt,
+            CreatedBy = creatorName ?? operatorLabel,
+            ModificationTimestamp = createdAt,
+            ModifiedBy = operatorLabel,
+            Date = quotationDate,
+            StoreId = storeId,
+            StoreUid = storeUid,
+            CurrentStatusUser = storeName,
+            UserName = estimatorName,
+            BookDate = reservationDate,
+            FixDate = repairDate,
+            Source = source,
+            CarNo = licensePlate,
+            CarNoInput = licensePlate,
+            CarNoInputGlobal = licensePlate,
+            Brand = brand,
+            Model = model,
+            BrandModel = BuildBrandModel(brand, model),
+            Color = color,
+            CarRemark = carRemark,
+            Name = customerName,
+            Phone = customerPhone,
+            PhoneInput = customerPhone,
+            PhoneInputGlobal = customerPhone,
+            PhoneQuery = phoneQuery,
+            Gender = customerGender,
+            CustomerType = customerSource,
+            ConnectRemark = customerRemark,
+            Remark = remarkPayload,
+            Valuation = valuation
+        };
+
+        await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 建立估價單 {QuotationUid} ({QuotationNo}) 成功。", operatorLabel, quotationEntity.QuotationUid, quotationEntity.QuotationNo);
+
+        return new CreateQuotationResponse
+        {
+            QuotationUid = quotationEntity.QuotationUid,
+            QuotationNo = quotationEntity.QuotationNo,
+            CreatedAt = quotationEntity.CreationTimestamp ?? createdAt
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationDetailResponse> GetQuotationAsync(GetQuotationRequest request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單查詢條件。");
+        }
+
+        var query = _context.Quatations
+            .AsNoTracking()
+            .Include(q => q.StoreNavigation)
+            .Include(q => q.BrandNavigation)
+            .Include(q => q.ModelNavigation);
+
+        query = ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
+
+        var quotation = await query.FirstOrDefaultAsync(cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無符合條件的估價單。");
+        }
+
+        var (plainRemark, extraData) = ParseRemark(quotation.Remark);
+
+        return new QuotationDetailResponse
+        {
+            QuotationUid = quotation.QuotationUid,
+            QuotationNo = quotation.QuotationNo,
+            Status = quotation.Status,
+            CreatedAt = quotation.CreationTimestamp,
+            UpdatedAt = quotation.ModificationTimestamp,
+            Store = new QuotationStoreInfo
+            {
+                StoreId = quotation.StoreId,
+                StoreUid = quotation.StoreUid,
+                StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
+                EstimatorName = quotation.UserName,
+                CreatorName = quotation.CreatedBy,
+                CreatedDate = quotation.CreationTimestamp,
+                ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
+                Source = quotation.Source,
+                RepairDate = quotation.FixDate?.ToDateTime(TimeOnly.MinValue)
+            },
+            Car = new QuotationCarInfo
+            {
+                LicensePlate = quotation.CarNo,
+                Brand = quotation.BrandNavigation?.BrandName ?? quotation.Brand,
+                Model = quotation.ModelNavigation?.ModelName ?? quotation.Model,
+                Color = quotation.Color,
+                Remark = quotation.CarRemark
+            },
+            Customer = new QuotationCustomerInfo
+            {
+                Name = quotation.Name,
+                Phone = quotation.Phone,
+                Gender = quotation.Gender,
+                Source = quotation.CustomerType,
+                Remark = quotation.ConnectRemark
+            },
+            Remark = plainRemark,
+            ServiceCategories = extraData?.ServiceCategories,
+            CategoryTotal = extraData?.CategoryTotal,
+            CarBodyConfirmation = extraData?.CarBodyConfirmation
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task UpdateQuotationAsync(UpdateQuotationRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單更新資料。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需更新的估價單。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var carInfo = request.Car ?? new QuotationCarInfo();
+        var customerInfo = request.Customer ?? new QuotationCustomerInfo();
+
+        quotation.CarNo = NormalizeOptionalText(carInfo.LicensePlate)?.ToUpperInvariant() ?? quotation.CarNo;
+        quotation.CarNoInput = quotation.CarNo;
+        quotation.CarNoInputGlobal = quotation.CarNo;
+        quotation.Brand = NormalizeOptionalText(carInfo.Brand);
+        quotation.Model = NormalizeOptionalText(carInfo.Model);
+        quotation.BrandModel = BuildBrandModel(quotation.Brand, quotation.Model);
+        quotation.Color = NormalizeOptionalText(carInfo.Color);
+        quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
+
+        quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
+        quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
+        quotation.PhoneInput = quotation.Phone;
+        quotation.PhoneInputGlobal = quotation.Phone;
+        quotation.PhoneQuery = NormalizePhoneQuery(quotation.Phone);
+        quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
+        quotation.CustomerType = NormalizeOptionalText(customerInfo.Source);
+        quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+
+        var (plainRemark, extraData) = ParseRemark(quotation.Remark);
+        extraData ??= new QuotationExtraData();
+        extraData.ServiceCategories ??= new QuotationServiceCategoryCollection();
+
+        foreach (var kvp in request.CategoryRemarks)
+        {
+            var categoryKey = NormalizeCategoryKey(kvp.Key);
+            if (categoryKey is null)
+            {
+                continue;
+            }
+
+            var block = EnsureCategoryBlock(extraData.ServiceCategories, categoryKey);
+            block.Overall.Remark = NormalizeOptionalText(kvp.Value);
+        }
+
+        var newRemark = request.Remark is not null
+            ? NormalizeOptionalText(request.Remark)
+            : plainRemark;
+
+        quotation.Remark = SerializeRemark(newRemark, extraData);
+        quotation.ModificationTimestamp = DateTime.UtcNow;
+        quotation.ModifiedBy = operatorLabel;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 更新估價單 {QuotationUid} 完成。", operatorLabel, quotation.QuotationUid);
+    }
+
+    // ---------- 方法區 ----------
+
+    /// <summary>
+    /// 針對估價單查詢套用 UID 或編號的過濾條件。
+    /// </summary>
+    private static IQueryable<Quatation> ApplyQuotationFilter(IQueryable<Quatation> query, string? quotationUid, string? quotationNo)
+    {
+        if (!string.IsNullOrWhiteSpace(quotationUid))
+        {
+            return query.Where(q => q.QuotationUid == quotationUid);
+        }
+
+        if (!string.IsNullOrWhiteSpace(quotationNo))
+        {
+            return query.Where(q => q.QuotationNo == quotationNo);
+        }
+
+        throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單識別資訊。");
+    }
+
+    /// <summary>
+    /// 建立估價單唯一識別碼，使用 Qu_ 前綴搭配 GUID。
+    /// </summary>
+    private static string BuildQuotationUid()
+    {
+        return $"Qu_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+    }
+
+    /// <summary>
+    /// 依照序號與建立時間產生估價單編號。
+    /// </summary>
+    private static string BuildQuotationNo(int serialNumber, DateTime timestamp)
+    {
+        return $"Q{timestamp:yyyyMMdd}-{serialNumber:0000}";
+    }
+
+    /// <summary>
+    /// 根據品牌與車型組出顯示文字。
+    /// </summary>
+    private static string? BuildBrandModel(string? brand, string? model)
+    {
+        if (string.IsNullOrWhiteSpace(brand) && string.IsNullOrWhiteSpace(model))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(brand))
+        {
+            return model;
+        }
+
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return brand;
+        }
+
+        return $"{brand} {model}";
+    }
+
+    /// <summary>
+    /// 產生下一個估價單序號，使用目前資料庫最大值加一。
+    /// </summary>
+    private async Task<int> GenerateNextSerialNumberAsync(CancellationToken cancellationToken)
+    {
+        var maxSerial = await _context.Quatations
+            .AsNoTracking()
+            .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+
+        return (maxSerial ?? 0) + 1;
+    }
+
+    /// <summary>
+    /// 嘗試依據店家資訊解析出門市識別碼。
+    /// </summary>
+    private async Task<int?> ResolveStoreIdAsync(QuotationStoreInfo storeInfo, CancellationToken cancellationToken)
+    {
+        if (storeInfo.StoreId.HasValue)
+        {
+            var exists = await _context.Stores
+                .AsNoTracking()
+                .AnyAsync(store => store.StoreId == storeInfo.StoreId.Value, cancellationToken);
+
+            if (!exists)
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料。");
+            }
+
+            return storeInfo.StoreId;
+        }
+
+        var storeName = NormalizeOptionalText(storeInfo.StoreName);
+        if (string.IsNullOrWhiteSpace(storeName))
+        {
+            return null;
+        }
+
+        var storeEntity = await _context.Stores
+            .AsNoTracking()
+            .FirstOrDefaultAsync(store => store.StoreName == storeName, cancellationToken);
+
+        return storeEntity?.StoreId;
+    }
+
+    /// <summary>
+    /// 嘗試尋找可供更新的估價單資料。
+    /// </summary>
+    private async Task<Quatation?> FindQuotationForUpdateAsync(string? quotationUid, string? quotationNo, CancellationToken cancellationToken)
+    {
+        var query = ApplyQuotationFilter(_context.Quatations, quotationUid, quotationNo);
+        return await query.FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 將 remark 字串還原為可讀取的備註與擴充資料。
+    /// </summary>
+    private static (string? PlainRemark, QuotationExtraData? Extra) ParseRemark(string? remark)
+    {
+        if (string.IsNullOrWhiteSpace(remark))
+        {
+            return (null, null);
+        }
+
+        try
+        {
+            var envelope = JsonSerializer.Deserialize<QuotationRemarkEnvelope>(remark, JsonOptions);
+            if (envelope is null)
+            {
+                return (remark, null);
+            }
+
+            return (NormalizeOptionalText(envelope.PlainRemark), envelope.Extra);
+        }
+        catch (JsonException)
+        {
+            return (remark, null);
+        }
+    }
+
+    /// <summary>
+    /// 將備註與擴充資料序列化為 JSON 字串，統一儲存格式。
+    /// </summary>
+    private static string SerializeRemark(string? remark, QuotationExtraData? extra)
+    {
+        if (string.IsNullOrWhiteSpace(remark) && extra is null)
+        {
+            return string.Empty;
+        }
+
+        var envelope = new QuotationRemarkEnvelope
+        {
+            PlainRemark = NormalizeOptionalText(remark),
+            Extra = extra
+        };
+
+        return JsonSerializer.Serialize(envelope, JsonOptions);
+    }
+
+    /// <summary>
+    /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
+    /// </summary>
+    private static decimal? CalculateTotalAmount(QuotationCategoryTotal? total, QuotationServiceCategoryCollection? categories)
+    {
+        var hasValue = false;
+        decimal amount = 0m;
+
+        if (total?.CategorySubtotals is { Count: > 0 })
+        {
+            foreach (var value in total.CategorySubtotals.Values)
+            {
+                if (value.HasValue)
+                {
+                    amount += value.Value;
+                    hasValue = true;
+                }
+            }
+
+            if (total.RoundingDiscount.HasValue)
+            {
+                amount -= total.RoundingDiscount.Value;
+                hasValue = true;
+            }
+        }
+        else if (categories is not null)
+        {
+            foreach (var block in EnumerateCategoryBlocks(categories))
+            {
+                if (block.Amount.DamageSubtotal.HasValue)
+                {
+                    amount += block.Amount.DamageSubtotal.Value;
+                    hasValue = true;
+                }
+
+                if (block.Amount.AdditionalFee.HasValue)
+                {
+                    amount += block.Amount.AdditionalFee.Value;
+                    hasValue = true;
+                }
+            }
+        }
+
+        return hasValue ? amount : null;
+    }
+
+    /// <summary>
+    /// 逐一走訪三大類別的資料區塊，方便彙整金額。
+    /// </summary>
+    private static IEnumerable<QuotationCategoryBlock> EnumerateCategoryBlocks(QuotationServiceCategoryCollection categories)
+    {
+        if (categories.Dent is not null)
+        {
+            yield return categories.Dent;
+        }
+
+        if (categories.Paint is not null)
+        {
+            yield return categories.Paint;
+        }
+
+        if (categories.Other is not null)
+        {
+            yield return categories.Other;
+        }
+    }
+
+    /// <summary>
+    /// 確保取得指定類別的資料區塊，若不存在則建立預設實例。
+    /// </summary>
+    private static QuotationCategoryBlock EnsureCategoryBlock(QuotationServiceCategoryCollection categories, string categoryKey)
+    {
+        return categoryKey switch
+        {
+            "dent" => categories.Dent ??= new QuotationCategoryBlock(),
+            "paint" => categories.Paint ??= new QuotationCategoryBlock(),
+            "other" => categories.Other ??= new QuotationCategoryBlock(),
+            _ => categories.Other ??= new QuotationCategoryBlock()
+        };
+    }
+
+    /// <summary>
+    /// 將類別索引正規化為 dent / paint / other。
+    /// </summary>
+    private static string? NormalizeCategoryKey(string? key)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return null;
+        }
+
+        return key.Trim().ToLowerInvariant() switch
+        {
+            "dent" or "凹痕" => "dent",
+            "paint" or "鈑烤" or "板烤" => "paint",
+            "other" or "其他" => "other",
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// 處理必填欄位，若為空值則拋出例外提示呼叫端補齊。
+    /// </summary>
+    private static string NormalizeRequiredText(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, $"{fieldName}為必填欄位，請重新輸入。");
+        }
+
+        return value.Trim();
+    }
+
+    /// <summary>
+    /// 處理可選文字欄位，若為空白則回傳 null。
+    /// </summary>
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
+    }
+
+    /// <summary>
+    /// 正規化操作人員名稱，避免寫入空白。
+    /// </summary>
+    private static string NormalizeOperator(string? operatorName)
+    {
+        if (string.IsNullOrWhiteSpace(operatorName))
+        {
+            return "UnknownUser";
+        }
+
+        return operatorName.Trim();
+    }
+
+    /// <summary>
+    /// 將 DateTime? 轉換為 DateOnly?，方便儲存至資料庫。
+    /// </summary>
+    private static DateOnly? ToDateOnly(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return DateOnly.FromDateTime(value.Value.Date);
+    }
+
+    /// <summary>
+    /// 將電話轉換為僅包含數字的查詢字串。
+    /// </summary>
+    private static string? NormalizePhoneQuery(string? phone)
+    {
+        if (string.IsNullOrWhiteSpace(phone))
+        {
+            return null;
+        }
+
+        var digits = new string(phone.Where(char.IsDigit).ToArray());
+        return string.IsNullOrWhiteSpace(digits) ? null : digits;
+    }
+
+    // ---------- 生命週期 ----------
+    // 服務由 DI 管理生命週期，無需額外釋放資源。
+
+    /// <summary>
+    /// remark 的序列化包裝，保留原始備註與擴充資料。
+    /// </summary>
+    private class QuotationRemarkEnvelope
+    {
+        /// <summary>
+        /// remark 版本，預留後續擴充使用。
+        /// </summary>
+        public int Version { get; set; } = 1;
+
+        /// <summary>
+        /// 純文字備註內容。
+        /// </summary>
+        public string? PlainRemark { get; set; }
+
+        /// <summary>
+        /// 擴充資料集合。
+        /// </summary>
+        public QuotationExtraData? Extra { get; set; }
+    }
+
+    /// <summary>
+    /// 估價單擴充資料，包含服務類別與車體確認單資訊。
+    /// </summary>
+    private class QuotationExtraData
+    {
+        /// <summary>
+        /// 各服務類別資訊。
+        /// </summary>
+        public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
+
+        /// <summary>
+        /// 類別金額總覽。
+        /// </summary>
+        public QuotationCategoryTotal? CategoryTotal { get; set; }
+
+        /// <summary>
+        /// 車體確認單資料。
+        /// </summary>
+        public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
     }
 }
