@@ -145,6 +145,7 @@ builder.Services.AddScoped<ICarPlateRecognitionService, CarPlateRecognitionServi
 builder.Services.AddScoped<ICarManagementService, CarManagementService>();
 builder.Services.AddScoped<IBrandModelQueryService, BrandModelQueryService>();
 builder.Services.AddScoped<ICustomerManagementService, CustomerManagementService>();
+builder.Services.AddScoped<ICustomerLookupService, CustomerLookupService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
