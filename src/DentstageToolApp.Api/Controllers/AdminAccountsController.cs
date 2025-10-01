@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Admin;
 using DentstageToolApp.Api.Services.Admin;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -34,6 +35,16 @@ public class AdminAccountsController : ControllerBase
     /// 建立新的使用者帳號與對應裝置機碼。
     /// </summary>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "displayName": "陳大明",
+          "role": "StoreManager",
+          "deviceKey": "CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C",
+          "deviceName": "高雄總店平板",
+          "operatorName": "SystemAdmin"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateUserDeviceResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Claims;
 using DentstageToolApp.Api.Auth;
 using DentstageToolApp.Api.Services.Auth;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,12 @@ public class AuthController : ControllerBase
     /// BFC29A95-885C-CF45-A91C-F0DD3F1DDD7B 加盟店測試 &#10;
     /// </remarks>
     [HttpPost("login")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "deviceKey": "CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C"
+        }
+        """)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -72,6 +79,13 @@ public class AuthController : ControllerBase
     /// 透過 Refresh Token 換取新的 Access Token。
     /// </summary>
     [HttpPost("token/refresh")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.MockRefreshToken",
+          "deviceKey": "CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C"
+        }
+        """)]
     [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

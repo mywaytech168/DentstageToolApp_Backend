@@ -1,5 +1,6 @@
 using DentstageToolApp.Api.Quotations;
 using DentstageToolApp.Api.Services.Quotation;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -57,6 +58,19 @@ public class QuotationsController : ControllerBase
     /// <param name="request">查詢參數，與 GET 版本相同但由 Body 傳遞。</param>
     /// <param name="cancellationToken">取消權杖，供前端於離開頁面時停止查詢。</param>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "fixType": "DentRepair",
+          "status": "110",
+          "startDate": "2024-03-01T00:00:00",
+          "endDate": "2024-03-31T23:59:59",
+          "customerKeyword": "林",
+          "carPlateKeyword": "AAA",
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationListResponse>> SearchQuotationsAsync([FromBody] QuotationListQuery request, CancellationToken cancellationToken)
     {
@@ -74,6 +88,75 @@ public class QuotationsController : ControllerBase
     /// 新增估價單，並回傳建立結果與編號資訊。
     /// </summary>
     [HttpPost("create")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "store": {
+            "storeId": 1,
+            "storeUid": "KH001",
+            "storeName": "高雄旗艦店",
+            "estimatorName": "張技師",
+            "creatorName": "王主管",
+            "createdDate": "2024-03-01T10:00:00",
+            "reservationDate": "2024-03-05T15:00:00",
+            "source": "官方網站",
+            "repairDate": "2024-03-08T09:00:00"
+          },
+          "car": {
+            "licensePlate": "AAA-1234",
+            "brand": "Toyota",
+            "model": "Altis",
+            "color": "銀",
+            "remark": "前保桿有刮傷"
+          },
+          "customer": {
+            "name": "林小華",
+            "phone": "0988123456",
+            "gender": "Male",
+            "source": "Facebook",
+            "remark": "首次諮詢"
+          },
+          "serviceCategories": {
+            "dent": {
+              "overall": {
+                "paintCondition": "原廠烤漆",
+                "toolEvaluation": "需特殊拉拔工具",
+                "needStay": true,
+                "remark": "建議留車一天",
+                "estimatedRepairTime": "1 天",
+                "estimatedRestorationLevel": "9 成新",
+                "isRepairable": true
+              },
+              "damages": [
+                {
+                  "photo": "dent-front-door.jpg",
+                  "position": "右前門",
+                  "dentStatus": "中度凹陷",
+                  "description": "需板金搭配烤漆",
+                  "estimatedAmount": 4500
+                }
+              ],
+              "amount": {
+                "damageSubtotal": 4500,
+                "additionalFee": 500,
+                "discountPercentage": 10,
+                "discountReason": "春季活動"
+              }
+            }
+          },
+          "categoryTotal": {
+            "categorySubtotals": {
+              "dent": 5000
+            },
+            "roundingDiscount": 0
+          },
+          "carBodyConfirmation": {
+            "annotatedImage": "https://cdn.dentstage.com/annotated/car-001.png",
+            "signature": "https://cdn.dentstage.com/signature/customer-001.png"
+          },
+          "remark": "請於修復後通知客戶取車"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateQuotationResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -106,6 +189,12 @@ public class QuotationsController : ControllerBase
     /// 取得單一估價單的詳細資料。
     /// </summary>
     [HttpPost("detail")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationUid": "QTN-20240301-0001"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -137,6 +226,31 @@ public class QuotationsController : ControllerBase
     /// 編輯估價單資料，更新車輛、客戶與類別備註。
     /// </summary>
     [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationUid": "QTN-20240301-0001",
+          "car": {
+            "licensePlate": "AAA-1234",
+            "brand": "Toyota",
+            "model": "Altis",
+            "color": "銀",
+            "remark": "已更新照片"
+          },
+          "customer": {
+            "name": "林小華",
+            "phone": "0988123456",
+            "gender": "Male",
+            "source": "Facebook",
+            "remark": "同意估價"
+          },
+          "categoryRemarks": {
+            "dent": "追加處理左後門凹痕",
+            "paint": "等待調色"
+          },
+          "remark": "預計 3/8 完成"
+        }
+        """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Customers;
 using DentstageToolApp.Api.Services.Customer;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,21 @@ public class CustomersController : ControllerBase
     /// {"phone": "0988963537"}
     /// </remarks>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "customerName": "林小華",
+          "phone": "0988123456",
+          "category": "一般客戶",
+          "gender": "Male",
+          "county": "高雄市",
+          "township": "左營區",
+          "email": "demo@dentstage.com",
+          "source": "Facebook",
+          "reason": "想了解凹痕修復方案",
+          "remark": "首次到店，請協助安排體驗"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateCustomerResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -90,6 +106,12 @@ public class CustomersController : ControllerBase
     /// {"phone": "0988963537"}
     /// </remarks>
     [HttpPost("phone-search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "phone": "0988123456"
+        }
+        """)]
     [ProducesResponseType(typeof(CustomerPhoneSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CustomerPhoneSearchResponse>> SearchCustomerByPhoneAsync([FromBody] CustomerPhoneSearchRequest? request, CancellationToken cancellationToken)
