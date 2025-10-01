@@ -27,6 +27,16 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<Car> Cars => Set<Car>();
 
     /// <summary>
+    /// 車輛品牌資料集。
+    /// </summary>
+    public virtual DbSet<Brand> Brands => Set<Brand>();
+
+    /// <summary>
+    /// 車輛型號資料集。
+    /// </summary>
+    public virtual DbSet<Model> Models => Set<Model>();
+
+    /// <summary>
     /// 報價單資料集。
     /// </summary>
     public virtual DbSet<Quatation> Quatations => Set<Quatation>();
@@ -72,6 +82,8 @@ public class DentstageToolAppContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         ConfigureCustomer(modelBuilder);
+        ConfigureBrand(modelBuilder);
+        ConfigureModel(modelBuilder);
         ConfigureCar(modelBuilder);
         ConfigureQuatation(modelBuilder);
         ConfigureOrder(modelBuilder);
@@ -231,6 +243,42 @@ public class DentstageToolAppContext : DbContext
     }
 
     /// <summary>
+    /// 設定車輛品牌資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigureBrand(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<Brand>();
+        entity.ToTable("Brands");
+        entity.HasKey(e => e.BrandId);
+        entity.Property(e => e.BrandId)
+            .HasColumnName("BrandId");
+        entity.Property(e => e.BrandName)
+            .IsRequired()
+            .HasMaxLength(50);
+    }
+
+    /// <summary>
+    /// 設定車輛型號資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigureModel(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<Model>();
+        entity.ToTable("Models");
+        entity.HasKey(e => e.ModelId);
+        entity.Property(e => e.ModelId)
+            .HasColumnName("ModelId");
+        entity.Property(e => e.ModelName)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.BrandId)
+            .HasColumnName("BrandId");
+        entity.HasOne(e => e.Brand)
+            .WithMany(e => e.Models)
+            .HasForeignKey(e => e.BrandId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    /// <summary>
     /// 設定報價單資料表欄位與關聯。
     /// </summary>
     private static void ConfigureQuatation(ModelBuilder modelBuilder)
@@ -263,6 +311,10 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CarNo).HasMaxLength(50);
         entity.Property(e => e.Brand).HasMaxLength(50);
         entity.Property(e => e.Model).HasMaxLength(50);
+        entity.Property(e => e.BrandId)
+            .HasColumnName("BrandId");
+        entity.Property(e => e.ModelId)
+            .HasColumnName("ModelId");
         entity.Property(e => e.Color).HasMaxLength(20);
         entity.Property(e => e.CarRemark)
             .HasMaxLength(255)
@@ -270,6 +322,14 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.BrandModel)
             .HasMaxLength(100)
             .HasColumnName("Brand_Model");
+        entity.HasOne(e => e.BrandNavigation)
+            .WithMany(e => e.Quatations)
+            .HasForeignKey(e => e.BrandId)
+            .OnDelete(DeleteBehavior.SetNull);
+        entity.HasOne(e => e.ModelNavigation)
+            .WithMany(e => e.Quatations)
+            .HasForeignKey(e => e.ModelId)
+            .OnDelete(DeleteBehavior.SetNull);
         entity.Property(e => e.CustomerUid)
             .HasMaxLength(100)
             .HasColumnName("CustomerUID");

@@ -104,6 +104,26 @@ public class Quatation
     public string? Model { get; set; }
 
     /// <summary>
+    /// 車輛品牌識別碼，對應 Brands 表格主鍵。
+    /// </summary>
+    public int? BrandId { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼，對應 Models 表格主鍵。
+    /// </summary>
+    public int? ModelId { get; set; }
+
+    /// <summary>
+    /// 導覽屬性：報價單所關聯的品牌資料。
+    /// </summary>
+    public Brand? BrandNavigation { get; set; }
+
+    /// <summary>
+    /// 導覽屬性：報價單所關聯的車型資料。
+    /// </summary>
+    public Model? ModelNavigation { get; set; }
+
+    /// <summary>
     /// 車色。
     /// </summary>
     public string? Color { get; set; }
