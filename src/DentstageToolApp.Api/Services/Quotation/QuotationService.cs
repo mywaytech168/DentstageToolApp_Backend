@@ -46,10 +46,18 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .AsQueryable();
 
-        // 篩選維修類型。
+        // 篩選維修類型，優先以識別碼比對，維持舊有欄位作為相容邏輯。
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
-            quotationsQuery = quotationsQuery.Where(q => q.FixType == query.FixType);
+            // 若前端改以數字識別碼查詢，透過 FixTypeId 篩選；否則回退以文字欄位過濾。
+            if (int.TryParse(query.FixType, out var fixTypeId))
+            {
+                quotationsQuery = quotationsQuery.Where(q => q.FixTypeId == fixTypeId);
+            }
+            else
+            {
+                quotationsQuery = quotationsQuery.Where(q => q.FixType == query.FixType);
+            }
         }
 
         // 篩選估價單狀態。
