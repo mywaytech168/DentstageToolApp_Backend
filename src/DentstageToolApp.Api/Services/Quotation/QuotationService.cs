@@ -92,27 +92,38 @@ public class QuotationService : IQuotationService
         var totalCount = await quotationsQuery.CountAsync(cancellationToken);
 
         // ---------- 套用排序與分頁 ----------
-        var pagedQuery = quotationsQuery
-            .OrderByDescending(q => q.CreationTimestamp ?? DateTime.MinValue)
-            .ThenByDescending(q => q.QuotationNo)
+        // 使用 LEFT JOIN 連結 Brands 與 Models 主檔，優先以主檔名稱回傳品牌與車型資訊。
+        var orderedQuery =
+            from quotation in quotationsQuery
+            join brand in _context.Brands.AsNoTracking()
+                on quotation.BrandId equals brand.BrandId into brandGroup
+            from brand in brandGroup.DefaultIfEmpty()
+            join model in _context.Models.AsNoTracking()
+                on quotation.ModelId equals model.ModelId into modelGroup
+            from model in modelGroup.DefaultIfEmpty()
+            orderby quotation.CreationTimestamp ?? DateTime.MinValue descending,
+                quotation.QuotationNo descending
+            select new { quotation, brand, model };
+
+        var pagedQuery = orderedQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(q => new QuotationSummaryResponse
+            .Select(result => new QuotationSummaryResponse
             {
-                QuotationNo = q.QuotationNo,
-                Status = q.Status,
-                CustomerName = q.Name,
-                CustomerPhone = q.Phone,
-                CarBrand = q.Brand,
-                CarModel = q.Model,
-                CarPlateNumber = q.CarNo,
+                QuotationNo = result.quotation.QuotationNo,
+                Status = result.quotation.Status,
+                CustomerName = result.quotation.Name,
+                CustomerPhone = result.quotation.Phone,
+                CarBrand = result.brand != null ? result.brand.BrandName : result.quotation.Brand,
+                CarModel = result.model != null ? result.model.ModelName : result.quotation.Model,
+                CarPlateNumber = result.quotation.CarNo,
                 // 目前狀態使用名稱
-                StoreName = q.UserName,
-                EstimatorName = q.CurrentStatusUser,
+                StoreName = result.quotation.UserName,
+                EstimatorName = result.quotation.CurrentStatusUser,
                 // 建立人員暫做為製單技師資訊。
-                CreatorName = q.CreatedBy,
-                CreatedAt = q.CreationTimestamp,
-                FixType = q.FixType
+                CreatorName = result.quotation.CreatedBy,
+                CreatedAt = result.quotation.CreationTimestamp,
+                FixType = result.quotation.FixType
             });
 
         var items = await pagedQuery.ToListAsync(cancellationToken);
