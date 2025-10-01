@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Cars;
 using DentstageToolApp.Api.Services.Car;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -50,6 +51,16 @@ public class CarsController : ControllerBase
     /// 
     /// </remarks>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "carPlateNumber": "AAA-1234",
+          "brandId": 1,
+          "modelId": 2,
+          "color": "白",
+          "remark": "測試建立車輛資料"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateCarResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

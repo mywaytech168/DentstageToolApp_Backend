@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.CarPlates;
 using DentstageToolApp.Api.Services.CarPlate;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -39,6 +40,13 @@ public class CarPlateRecognitionController : ControllerBase
     /// 上傳車牌影像並回傳車牌、車輛資料與維修紀錄。
     /// </summary>
     [HttpPost("recognitions")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "imageBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD..."
+        }
+        """,
+        contentType: "multipart/form-data")]
     [ProducesResponseType(typeof(CarPlateRecognitionResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -117,6 +125,12 @@ public class CarPlateRecognitionController : ControllerBase
     /// <param name="request">包含欲查詢車牌號碼的請求物件。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpPost("search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "licensePlateNumber": "AAA-1234"
+        }
+        """)]
     [ProducesResponseType(typeof(CarPlateMaintenanceHistoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
