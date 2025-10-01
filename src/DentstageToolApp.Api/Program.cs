@@ -10,6 +10,7 @@ using DentstageToolApp.Api.Services.BrandModels;
 using DentstageToolApp.Api.Services.Car;
 using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Quotation;
+using DentstageToolApp.Api.Services.Customer;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -143,6 +144,7 @@ builder.Services.AddScoped<IQuotationService, QuotationService>();
 builder.Services.AddScoped<ICarPlateRecognitionService, CarPlateRecognitionService>();
 builder.Services.AddScoped<ICarManagementService, CarManagementService>();
 builder.Services.AddScoped<IBrandModelQueryService, BrandModelQueryService>();
+builder.Services.AddScoped<ICustomerManagementService, CustomerManagementService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
