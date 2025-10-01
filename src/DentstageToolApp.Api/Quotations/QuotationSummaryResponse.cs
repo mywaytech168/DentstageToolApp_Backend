@@ -13,7 +13,7 @@ public class QuotationSummaryResponse
     public string? QuotationNo { get; set; }
 
     /// <summary>
-    /// 維修類型，協助前端根據 FixType 顯示不同標籤。
+    /// 維修類型，優先回傳主檔名稱，協助前端顯示標籤文字。
     /// </summary>
     public string? FixType { get; set; }
 
@@ -48,12 +48,12 @@ public class QuotationSummaryResponse
     public string? CarPlateNumber { get; set; }
 
     /// <summary>
-    /// 店鋪名稱（目前以 StoreUid 代入，待串接門市主檔後可替換為實際名稱）。
+    /// 店鋪名稱，優先使用門市主檔資料，若無對應則回退估價單欄位。
     /// </summary>
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價技師姓名，對應資料欄位 UserName。
+    /// 估價技師姓名，優先採用技師主檔資料，若無則使用估價單原欄位。
     /// </summary>
     public string? EstimatorName { get; set; }
 
