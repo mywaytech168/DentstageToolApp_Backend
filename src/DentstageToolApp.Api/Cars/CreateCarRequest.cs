@@ -12,19 +12,19 @@ public class CreateCarRequest
     /// </summary>
     [Required(ErrorMessage = "請輸入車牌號碼。")]
     [StringLength(50, ErrorMessage = "車牌號碼長度不得超過 50 個字元。")]
-    public string? LicensePlateNumber { get; set; }
+    public string? CarPlateNumber { get; set; }
 
     /// <summary>
-    /// 車輛品牌或車款資訊，可留空。
+    /// 車輛品牌識別碼，需由前端傳入既有的品牌編號，若無則留空。
     /// </summary>
-    [StringLength(50, ErrorMessage = "車輛品牌長度不得超過 50 個字元。")]
-    public string? Brand { get; set; }
+    [Range(1, int.MaxValue, ErrorMessage = "品牌識別碼需大於 0。")]
+    public int? BrandId { get; set; }
 
     /// <summary>
-    /// 車輛型號，可留空。
+    /// 車輛型號識別碼，需搭配品牌編號進行檢核，可留空。
     /// </summary>
-    [StringLength(50, ErrorMessage = "車輛型號長度不得超過 50 個字元。")]
-    public string? Model { get; set; }
+    [Range(1, int.MaxValue, ErrorMessage = "車型識別碼需大於 0。")]
+    public int? ModelId { get; set; }
 
     /// <summary>
     /// 車色，可留空。
@@ -38,9 +38,4 @@ public class CreateCarRequest
     [StringLength(255, ErrorMessage = "備註長度不得超過 255 個字元。")]
     public string? Remark { get; set; }
 
-    /// <summary>
-    /// 操作人員名稱，若未填寫會以系統帳號代替。
-    /// </summary>
-    [StringLength(50, ErrorMessage = "操作人員名稱長度不得超過 50 個字元。")]
-    public string? OperatorName { get; set; }
 }
