@@ -2,7 +2,6 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Cars;
 using DentstageToolApp.Api.Services.Car;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
