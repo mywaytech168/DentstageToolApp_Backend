@@ -43,6 +43,9 @@ public class CustomersController : ControllerBase
     /// <summary>
     /// 新增客戶資料，建立姓名、電話、來源與備註等欄位。
     /// </summary>
+    /// <remarks>
+    /// {"phone": "0988963537"}
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(CreateCustomerResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -83,6 +86,9 @@ public class CustomersController : ControllerBase
     /// <summary>
     /// 透過電話關鍵字搜尋客戶資料與維修統計資訊。
     /// </summary>
+    /// <remarks>
+    /// {"phone": "0988963537"}
+    /// </remarks>
     [HttpPost("phone-search")]
     [ProducesResponseType(typeof(CustomerPhoneSearchResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

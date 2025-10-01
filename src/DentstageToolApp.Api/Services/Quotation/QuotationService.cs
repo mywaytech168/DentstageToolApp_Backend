@@ -264,7 +264,6 @@ public class QuotationService : IQuotationService
             Phone = customerPhone,
             PhoneInput = customerPhone,
             PhoneInputGlobal = customerPhone,
-            PhoneQuery = phoneQuery,
             Gender = customerGender,
             CustomerType = customerSource,
             ConnectRemark = customerRemark,
@@ -299,7 +298,7 @@ public class QuotationService : IQuotationService
             .Include(q => q.BrandNavigation)
             .Include(q => q.ModelNavigation);
 
-        query = ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
+        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
@@ -384,7 +383,6 @@ public class QuotationService : IQuotationService
         quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
         quotation.PhoneInput = quotation.Phone;
         quotation.PhoneInputGlobal = quotation.Phone;
-        quotation.PhoneQuery = NormalizePhoneQuery(quotation.Phone);
         quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
         quotation.CustomerType = NormalizeOptionalText(customerInfo.Source);
         quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
