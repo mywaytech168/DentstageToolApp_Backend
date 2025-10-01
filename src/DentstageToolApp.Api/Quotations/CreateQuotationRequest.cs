@@ -63,9 +63,13 @@ public class QuotationStoreInfo
     public string? StoreUid { get; set; }
 
     /// <summary>
-    /// 店鋪名稱。
+    /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
     /// </summary>
-    [Required]
+    public int? TechnicianId { get; set; }
+
+    /// <summary>
+    /// 店鋪名稱，若未提供會依據技師或門市主檔自動補齊。
+    /// </summary>
     public string? StoreName { get; set; }
 
     /// <summary>
@@ -105,9 +109,13 @@ public class QuotationStoreInfo
 public class QuotationCarInfo
 {
     /// <summary>
-    /// 車牌號碼。
+    /// 車輛唯一識別碼，若提供則會自動帶出車牌與車況資訊。
     /// </summary>
-    [Required]
+    public string? CarUid { get; set; }
+
+    /// <summary>
+    /// 車牌號碼，若未提供會依據車輛主檔自動補齊。
+    /// </summary>
     public string? LicensePlate { get; set; }
 
     /// <summary>
@@ -137,9 +145,13 @@ public class QuotationCarInfo
 public class QuotationCustomerInfo
 {
     /// <summary>
-    /// 客戶名稱。
+    /// 客戶唯一識別碼，若提供則會自動帶出客戶聯絡資料。
     /// </summary>
-    [Required]
+    public string? CustomerUid { get; set; }
+
+    /// <summary>
+    /// 客戶名稱，若未提供會依據客戶主檔自動補齊。
+    /// </summary>
     public string? Name { get; set; }
 
     /// <summary>
