@@ -71,6 +71,39 @@ public class CarsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 取得車輛品牌與型號主檔清單，供前端建立下拉選項。
+    /// </summary>
+    [HttpGet("brands-models")]
+    [ProducesResponseType(typeof(CarBrandModelListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<CarBrandModelListResponse>> GetBrandModelsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _carManagementService.GetBrandModelsAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (CarManagementException ex)
+        {
+            // 對於自訂例外，維持服務層提供的錯誤狀態與訊息。
+            _logger.LogWarning(ex, "取得品牌型號失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "取得品牌型號失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            // 當前端取消請求時，回傳 499 表示流程被中斷。
+            _logger.LogInformation("取得品牌型號流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "取得品牌型號已取消");
+        }
+        catch (Exception ex)
+        {
+            // 其餘例外統一視為系統錯誤，利於集中監控。
+            _logger.LogError(ex, "取得品牌型號流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取得品牌型號失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
