@@ -1,0 +1,6 @@
+CREATE TABLE models (
+    ModelId INT AUTO_INCREMENT PRIMARY KEY,
+    BrandId INT NOT NULL,
+    ModelName VARCHAR(100) NOT NULL,
+    FOREIGN KEY (BrandId) REFERENCES brands(BrandId)
+);

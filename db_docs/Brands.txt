@@ -1,0 +1,4 @@
+CREATE TABLE brands (
+    BrandId INT AUTO_INCREMENT PRIMARY KEY,
+    BrandName VARCHAR(50) NOT NULL
+);
