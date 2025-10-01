@@ -75,7 +75,7 @@ public class CarManagementService : ICarManagementService
 
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
-        var carEntity = new Car
+        var carEntity = new Infrastructure.Entities.Car
         {
             CarUid = Guid.NewGuid().ToString("N"),
             CarNo = storedPlate,

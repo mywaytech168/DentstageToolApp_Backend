@@ -1,0 +1,43 @@
+CREATE TABLE stores (
+    StoreId INT AUTO_INCREMENT PRIMARY KEY,
+    StoreName VARCHAR(100) NOT NULL UNIQUE
+);
+
+CREATE TABLE technicians (
+    TechnicianId INT AUTO_INCREMENT PRIMARY KEY,
+    TechnicianName VARCHAR(100) NOT NULL,
+    StoreId INT NOT NULL,
+    FOREIGN KEY (StoreId) REFERENCES stores(StoreId),
+    UNIQUE KEY uq_technician (TechnicianName, StoreId)
+);
+
+INSERT INTO stores (StoreName)
+SELECT DISTINCT CurrentStatus_User
+FROM quatations
+WHERE CurrentStatus_User IS NOT NULL AND CurrentStatus_User <> '';
+
+INSERT INTO technicians (TechnicianName, StoreId)
+SELECT DISTINCT q.UserName, s.StoreId
+FROM quatations q
+JOIN stores s ON q.CurrentStatus_User = s.StoreName
+WHERE q.UserName IS NOT NULL AND q.UserName <> '';
+
+ALTER TABLE quatations
+    ADD COLUMN StoreId INT NULL,
+    ADD COLUMN TechnicianId INT NULL,
+    ADD CONSTRAINT fk_quatations_store FOREIGN KEY (StoreId) REFERENCES stores(StoreId),
+    ADD CONSTRAINT fk_quatations_technician FOREIGN KEY (TechnicianId) REFERENCES technicians(TechnicianId);
+
+UPDATE quatations q
+JOIN stores s ON q.CurrentStatus_User = s.StoreName
+SET q.StoreId = s.StoreId;
+
+UPDATE quatations q
+JOIN technicians t ON q.UserName = t.TechnicianName
+   AND q.StoreId = t.StoreId
+SET q.TechnicianId = t.TechnicianId;
+
+SELECT s.StoreName, GROUP_CONCAT(t.TechnicianName ORDER BY t.TechnicianName SEPARATOR ', ') AS Technicians
+FROM technicians t
+JOIN stores s ON t.StoreId = s.StoreId
+GROUP BY s.StoreName;

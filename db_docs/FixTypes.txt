@@ -1,0 +1,4 @@
+CREATE TABLE fix_types (
+    FixTypeId INT AUTO_INCREMENT PRIMARY KEY,
+    FixTypeName VARCHAR(50) NOT NULL UNIQUE
+);
