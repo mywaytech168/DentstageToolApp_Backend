@@ -107,8 +107,8 @@ public class QuotationService : IQuotationService
                 CarModel = q.Model,
                 CarPlateNumber = q.CarNo,
                 // 目前狀態使用名稱
-                StoreName = q.CurrentStatusUser,
-                EstimatorName = q.UserName,
+                StoreName = q.UserName,
+                EstimatorName = q.CurrentStatusUser,
                 // 建立人員暫做為製單技師資訊。
                 CreatorName = q.CreatedBy,
                 CreatedAt = q.CreationTimestamp,
