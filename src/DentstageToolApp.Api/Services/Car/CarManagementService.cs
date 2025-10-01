@@ -110,6 +110,45 @@ public class CarManagementService : ICarManagementService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<CarBrandModelListResponse> GetBrandModelsAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 查詢組合區 ----------
+        // 先載入品牌與其子集合，降低後續查詢次數，並採用 NoTracking 提升效能。
+        var brands = await _dbContext.Brands
+            .AsNoTracking()
+            .Include(brand => brand.Models)
+            .ToListAsync(cancellationToken);
+
+        // ---------- 資料整理區 ----------
+        // 透過記憶體排序，確保品牌與型號按照名稱排列，便於前端顯示。
+        var brandModels = brands
+            .OrderBy(brand => brand.BrandName, StringComparer.CurrentCulture)
+            .Select(brand => new CarBrandModelItem
+            {
+                BrandId = brand.BrandId,
+                BrandName = brand.BrandName,
+                Models = brand.Models
+                    .OrderBy(model => model.ModelName, StringComparer.CurrentCulture)
+                    .Select(model => new CarModelItem
+                    {
+                        ModelId = model.ModelId,
+                        ModelName = model.ModelName
+                    })
+                    .ToList()
+            })
+            .ToList();
+
+        // ---------- 組裝回應區 ----------
+        // 即便查無資料仍回傳空集合，方便前端顯示預設狀態。
+        return new CarBrandModelListResponse
+        {
+            Items = brandModels
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
