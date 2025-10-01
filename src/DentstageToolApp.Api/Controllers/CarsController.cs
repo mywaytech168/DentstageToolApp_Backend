@@ -1,5 +1,7 @@
 using System;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
+using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Services.Car;
@@ -49,7 +51,9 @@ public class CarsController : ControllerBase
 
         try
         {
-            var response = await _carManagementService.CreateCarAsync(request, cancellationToken);
+            // 透過 JWT 取得操作人員名稱，統一填寫建立與修改者資訊。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _carManagementService.CreateCarAsync(request, operatorName, cancellationToken);
             return StatusCode(StatusCodes.Status201Created, response);
         }
         catch (CarManagementException ex)
@@ -86,6 +90,36 @@ public class CarsController : ControllerBase
         };
 
         return StatusCode(problem.Status ?? StatusCodes.Status500InternalServerError, problem);
+    }
+
+    /// <summary>
+    /// 從 JWT 權杖中取得操作人員名稱，優先使用顯示名稱，再回退至使用者識別碼。
+    /// </summary>
+    private string GetCurrentOperatorName()
+    {
+        // 先取 displayName Claim，確保記錄可讀性。
+        var displayName = User.FindFirstValue("displayName");
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            return displayName;
+        }
+
+        // 若無顯示名稱則改用 Sub 或 UniqueName 以確保可追蹤性。
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        // 最後使用通用 NameIdentifier，避免回傳空字串造成資料庫寫入失敗。
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
     }
 
     // ---------- 生命週期 ----------
