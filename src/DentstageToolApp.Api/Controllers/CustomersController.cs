@@ -22,14 +22,19 @@ namespace DentstageToolApp.Api.Controllers;
 public class CustomersController : ControllerBase
 {
     private readonly ICustomerManagementService _customerManagementService;
+    private readonly ICustomerLookupService _customerLookupService;
     private readonly ILogger<CustomersController> _logger;
 
     /// <summary>
     /// 建構子，注入客戶維運服務與記錄器。
     /// </summary>
-    public CustomersController(ICustomerManagementService customerManagementService, ILogger<CustomersController> logger)
+    public CustomersController(
+        ICustomerManagementService customerManagementService,
+        ICustomerLookupService customerLookupService,
+        ILogger<CustomersController> logger)
     {
         _customerManagementService = customerManagementService;
+        _customerLookupService = customerLookupService;
         _logger = logger;
     }
 
@@ -72,6 +77,48 @@ public class CustomersController : ControllerBase
         {
             _logger.LogError(ex, "新增客戶流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "新增客戶資料失敗");
+        }
+    }
+
+    /// <summary>
+    /// 透過電話關鍵字搜尋客戶資料與維修統計資訊。
+    /// </summary>
+    [HttpPost("phone-search")]
+    [ProducesResponseType(typeof(CustomerPhoneSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CustomerPhoneSearchResponse>> SearchCustomerByPhoneAsync([FromBody] CustomerPhoneSearchRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            // 若前端未傳入內容，直接回覆提示訊息避免 NullReference。
+            return BuildProblemDetails(HttpStatusCode.BadRequest, "請提供欲查詢的電話號碼。", "電話搜尋失敗");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 呼叫查詢服務並回傳統一格式的結果給前端。
+            var response = await _customerLookupService.SearchByPhoneAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (CustomerLookupException ex)
+        {
+            _logger.LogWarning(ex, "電話搜尋失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "電話搜尋失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("電話搜尋流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "電話搜尋已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "電話搜尋流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "電話搜尋失敗");
         }
     }
 
