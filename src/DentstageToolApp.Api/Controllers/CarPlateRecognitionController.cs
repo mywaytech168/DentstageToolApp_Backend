@@ -128,7 +128,7 @@ public class CarPlateRecognitionController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "licensePlateNumber": "AAA-1234"
+          "carPlateNumber": "AAA-1234"
         }
         """)]
     [ProducesResponseType(typeof(CarPlateMaintenanceHistoryResponse), StatusCodes.Status200OK)]
@@ -138,7 +138,7 @@ public class CarPlateRecognitionController : ControllerBase
         [FromBody] CarPlateMaintenanceHistoryRequest request,
         CancellationToken cancellationToken)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.LicensePlateNumber))
+        if (request is null || string.IsNullOrWhiteSpace(request.CarPlateNumber))
         {
             return BadRequest(new ProblemDetails
             {
@@ -150,7 +150,7 @@ public class CarPlateRecognitionController : ControllerBase
 
         try
         {
-            var result = await _carPlateRecognitionService.GetMaintenanceHistoryAsync(request.LicensePlateNumber, cancellationToken);
+            var result = await _carPlateRecognitionService.GetMaintenanceHistoryAsync(request.CarPlateNumber, cancellationToken);
 
             if (!result.HasMaintenanceRecords)
             {
