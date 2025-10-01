@@ -16,4 +16,5 @@ public interface ICarManagementService
     /// <param name="cancellationToken">取消權杖，用於中止長時間操作。</param>
     /// <returns>建立成功後的車輛資訊。</returns>
     Task<CreateCarResponse> CreateCarAsync(CreateCarRequest request, CancellationToken cancellationToken);
+
 }

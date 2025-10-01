@@ -6,6 +6,7 @@ using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Options;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
+using DentstageToolApp.Api.Services.BrandModels;
 using DentstageToolApp.Api.Services.Car;
 using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Quotation;
@@ -141,6 +142,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
 builder.Services.AddScoped<ICarPlateRecognitionService, CarPlateRecognitionService>();
 builder.Services.AddScoped<ICarManagementService, CarManagementService>();
+builder.Services.AddScoped<IBrandModelQueryService, BrandModelQueryService>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
