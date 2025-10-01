@@ -94,6 +94,7 @@ public class QuotationsController : ControllerBase
           "store": {
             "storeId": 1,
             "storeUid": "KH001",
+            "technicianId": 12,
             "storeName": "高雄旗艦店",
             "estimatorName": "張技師",
             "creatorName": "王主管",
@@ -103,6 +104,7 @@ public class QuotationsController : ControllerBase
             "repairDate": "2024-03-08T09:00:00"
           },
           "car": {
+            "carUid": "CAR-20240301-0001",
             "licensePlate": "AAA-1234",
             "brand": "Toyota",
             "model": "Altis",
@@ -110,6 +112,7 @@ public class QuotationsController : ControllerBase
             "remark": "前保桿有刮傷"
           },
           "customer": {
+            "customerUid": "CUST-20240228-0001",
             "name": "林小華",
             "phone": "0988123456",
             "gender": "Male",
