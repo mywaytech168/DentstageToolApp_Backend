@@ -56,7 +56,8 @@ public class TechnicianQueryService : ITechnicianQueryService
                     TechnicianId = technician.TechnicianId,
                     TechnicianName = technician.TechnicianName
                 })
-                .OrderBy(technician => technician.TechnicianName, StringComparer.CurrentCulture)
+                // EF Core 無法直接翻譯帶有 Comparer 的排序，改用預設排序以確保查詢可被翻譯。 
+                .OrderBy(technician => technician.TechnicianName)
                 .ToListAsync(cancellationToken);
 
             // ---------- 組裝回應區 ----------
