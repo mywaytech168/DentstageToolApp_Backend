@@ -1,22 +1,22 @@
 using System.Collections.Generic;
 
-namespace DentstageToolApp.Api.Cars;
+namespace DentstageToolApp.Api.BrandModels;
 
 /// <summary>
 /// 品牌與型號清單回應物件，提供前端建置下拉選單使用。
 /// </summary>
-public class CarBrandModelListResponse
+public class BrandModelListResponse
 {
     /// <summary>
     /// 品牌與其所屬型號清單集合。
     /// </summary>
-    public List<CarBrandModelItem> Items { get; set; } = new();
+    public List<BrandModelItem> Items { get; set; } = new();
 }
 
 /// <summary>
 /// 品牌資料與底下可選型號清單。
 /// </summary>
-public class CarBrandModelItem
+public class BrandModelItem
 {
     /// <summary>
     /// 品牌識別碼。
@@ -31,13 +31,13 @@ public class CarBrandModelItem
     /// <summary>
     /// 該品牌底下可使用的車型選項。
     /// </summary>
-    public List<CarModelItem> Models { get; set; } = new();
+    public List<BrandModelOption> Models { get; set; } = new();
 }
 
 /// <summary>
 /// 車型資料，對應單一品牌底下的具體車款。
 /// </summary>
-public class CarModelItem
+public class BrandModelOption
 {
     /// <summary>
     /// 車型識別碼。

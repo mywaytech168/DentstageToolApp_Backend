@@ -17,10 +17,4 @@ public interface ICarManagementService
     /// <returns>建立成功後的車輛資訊。</returns>
     Task<CreateCarResponse> CreateCarAsync(CreateCarRequest request, CancellationToken cancellationToken);
 
-    /// <summary>
-    /// 取得車輛品牌與型號的主檔清單，提供前端建置選單。
-    /// </summary>
-    /// <param name="cancellationToken">取消權杖，用於中止查詢。</param>
-    /// <returns>包含品牌與型號資料的回應物件。</returns>
-    Task<CarBrandModelListResponse> GetBrandModelsAsync(CancellationToken cancellationToken);
 }
