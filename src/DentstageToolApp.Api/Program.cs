@@ -12,6 +12,7 @@ using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Api.Services.Technician;
 using DentstageToolApp.Api.Services.Customer;
+using DentstageToolApp.Api.Swagger;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,9 @@ builder.Services.AddSwaggerGen(options =>
             Array.Empty<string>()
         }
     });
+
+    // 注入 Mock 範例過濾器，將屬性定義的 JSON 直接呈現在 Swagger UI 中
+    options.OperationFilter<MockRequestExampleOperationFilter>();
 });
 // 讀取 Swagger 組態，提供後續中介層調整依據
 var swaggerSection = builder.Configuration.GetSection("Swagger");
