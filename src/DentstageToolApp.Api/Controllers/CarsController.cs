@@ -74,7 +74,7 @@ public class CarsController : ControllerBase
     /// <summary>
     /// 取得車輛品牌與型號主檔清單，供前端建立下拉選項。
     /// </summary>
-    [HttpGet("brands-models")]
+    [HttpGet("/api/brands-models")]
     [ProducesResponseType(typeof(CarBrandModelListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CarBrandModelListResponse>> GetBrandModelsAsync(CancellationToken cancellationToken)
