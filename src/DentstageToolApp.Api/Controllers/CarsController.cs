@@ -4,6 +4,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using DentstageToolApp.Api.Cars;
 using DentstageToolApp.Api.Services.Car;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -37,6 +38,17 @@ public class CarsController : ControllerBase
     /// <summary>
     /// 新增車輛資料，建立車牌、品牌、型號與備註等欄位。
     /// </summary>
+    /// <remarks>
+    /// 
+    /// {
+    ///   "carPlateNumber": "AAA-4445",
+    ///   "brandId": 1,
+    ///   "modelId": 1,
+    ///   "color": "黃",
+    ///   "remark": ""
+    /// }
+    /// 
+    /// </remarks>
     [HttpPost]
     [ProducesResponseType(typeof(CreateCarResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

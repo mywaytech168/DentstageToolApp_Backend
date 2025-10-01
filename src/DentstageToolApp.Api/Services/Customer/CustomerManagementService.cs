@@ -70,7 +70,7 @@ public class CustomerManagementService : ICustomerManagementService
 
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
-        var customerEntity = new Customer
+        var customerEntity = new Infrastructure.Entities.Customer
         {
             CustomerUid = BuildCustomerUid(),
             Name = customerName,
