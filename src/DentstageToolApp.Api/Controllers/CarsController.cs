@@ -43,8 +43,8 @@ public class CarsController : ControllerBase
     /// 
     /// {
     ///   "carPlateNumber": "AAA-4445",
-    ///   "brandUid": "Br_123",
-    ///   "modelUid": "Mo_456",
+    ///   "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
+    ///   "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
     ///   "color": "黃",
     ///   "remark": ""
     /// }
@@ -55,8 +55,8 @@ public class CarsController : ControllerBase
         """
         {
           "carPlateNumber": "AAA-1234",
-          "brandUid": "Br_123",
-          "modelUid": "Mo_456",
+          "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
+          "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
           "color": "白",
           "remark": "測試建立車輛資料"
         }

@@ -89,7 +89,7 @@ public class CarManagementService : ICarManagementService
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
         var carUid = BuildCarUid();
-        var carEntity = new Infrastructure.Entities.Car
+        var carEntity = new DentstageToolApp.Infrastructure.Entities.Car
         {
             CarUid = carUid,
             CarNo = storedPlate,

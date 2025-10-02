@@ -139,7 +139,7 @@ public class CustomerLookupService : ICustomerLookupService
     private async Task<List<Order>> FetchRelatedOrdersAsync(
         string normalizedPhone,
         string phoneDigits,
-        IReadOnlyCollection<Infrastructure.Entities.Customer> customerEntities,
+        IReadOnlyCollection<DentstageToolApp.Infrastructure.Entities.Customer> customerEntities,
         CancellationToken cancellationToken)
     {
         var orders = new Dictionary<string, Order>(StringComparer.OrdinalIgnoreCase);
@@ -222,7 +222,7 @@ public class CustomerLookupService : ICustomerLookupService
     /// <summary>
     /// 將資料庫客戶實體轉為 API 回傳模型。
     /// </summary>
-    private static CustomerPhoneSearchItem MapToCustomerItem(Infrastructure.Entities.Customer customer)
+    private static CustomerPhoneSearchItem MapToCustomerItem(DentstageToolApp.Infrastructure.Entities.Customer customer)
     {
         return new CustomerPhoneSearchItem
         {
