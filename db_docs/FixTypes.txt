@@ -1,4 +1,12 @@
 CREATE TABLE fix_types (
-    FixTypeId INT AUTO_INCREMENT PRIMARY KEY,
-    FixTypeName VARCHAR(50) NOT NULL UNIQUE
-);
+    FixTypeUID VARCHAR(100) NOT NULL PRIMARY KEY,
+    FixTypeName VARCHAR(100) NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO fix_types (FixTypeUID, FixTypeName)
+SELECT 
+    CONCAT('F_', UPPER(UUID())) AS FixTypeUID,
+    q.Fix_Type
+FROM quatations q
+WHERE q.Fix_Type IS NOT NULL AND q.Fix_Type <> ''
+GROUP BY q.Fix_Type;
