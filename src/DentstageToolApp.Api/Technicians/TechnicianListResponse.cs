@@ -19,9 +19,9 @@ public class TechnicianListResponse
 public class TechnicianItem
 {
     /// <summary>
-    /// 技師識別碼，對應後端技師主鍵。
+    /// 技師識別碼，改為技師 UID。
     /// </summary>
-    public int TechnicianId { get; set; }
+    public string TechnicianUid { get; set; } = string.Empty;
 
     /// <summary>
     /// 技師姓名，提供前端顯示。

@@ -73,15 +73,9 @@ public class QuotationService : IQuotationService
         // 篩選維修類型，優先以識別碼比對，維持舊有欄位作為相容邏輯。
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
-            // 若前端改以數字識別碼查詢，透過 FixTypeId 篩選；否則回退以文字欄位過濾。
-            if (int.TryParse(query.FixType, out var fixTypeId))
-            {
-                quotationsQuery = quotationsQuery.Where(q => q.FixTypeId == fixTypeId);
-            }
-            else
-            {
-                quotationsQuery = quotationsQuery.Where(q => q.FixType == query.FixType);
-            }
+            var fixTypeFilter = query.FixType.Trim();
+            quotationsQuery = quotationsQuery.Where(q =>
+                q.FixTypeUid == fixTypeFilter || q.FixType == fixTypeFilter);
         }
 
         // 篩選估價單狀態。
@@ -129,19 +123,19 @@ public class QuotationService : IQuotationService
         var orderedQuery =
             from quotation in quotationsQuery
             join brand in _context.Brands.AsNoTracking()
-                on quotation.BrandId equals brand.BrandId into brandGroup
+                on quotation.BrandUid equals brand.BrandUid into brandGroup
             from brand in brandGroup.DefaultIfEmpty()
             join model in _context.Models.AsNoTracking()
-                on quotation.ModelId equals model.ModelId into modelGroup
+                on quotation.ModelUid equals model.ModelUid into modelGroup
             from model in modelGroup.DefaultIfEmpty()
             join fixType in _context.FixTypes.AsNoTracking()
-                on quotation.FixTypeId equals fixType.FixTypeId into fixTypeGroup
+                on quotation.FixTypeUid equals fixType.FixTypeUid into fixTypeGroup
             from fixType in fixTypeGroup.DefaultIfEmpty()
             join store in _context.Stores.AsNoTracking()
-                on quotation.StoreId equals store.StoreId into storeGroup
+                on quotation.StoreUid equals store.StoreUid into storeGroup
             from store in storeGroup.DefaultIfEmpty()
             join technician in _context.Technicians.AsNoTracking()
-                on quotation.TechnicianId equals technician.TechnicianId into technicianGroup
+                on quotation.TechnicianUid equals technician.TechnicianUid into technicianGroup
             from technician in technicianGroup.DefaultIfEmpty()
             orderby quotation.CreationTimestamp ?? DateTime.MinValue descending,
                 quotation.QuotationNo descending
@@ -203,7 +197,7 @@ public class QuotationService : IQuotationService
         var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
 
         // 僅透過技師識別碼即可反查門市資料，減少前端傳遞欄位。
-        var technicianEntity = await GetTechnicianEntityAsync(storeInfo.TechnicianId, cancellationToken);
+        var technicianEntity = await GetTechnicianEntityAsync(storeInfo.TechnicianUid, cancellationToken);
         if (technicianEntity is null)
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的估價技師。");
@@ -212,6 +206,7 @@ public class QuotationService : IQuotationService
         // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊。
         var storeEntity = await GetStoreEntityAsync(technicianEntity, cancellationToken);
         var storeName = NormalizeRequiredText(storeEntity?.StoreName, "店鋪名稱");
+        var storeUid = NormalizeRequiredText(ResolveStoreUid(technicianEntity, storeEntity), "門市識別碼");
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
         var operatorUid = NormalizeOptionalText(operatorContext.UserUid);
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
@@ -265,7 +260,6 @@ public class QuotationService : IQuotationService
         var serialNumber = await GenerateNextSerialNumberAsync(cancellationToken);
         var quotationUid = BuildQuotationUid();
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
-        var storeId = ResolveStoreId(technicianEntity, storeEntity);
 
         var extraData = new QuotationExtraData
         {
@@ -291,9 +285,8 @@ public class QuotationService : IQuotationService
             ModifiedBy = operatorLabel,
             UserUid = operatorUid,
             Date = quotationDate,
-            StoreId = storeId,
-            StoreUid = null,
-            TechnicianId = technicianEntity?.TechnicianId,
+            StoreUid = storeUid,
+            TechnicianUid = technicianEntity?.TechnicianUid,
             CurrentStatusUser = storeName,
             UserName = estimatorName ?? operatorLabel,
             BookDate = reservationDate,
@@ -373,9 +366,8 @@ public class QuotationService : IQuotationService
             UpdatedAt = quotation.ModificationTimestamp,
             Store = new QuotationStoreInfo
             {
-                StoreId = quotation.StoreId,
                 StoreUid = quotation.StoreUid,
-                TechnicianId = quotation.TechnicianId,
+                TechnicianUid = quotation.TechnicianUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
                 EstimatorName = quotation.UserName,
                 CreatorName = quotation.CreatedBy,
@@ -552,22 +544,28 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 嘗試依據技師或門市主檔解析出門市識別碼。
     /// </summary>
-    private static int? ResolveStoreId(TechnicianEntity? technician, StoreEntity? storeEntity)
+    private static string? ResolveStoreUid(TechnicianEntity? technician, StoreEntity? storeEntity)
     {
-        if (technician is not null)
+        if (!string.IsNullOrWhiteSpace(technician?.StoreUid))
         {
-            return technician.StoreId;
+            return NormalizeOptionalText(technician!.StoreUid);
         }
 
-        return storeEntity?.StoreId;
+        if (!string.IsNullOrWhiteSpace(storeEntity?.StoreUid))
+        {
+            return NormalizeOptionalText(storeEntity!.StoreUid);
+        }
+
+        return null;
     }
 
     /// <summary>
     /// 依據技師識別碼載入技師與所屬門市資料，若未提供識別碼則回傳 null。
     /// </summary>
-    private async Task<TechnicianEntity?> GetTechnicianEntityAsync(int? technicianId, CancellationToken cancellationToken)
+    private async Task<TechnicianEntity?> GetTechnicianEntityAsync(string? technicianUid, CancellationToken cancellationToken)
     {
-        if (!technicianId.HasValue)
+        var normalizedUid = NormalizeOptionalText(technicianUid);
+        if (normalizedUid is null)
         {
             return null;
         }
@@ -575,7 +573,7 @@ public class QuotationService : IQuotationService
         var technician = await _context.Technicians
             .AsNoTracking()
             .Include(entity => entity.Store)
-            .FirstOrDefaultAsync(entity => entity.TechnicianId == technicianId.Value, cancellationToken);
+            .FirstOrDefaultAsync(entity => entity.TechnicianUid == normalizedUid, cancellationToken);
 
         if (technician is null)
         {
@@ -600,9 +598,15 @@ public class QuotationService : IQuotationService
             return technician.Store;
         }
 
+        var normalizedStoreUid = NormalizeOptionalText(technician.StoreUid);
+        if (normalizedStoreUid is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料。");
+        }
+
         var store = await _context.Stores
             .AsNoTracking()
-            .FirstOrDefaultAsync(entity => entity.StoreId == technician.StoreId, cancellationToken);
+            .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedStoreUid, cancellationToken);
 
         if (store is null)
         {

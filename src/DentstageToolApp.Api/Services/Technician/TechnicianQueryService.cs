@@ -40,9 +40,10 @@ public class TechnicianQueryService : ITechnicianQueryService
                 throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "查詢參數不可為空。");
             }
 
-            if (query.StoreId <= 0)
+            var storeUid = query.StoreUid?.Trim();
+            if (string.IsNullOrWhiteSpace(storeUid))
             {
-                // 若店家識別碼小於等於零，代表格式錯誤，直接拋出可預期例外。
+                // 若店家識別碼為空字串，代表格式錯誤，直接拋出可預期例外。
                 throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "請提供有效的店家識別碼。");
             }
 
@@ -50,10 +51,10 @@ public class TechnicianQueryService : ITechnicianQueryService
             // 透過技師主檔資料表過濾店家識別碼，並僅保留必要欄位，降低資料傳輸量。
             var technicians = await _dbContext.Technicians
                 .AsNoTracking()
-                .Where(technician => technician.StoreId == query.StoreId)
+                .Where(technician => technician.StoreUid == storeUid)
                 .Select(technician => new TechnicianItem
                 {
-                    TechnicianId = technician.TechnicianId,
+                    TechnicianUid = technician.TechnicianUid,
                     TechnicianName = technician.TechnicianName
                 })
                 // EF Core 無法直接翻譯帶有 Comparer 的排序，改用預設排序以確保查詢可被翻譯。 

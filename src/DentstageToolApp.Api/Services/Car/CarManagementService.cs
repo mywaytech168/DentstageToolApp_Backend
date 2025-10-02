@@ -48,17 +48,17 @@ public class CarManagementService : ICarManagementService
 
         var storedPlate = licensePlate.ToUpperInvariant();
         var operatorLabel = NormalizeOperator(operatorName);
-        var resolvedBrand = await ResolveBrandAsync(request.BrandId, cancellationToken);
-        var resolvedModel = await ResolveModelAsync(request.ModelId, resolvedBrand?.BrandId, cancellationToken);
+        var resolvedBrand = await ResolveBrandAsync(request.BrandUid, cancellationToken);
+        var resolvedModel = await ResolveModelAsync(request.ModelUid, resolvedBrand?.BrandUid, cancellationToken);
 
         // 若模型提供品牌關聯而原本未帶入品牌，需補齊品牌資訊以供後續使用。
-        if (resolvedModel?.BrandId is not null && resolvedBrand is null)
+        if (!string.IsNullOrWhiteSpace(resolvedModel?.BrandUid) && resolvedBrand is null)
         {
-            resolvedBrand = await ResolveBrandAsync(resolvedModel.BrandId, cancellationToken);
+            resolvedBrand = await ResolveBrandAsync(resolvedModel!.BrandUid, cancellationToken);
         }
 
         // 當品牌有傳入且模型也存在時，需確保兩者相符避免資料混亂。
-        if (resolvedBrand is not null && resolvedModel is not null && resolvedBrand.BrandId != resolvedModel.BrandId)
+        if (resolvedBrand is not null && resolvedModel is not null && !string.Equals(resolvedBrand.BrandUid, resolvedModel.BrandUid, StringComparison.Ordinal))
         {
             throw new CarManagementException(HttpStatusCode.BadRequest, "車型與品牌不相符，請重新選擇後再儲存。");
         }
@@ -115,10 +115,10 @@ public class CarManagementService : ICarManagementService
         {
             CarUid = carEntity.CarUid,
             CarPlateNumber = carEntity.CarNo,
-            BrandId = resolvedBrand?.BrandId,
+            BrandUid = resolvedBrand?.BrandUid,
             Brand = carEntity.Brand,
             Model = carEntity.Model,
-            ModelId = resolvedModel?.ModelId,
+            ModelUid = resolvedModel?.ModelUid,
             Color = carEntity.Color,
             Remark = carEntity.CarRemark,
             CreatedAt = now,
@@ -180,16 +180,17 @@ public class CarManagementService : ICarManagementService
     /// <summary>
     /// 依照傳入品牌識別碼取得品牌資料，若未帶入則回傳 null。
     /// </summary>
-    private async Task<Brand?> ResolveBrandAsync(int? brandId, CancellationToken cancellationToken)
+    private async Task<Brand?> ResolveBrandAsync(string? brandUid, CancellationToken cancellationToken)
     {
-        if (!brandId.HasValue)
+        var normalizedUid = NormalizeOptionalText(brandUid);
+        if (normalizedUid is null)
         {
             return null;
         }
 
         var brand = await _dbContext.Brands
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.BrandId == brandId.Value, cancellationToken);
+            .FirstOrDefaultAsync(x => x.BrandUid == normalizedUid, cancellationToken);
 
         if (brand is null)
         {
@@ -202,23 +203,24 @@ public class CarManagementService : ICarManagementService
     /// <summary>
     /// 依照傳入車型識別碼取得車型資料，會檢查與指定品牌是否相符。
     /// </summary>
-    private async Task<Model?> ResolveModelAsync(int? modelId, int? expectedBrandId, CancellationToken cancellationToken)
+    private async Task<Model?> ResolveModelAsync(string? modelUid, string? expectedBrandUid, CancellationToken cancellationToken)
     {
-        if (!modelId.HasValue)
+        var normalizedUid = NormalizeOptionalText(modelUid);
+        if (normalizedUid is null)
         {
             return null;
         }
 
         var model = await _dbContext.Models
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.ModelId == modelId.Value, cancellationToken);
+            .FirstOrDefaultAsync(x => x.ModelUid == normalizedUid, cancellationToken);
 
         if (model is null)
         {
             throw new CarManagementException(HttpStatusCode.BadRequest, "找不到對應的車輛型號，請重新選擇。");
         }
 
-        if (expectedBrandId.HasValue && model.BrandId != expectedBrandId.Value)
+        if (!string.IsNullOrWhiteSpace(expectedBrandUid) && !string.Equals(model.BrandUid, expectedBrandUid, StringComparison.Ordinal))
         {
             throw new CarManagementException(HttpStatusCode.BadRequest, "車型與品牌不相符，請確認選項是否正確。");
         }
