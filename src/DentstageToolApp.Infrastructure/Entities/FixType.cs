@@ -8,9 +8,9 @@ namespace DentstageToolApp.Infrastructure.Entities;
 public class FixType
 {
     /// <summary>
-    /// 維修類型主鍵。
+    /// 維修類型主鍵，改為 UID 字串，對應 FixTypeUID。
     /// </summary>
-    public int FixTypeId { get; set; }
+    public string FixTypeUid { get; set; } = null!;
 
     /// <summary>
     /// 維修類型名稱，例如凹痕、鈑烤等。

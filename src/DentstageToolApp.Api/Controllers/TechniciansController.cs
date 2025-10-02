@@ -53,7 +53,7 @@ public class TechniciansController : ControllerBase
 
         try
         {
-            _logger.LogDebug("查詢店家 {StoreId} 的技師名單。", query.StoreId);
+            _logger.LogDebug("查詢店家 {StoreUid} 的技師名單。", query.StoreUid);
             var response = await _technicianQueryService.GetTechniciansAsync(query, cancellationToken);
             return Ok(response);
         }
