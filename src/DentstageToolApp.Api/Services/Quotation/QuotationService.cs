@@ -1,4 +1,5 @@
 using DentstageToolApp.Api.Quotations;
+using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using CarEntity = DentstageToolApp.Infrastructure.Entities.Car;
@@ -36,14 +37,16 @@ public class QuotationService : IQuotationService
     };
 
     private readonly DentstageToolAppContext _context;
+    private readonly IPhotoService _photoService;
     private readonly ILogger<QuotationService> _logger;
 
     /// <summary>
     /// 建構子，注入資料庫內容物件以供查詢使用。
     /// </summary>
-    public QuotationService(DentstageToolAppContext context, ILogger<QuotationService> logger)
+    public QuotationService(DentstageToolAppContext context, IPhotoService photoService, ILogger<QuotationService> logger)
     {
         _context = context;
+        _photoService = photoService;
         _logger = logger;
     }
 
@@ -312,6 +315,13 @@ public class QuotationService : IQuotationService
 
         await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+
+        // 將建立流程中帶入的所有 PhotoUID 一次綁定到新建立的估價單。
+        var photoUids = CollectPhotoUids(request);
+        if (photoUids.Count > 0)
+        {
+            await _photoService.BindToQuotationAsync(quotationEntity.QuotationUid, photoUids, cancellationToken);
+        }
 
         _logger.LogInformation("操作人員 {Operator} 建立估價單 {QuotationUid} ({QuotationNo}) 成功。", operatorLabel, quotationEntity.QuotationUid, quotationEntity.QuotationNo);
 
@@ -736,6 +746,73 @@ public class QuotationService : IQuotationService
         }
 
         return hasValue ? amount : null;
+    }
+
+    /// <summary>
+    /// 整理建立估價單請求內所有的照片識別碼，避免遺漏綁定。
+    /// </summary>
+    private static List<string> CollectPhotoUids(CreateQuotationRequest request)
+    {
+        var uniqueUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        static void TryAdd(HashSet<string> buffer, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            buffer.Add(value.Trim());
+        }
+
+        if (request.ServiceCategories is { } categories)
+        {
+            foreach (var block in EnumerateCategoryBlocks(categories))
+            {
+                foreach (var damage in block.Damages)
+                {
+                    TryAdd(uniqueUids, damage.Photo);
+
+                    if (damage.Photos is { Count: > 0 })
+                    {
+                        foreach (var photo in damage.Photos)
+                        {
+                            if (photo is null)
+                            {
+                                continue;
+                            }
+
+                            TryAdd(uniqueUids, photo.PhotoUid);
+                            TryAdd(uniqueUids, photo.File);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (request.CarBodyConfirmation is { } body)
+        {
+            TryAdd(uniqueUids, body.AnnotatedPhotoUid);
+            TryAdd(uniqueUids, body.AnnotatedImage);
+            TryAdd(uniqueUids, body.SignaturePhotoUid);
+            TryAdd(uniqueUids, body.Signature);
+
+            if (body.Checklist is { Count: > 0 })
+            {
+                foreach (var item in body.Checklist)
+                {
+                    if (item.Photos is { Count: > 0 })
+                    {
+                        foreach (var photoUid in item.Photos)
+                        {
+                            TryAdd(uniqueUids, photoUid);
+                        }
+                    }
+                }
+            }
+        }
+
+        return uniqueUids.ToList();
     }
 
     /// <summary>

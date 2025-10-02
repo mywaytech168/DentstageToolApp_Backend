@@ -132,9 +132,15 @@ public class QuotationDamageItem
 public class QuotationDamagePhoto
 {
     /// <summary>
-    /// 圖片檔案識別或外部儲存 URL。
+    /// 舊版欄位，改為傳遞 PhotoUID，保留以相容既有流程。
     /// </summary>
+    [Obsolete("請改用 PhotoUid 傳遞圖片識別碼。")]
     public string? File { get; set; }
+
+    /// <summary>
+    /// 圖片唯一識別碼，對應圖片上傳 API 回傳的 PhotoUID。
+    /// </summary>
+    public string? PhotoUid { get; set; }
 
     /// <summary>
     /// 圖片描述，說明拍攝角度或重點標註。
@@ -195,9 +201,15 @@ public class QuotationCategoryTotal
 public class QuotationCarBodyConfirmation
 {
     /// <summary>
-    /// 已標註受損位置的車身圖片，可為檔案識別或 URL。
+    /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
     /// </summary>
+    [Obsolete("請改用 AnnotatedPhotoUid 傳遞圖片識別碼。")]
     public string? AnnotatedImage { get; set; }
+
+    /// <summary>
+    /// 已標註受損位置的車身圖片識別碼。
+    /// </summary>
+    public string? AnnotatedPhotoUid { get; set; }
 
     /// <summary>
     /// 車體確認細項列表，可對應檢查部位與勾選結果。
@@ -205,9 +217,15 @@ public class QuotationCarBodyConfirmation
     public List<QuotationCarBodyChecklistItem> Checklist { get; set; } = new();
 
     /// <summary>
-    /// 客戶簽名影像資料。
+    /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
     /// </summary>
+    [Obsolete("請改用 SignaturePhotoUid 傳遞圖片識別碼。")]
     public string? Signature { get; set; }
+
+    /// <summary>
+    /// 客戶簽名影像的 PhotoUID。
+    /// </summary>
+    public string? SignaturePhotoUid { get; set; }
 }
 
 /// <summary>
@@ -231,7 +249,7 @@ public class QuotationCarBodyChecklistItem
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 單一檢查項目的補充圖片，方便比對局部細節。
+    /// 單一檢查項目的補充圖片，需傳入 PhotoUID 以便後端綁定。
     /// </summary>
     public List<string> Photos { get; set; } = new();
 }
