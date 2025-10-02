@@ -8,9 +8,9 @@ namespace DentstageToolApp.Api.Technicians;
 public class TechnicianListQuery
 {
     /// <summary>
-    /// 店家識別碼，僅接受正整數，代表欲查詢的門市。
+    /// 店家識別碼，改為以 UID 字串傳遞，長度限制 100 字元以內。
     /// </summary>
     [Required(ErrorMessage = "請提供店家識別碼。")]
-    [Range(1, int.MaxValue, ErrorMessage = "店家識別碼格式不正確。")]
-    public int StoreId { get; set; }
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "店家識別碼格式不正確。")]
+    public string StoreUid { get; set; } = string.Empty;
 }

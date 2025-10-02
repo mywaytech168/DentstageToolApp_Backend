@@ -59,19 +59,14 @@ public class Quatation
     public string? UserName { get; set; }
 
     /// <summary>
-    /// 所屬門市識別碼。
-    /// </summary>
-    public int? StoreId { get; set; }
-
-    /// <summary>
     /// 導覽屬性：門市主檔資料。
     /// </summary>
     public Store? StoreNavigation { get; set; }
 
     /// <summary>
-    /// 建立估價單的技師識別碼。
+    /// 建立估價單的技師識別碼（UID）。
     /// </summary>
-    public int? TechnicianId { get; set; }
+    public string? TechnicianUid { get; set; }
 
     /// <summary>
     /// 導覽屬性：技師主檔資料。
@@ -94,9 +89,9 @@ public class Quatation
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 維修類型識別碼，對應 fix_types 表格主鍵。
+    /// 維修類型識別碼（UID），對應 fix_types 表格主鍵。
     /// </summary>
-    public int? FixTypeId { get; set; }
+    public string? FixTypeUid { get; set; }
 
     /// <summary>
     /// 導覽屬性：維修類型主檔資料。
@@ -134,14 +129,14 @@ public class Quatation
     public string? Model { get; set; }
 
     /// <summary>
-    /// 車輛品牌識別碼，對應 Brands 表格主鍵。
+    /// 車輛品牌識別碼（UID），對應 Brands 表格主鍵。
     /// </summary>
-    public int? BrandId { get; set; }
+    public string? BrandUid { get; set; }
 
     /// <summary>
-    /// 車輛型號識別碼，對應 Models 表格主鍵。
+    /// 車輛型號識別碼（UID），對應 Models 表格主鍵。
     /// </summary>
-    public int? ModelId { get; set; }
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 導覽屬性：報價單所關聯的品牌資料。

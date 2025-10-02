@@ -8,9 +8,9 @@ namespace DentstageToolApp.Infrastructure.Entities;
 public class Store
 {
     /// <summary>
-    /// 門市主鍵識別碼。
+    /// 門市主鍵識別碼，改以 UID 字串表示，對應資料表欄位 StoreUID。
     /// </summary>
-    public int StoreId { get; set; }
+    public string StoreUid { get; set; } = null!;
 
     /// <summary>
     /// 門市名稱。

@@ -267,12 +267,13 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<Brand>();
         entity.ToTable("Brands");
-        entity.HasKey(e => e.BrandId);
-        entity.Property(e => e.BrandId)
-            .HasColumnName("BrandId");
+        entity.HasKey(e => e.BrandUid);
+        entity.Property(e => e.BrandUid)
+            .HasMaxLength(100)
+            .HasColumnName("BrandUID");
         entity.Property(e => e.BrandName)
             .IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(100);
     }
 
     /// <summary>
@@ -282,17 +283,19 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<Model>();
         entity.ToTable("Models");
-        entity.HasKey(e => e.ModelId);
-        entity.Property(e => e.ModelId)
-            .HasColumnName("ModelId");
+        entity.HasKey(e => e.ModelUid);
+        entity.Property(e => e.ModelUid)
+            .HasMaxLength(100)
+            .HasColumnName("ModelUID");
         entity.Property(e => e.ModelName)
             .IsRequired()
             .HasMaxLength(100);
-        entity.Property(e => e.BrandId)
-            .HasColumnName("BrandId");
+        entity.Property(e => e.BrandUid)
+            .HasMaxLength(100)
+            .HasColumnName("BrandUID");
         entity.HasOne(e => e.Brand)
             .WithMany(e => e.Models)
-            .HasForeignKey(e => e.BrandId)
+            .HasForeignKey(e => e.BrandUid)
             .OnDelete(DeleteBehavior.Cascade);
     }
 
@@ -303,13 +306,16 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<FixType>();
         entity.ToTable("fix_types");
-        entity.HasKey(e => e.FixTypeId);
+        entity.HasKey(e => e.FixTypeUid);
+        entity.Property(e => e.FixTypeUid)
+            .HasMaxLength(100)
+            .HasColumnName("FixTypeUID");
         entity.Property(e => e.FixTypeName)
             .IsRequired()
-            .HasMaxLength(50);
+            .HasMaxLength(100);
         entity.HasMany(e => e.Quatations)
             .WithOne(e => e.FixTypeNavigation)
-            .HasForeignKey(e => e.FixTypeId)
+            .HasForeignKey(e => e.FixTypeUid)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
@@ -320,17 +326,20 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<Store>();
         entity.ToTable("stores");
-        entity.HasKey(e => e.StoreId);
+        entity.HasKey(e => e.StoreUid);
+        entity.Property(e => e.StoreUid)
+            .HasMaxLength(100)
+            .HasColumnName("StoreUID");
         entity.Property(e => e.StoreName)
             .IsRequired()
             .HasMaxLength(100);
         entity.HasMany(e => e.Technicians)
             .WithOne(e => e.Store)
-            .HasForeignKey(e => e.StoreId)
+            .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasMany(e => e.Quatations)
             .WithOne(e => e.StoreNavigation)
-            .HasForeignKey(e => e.StoreId)
+            .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
@@ -341,18 +350,23 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<Technician>();
         entity.ToTable("technicians");
-        entity.HasKey(e => e.TechnicianId);
+        entity.HasKey(e => e.TechnicianUid);
+        entity.Property(e => e.TechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("TechnicianUID");
         entity.Property(e => e.TechnicianName)
             .IsRequired()
             .HasMaxLength(100);
-        entity.Property(e => e.StoreId).IsRequired();
+        entity.Property(e => e.StoreUid)
+            .HasMaxLength(100)
+            .HasColumnName("StoreUID");
         entity.HasOne(e => e.Store)
             .WithMany(e => e.Technicians)
-            .HasForeignKey(e => e.StoreId)
+            .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasMany(e => e.Quatations)
             .WithOne(e => e.TechnicianNavigation)
-            .HasForeignKey(e => e.TechnicianId)
+            .HasForeignKey(e => e.TechnicianUid)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
@@ -370,19 +384,21 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.QuotationNo).HasMaxLength(50);
         entity.Property(e => e.CreatedBy).HasMaxLength(50);
         entity.Property(e => e.ModifiedBy).HasMaxLength(50);
-        entity.Property(e => e.StoreUid).HasMaxLength(100);
+        entity.Property(e => e.StoreUid)
+            .HasMaxLength(100)
+            .HasColumnName("StoreUID");
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
-        entity.Property(e => e.StoreId)
-            .HasColumnName("StoreId");
-        entity.Property(e => e.TechnicianId)
-            .HasColumnName("TechnicianId");
+        entity.Property(e => e.TechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("TechnicianUID");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.FixType)
             .HasMaxLength(50)
             .HasColumnName("Fix_Type");
-        entity.Property(e => e.FixTypeId)
-            .HasColumnName("FixTypeId");
+        entity.Property(e => e.FixTypeUid)
+            .HasMaxLength(100)
+            .HasColumnName("FixTypeUID");
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)
             .HasColumnName("CarUID");
@@ -395,10 +411,12 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CarNo).HasMaxLength(50);
         entity.Property(e => e.Brand).HasMaxLength(50);
         entity.Property(e => e.Model).HasMaxLength(50);
-        entity.Property(e => e.BrandId)
-            .HasColumnName("BrandId");
-        entity.Property(e => e.ModelId)
-            .HasColumnName("ModelId");
+        entity.Property(e => e.BrandUid)
+            .HasMaxLength(100)
+            .HasColumnName("BrandUID");
+        entity.Property(e => e.ModelUid)
+            .HasMaxLength(100)
+            .HasColumnName("ModelUID");
         entity.Property(e => e.Color).HasMaxLength(20);
         entity.Property(e => e.CarRemark)
             .HasMaxLength(255)
@@ -408,23 +426,23 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("Brand_Model");
         entity.HasOne(e => e.BrandNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.BrandId)
+            .HasForeignKey(e => e.BrandUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(e => e.ModelNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.ModelId)
+            .HasForeignKey(e => e.ModelUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(e => e.FixTypeNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.FixTypeId)
+            .HasForeignKey(e => e.FixTypeUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(e => e.StoreNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.StoreId)
+            .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(e => e.TechnicianNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.TechnicianId)
+            .HasForeignKey(e => e.TechnicianUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.Property(e => e.CustomerUid)
             .HasMaxLength(100)

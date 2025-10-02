@@ -15,16 +15,16 @@ public class CreateCarRequest
     public string? CarPlateNumber { get; set; }
 
     /// <summary>
-    /// 車輛品牌識別碼，需由前端傳入既有的品牌編號，若無則留空。
+    /// 車輛品牌識別碼，改以 UID 字串傳遞，若無則留空。
     /// </summary>
-    [Range(1, int.MaxValue, ErrorMessage = "品牌識別碼需大於 0。")]
-    public int? BrandId { get; set; }
+    [StringLength(100, ErrorMessage = "品牌識別碼長度不得超過 100 個字元。")]
+    public string? BrandUid { get; set; }
 
     /// <summary>
-    /// 車輛型號識別碼，需搭配品牌編號進行檢核，可留空。
+    /// 車輛型號識別碼，改以 UID 字串傳遞，可留空。
     /// </summary>
-    [Range(1, int.MaxValue, ErrorMessage = "車型識別碼需大於 0。")]
-    public int? ModelId { get; set; }
+    [StringLength(100, ErrorMessage = "車型識別碼長度不得超過 100 個字元。")]
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車色，可留空。
