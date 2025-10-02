@@ -19,9 +19,9 @@ public class BrandModelListResponse
 public class BrandModelItem
 {
     /// <summary>
-    /// 品牌識別碼。
+    /// 品牌識別碼（UID）。
     /// </summary>
-    public int BrandId { get; set; }
+    public string BrandUid { get; set; } = string.Empty;
 
     /// <summary>
     /// 品牌名稱。
@@ -40,9 +40,9 @@ public class BrandModelItem
 public class BrandModelOption
 {
     /// <summary>
-    /// 車型識別碼。
+    /// 車型識別碼（UID）。
     /// </summary>
-    public int ModelId { get; set; }
+    public string ModelUid { get; set; } = string.Empty;
 
     /// <summary>
     /// 車型名稱。

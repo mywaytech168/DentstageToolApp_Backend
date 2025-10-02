@@ -8,14 +8,14 @@ namespace DentstageToolApp.Infrastructure.Entities;
 public class Model
 {
     /// <summary>
-    /// 車型識別碼，資料表主鍵。
+    /// 車型識別碼，資料表主鍵改為 UID 字串。
     /// </summary>
-    public int ModelId { get; set; }
+    public string ModelUid { get; set; } = null!;
 
     /// <summary>
-    /// 對應品牌識別碼。
+    /// 對應品牌識別碼，改為以品牌 UID 串接品牌主檔。
     /// </summary>
-    public int BrandId { get; set; }
+    public string? BrandUid { get; set; }
 
     /// <summary>
     /// 車型名稱。

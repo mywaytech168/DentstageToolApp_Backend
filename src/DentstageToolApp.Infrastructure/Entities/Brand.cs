@@ -8,9 +8,9 @@ namespace DentstageToolApp.Infrastructure.Entities;
 public class Brand
 {
     /// <summary>
-    /// 品牌識別碼，資料表主鍵。
+    /// 品牌識別碼，資料表主鍵改為 UID 字串。
     /// </summary>
-    public int BrandId { get; set; }
+    public string BrandUid { get; set; } = null!;
 
     /// <summary>
     /// 品牌名稱。

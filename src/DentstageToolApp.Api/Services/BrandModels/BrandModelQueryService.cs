@@ -47,13 +47,13 @@ public class BrandModelQueryService : IBrandModelQueryService
                 .OrderBy(brand => brand.BrandName, StringComparer.CurrentCulture)
                 .Select(brand => new BrandModelItem
                 {
-                    BrandId = brand.BrandId,
+                    BrandUid = brand.BrandUid,
                     BrandName = brand.BrandName,
                     Models = brand.Models
                         .OrderBy(model => model.ModelName, StringComparer.CurrentCulture)
                         .Select(model => new BrandModelOption
                         {
-                            ModelId = model.ModelId,
+                            ModelUid = model.ModelUid,
                             ModelName = model.ModelName
                         })
                         .ToList()

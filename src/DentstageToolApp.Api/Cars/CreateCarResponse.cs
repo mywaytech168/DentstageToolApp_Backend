@@ -18,9 +18,9 @@ public class CreateCarResponse
     public string CarPlateNumber { get; set; } = null!;
 
     /// <summary>
-    /// 車輛品牌識別碼，回傳前端所選品牌，若未指定則為 null。
+    /// 車輛品牌識別碼（UID），回傳前端所選品牌，若未指定則為 null。
     /// </summary>
-    public int? BrandId { get; set; }
+    public string? BrandUid { get; set; }
 
     /// <summary>
     /// 車輛品牌或車款資訊。
@@ -33,9 +33,9 @@ public class CreateCarResponse
     public string? Model { get; set; }
 
     /// <summary>
-    /// 車輛型號識別碼，回傳前端所選型號，若未指定則為 null。
+    /// 車輛型號識別碼（UID），回傳前端所選型號，若未指定則為 null。
     /// </summary>
-    public int? ModelId { get; set; }
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車色。

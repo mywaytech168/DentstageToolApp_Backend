@@ -53,11 +53,11 @@ public class CreateQuotationRequest
 public class CreateQuotationStoreInfo
 {
     /// <summary>
-    /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
+    /// 技師識別碼，改為以 UID 字串傳遞，可自動帶出所屬門市與技師名稱。
     /// </summary>
     [Required(ErrorMessage = "請選擇估價技師。")]
-    [Range(1, int.MaxValue, ErrorMessage = "請選擇有效的估價技師。")]
-    public int? TechnicianId { get; set; }
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
+    public string? TechnicianUid { get; set; }
 
     /// <summary>
     /// 維修來源。
@@ -72,19 +72,14 @@ public class CreateQuotationStoreInfo
 public class QuotationStoreInfo
 {
     /// <summary>
-    /// 門市識別碼，若有對應主檔可一併傳入。
-    /// </summary>
-    public int? StoreId { get; set; }
-
-    /// <summary>
     /// 門市唯一代碼，可對應舊系統欄位。
     /// </summary>
     public string? StoreUid { get; set; }
 
     /// <summary>
-    /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
+    /// 技師識別碼（UID），可透過此欄位查詢技師主檔。
     /// </summary>
-    public int? TechnicianId { get; set; }
+    public string? TechnicianUid { get; set; }
 
     /// <summary>
     /// 店鋪名稱，若未提供會依據技師或門市主檔自動補齊。
