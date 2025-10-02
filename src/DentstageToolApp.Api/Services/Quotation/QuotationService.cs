@@ -144,29 +144,36 @@ public class QuotationService : IQuotationService
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        // 彙整當前頁面所需的技師 UID，僅針對有值的項目進行查詢，降低額外資料庫負擔。
-        var technicianUids = pagedSource
-            .Select(result => result.quotation.TechnicianUid)
-            .Where(uid => !string.IsNullOrWhiteSpace(uid))
+        // 彙整當前頁面所需的使用者 UID，僅針對有值的項目進行查詢，降低額外資料庫負擔。
+        var estimatorUserUids = pagedSource
+            .Select(result => NormalizeOptionalText(result.quotation.UserUid))
+            .Where(uid => uid is not null)
             .Select(uid => uid!)
-            .Distinct()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var technicianMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (technicianUids.Count > 0)
+        var estimatorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (estimatorUserUids.Count > 0)
         {
-            // 針對當前頁面使用到的技師 UID 一次撈取名稱，並建立快取以供後續查找。
-            var technicians = await _context.Technicians
+            // 針對當前頁面使用到的使用者 UID 一次撈取顯示名稱，建立快取供後續查找，減少重複查詢成本。
+            var estimatorAccounts = await _context.UserAccounts
                 .AsNoTracking()
-                .Where(technician => technician.TechnicianUid != null && technicianUids.Contains(technician.TechnicianUid))
+                .Where(account => estimatorUserUids.Contains(account.UserUid))
+                .Select(account => new { account.UserUid, account.DisplayName })
                 .ToListAsync(cancellationToken);
 
-            technicianMap = technicians
-                .Where(technician => !string.IsNullOrWhiteSpace(technician.TechnicianUid))
-                .ToDictionary(
-                    technician => technician.TechnicianUid!,
-                    technician => technician.TechnicianName,
-                    StringComparer.OrdinalIgnoreCase);
+            foreach (var account in estimatorAccounts)
+            {
+                // 僅保留同時具備 UID 與顯示名稱的資料，避免寫入空白映射。
+                var normalizedUid = NormalizeOptionalText(account.UserUid);
+                var normalizedName = NormalizeOptionalText(account.DisplayName);
+                if (normalizedUid is null || normalizedName is null)
+                {
+                    continue;
+                }
+
+                estimatorMap[normalizedUid] = normalizedName;
+            }
         }
 
         var items = pagedSource
@@ -178,13 +185,14 @@ public class QuotationService : IQuotationService
                 var fixType = result.fixType;
                 var store = result.store;
 
-                // 優先使用技師主檔名稱，若查無對應資料則回退為估價單建立者名稱。
+                // 優先使用使用者帳號顯示名稱，若查無對應資料則回退為估價單上的 UserName 欄位。
                 var estimatorName = quotation.UserName;
-                if (!string.IsNullOrWhiteSpace(quotation.TechnicianUid) &&
-                    technicianMap.TryGetValue(quotation.TechnicianUid, out var technicianName) &&
-                    !string.IsNullOrWhiteSpace(technicianName))
+                var normalizedEstimatorUid = NormalizeOptionalText(quotation.UserUid);
+                if (normalizedEstimatorUid is not null &&
+                    estimatorMap.TryGetValue(normalizedEstimatorUid, out var mappedName) &&
+                    !string.IsNullOrWhiteSpace(mappedName))
                 {
-                    estimatorName = technicianName;
+                    estimatorName = mappedName;
                 }
 
                 return new QuotationSummaryResponse
@@ -198,7 +206,7 @@ public class QuotationService : IQuotationService
                     CarPlateNumber = quotation.CarNo,
                     // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
                     StoreName = store != null ? store.StoreName : quotation.CurrentStatusUser,
-                    // 估價技師名稱若查無主檔資料，則使用估價單建立者名稱，維持舊資料相容性。
+                    // 估價人員名稱若查無主檔資料，則使用估價單建立者名稱，維持舊資料相容性。
                     EstimatorName = estimatorName,
                     // 建立人員暫做為製單技師資訊。
                     CreatorName = quotation.CreatedBy,
@@ -400,21 +408,22 @@ public class QuotationService : IQuotationService
 
         var (plainRemark, extraData) = ParseRemark(quotation.Remark);
 
-        // ---------- 技師名稱組裝 ----------
-        // 若舊資料缺少對應的 TechnicianUID，直接使用估價單上的建立者名稱避免查詢失敗。
+        // ---------- 估價人員名稱組裝 ----------
+        // 預設使用估價單上紀錄的 UserName，若 UserUid 能對應使用者主檔則改採顯示名稱。
         var estimatorName = quotation.UserName;
-        if (!string.IsNullOrWhiteSpace(quotation.TechnicianUid))
+        var estimatorUid = NormalizeOptionalText(quotation.UserUid);
+        if (estimatorUid is not null)
         {
-            // 僅在 UID 有值時才查詢技師主檔，避免對舊資料造成不必要的 join。
-            var technicianName = await _context.Technicians
+            // 僅在 UID 有值時才進行查詢，避免對舊資料造成額外的資料庫負擔。
+            var accountDisplayName = await _context.UserAccounts
                 .AsNoTracking()
-                .Where(technician => technician.TechnicianUid == quotation.TechnicianUid)
-                .Select(technician => technician.TechnicianName)
+                .Where(account => account.UserUid == estimatorUid)
+                .Select(account => account.DisplayName)
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (!string.IsNullOrWhiteSpace(technicianName))
+            if (!string.IsNullOrWhiteSpace(accountDisplayName))
             {
-                estimatorName = technicianName;
+                estimatorName = accountDisplayName;
             }
         }
 
@@ -428,9 +437,9 @@ public class QuotationService : IQuotationService
             Store = new QuotationStoreInfo
             {
                 StoreUid = quotation.StoreUid,
-                TechnicianUid = quotation.TechnicianUid,
+                UserUid = quotation.UserUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
-                // 技師名稱優先顯示主檔資料，若查無對應技師則回退為建立者姓名。
+                // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
                 EstimatorName = estimatorName,
                 CreatorName = quotation.CreatedBy,
                 CreatedDate = quotation.CreationTimestamp,
