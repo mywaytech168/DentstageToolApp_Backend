@@ -263,6 +263,10 @@ public class QuotationService : IQuotationService
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
+        // ---------- 預約與維修日期處理 ----------
+        // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
+        var reservationDate = NormalizeOptionalDate(storeInfo.ReservationDate);
+        var repairDate = NormalizeOptionalDate(storeInfo.RepairDate);
 
         // 透過車輛主檔自動帶出車牌與品牌資訊，流程僅需車輛 UID 即可，先驗證識別碼後統一補齊細節。
         var requestCarUid = NormalizeRequiredText(carInfo.CarUid, "車輛識別碼");
@@ -301,8 +305,6 @@ public class QuotationService : IQuotationService
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = DateTime.UtcNow;
         var quotationDate = DateOnly.FromDateTime(createdAt);
-        DateOnly? reservationDate = null;
-        DateOnly? repairDate = null;
         var phoneQuery = NormalizePhoneQuery(customerPhone);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -1013,6 +1015,20 @@ public class QuotationService : IQuotationService
 
         var digits = new string(phone.Where(char.IsDigit).ToArray());
         return string.IsNullOrWhiteSpace(digits) ? null : digits;
+    }
+
+    /// <summary>
+    /// 將可選的日期欄位正規化為 DateOnly，避免時間資訊影響資料庫儲存。
+    /// </summary>
+    private static DateOnly? NormalizeOptionalDate(DateTime? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        // 僅保留日期部分，確保與資料庫 DateOnly 欄位一致。
+        return DateOnly.FromDateTime(value.Value.Date);
     }
 
     // ---------- 生命週期 ----------
