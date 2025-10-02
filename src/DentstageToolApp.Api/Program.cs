@@ -10,6 +10,7 @@ using DentstageToolApp.Api.Services.BrandModels;
 using DentstageToolApp.Api.Services.Car;
 using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Quotation;
+using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Api.Services.Technician;
 using DentstageToolApp.Api.Services.Customer;
 using DentstageToolApp.Api.Swagger;
@@ -106,6 +107,7 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 // ---------- JWT 與身份驗證設定 ----------
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
+builder.Services.Configure<PhotoStorageOptions>(builder.Configuration.GetSection("PhotoStorage"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
@@ -146,6 +148,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<IAccountAdminService, AccountAdminService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IQuotationService, QuotationService>();
+builder.Services.AddScoped<IPhotoService, PhotoService>();
 builder.Services.AddScoped<ICarPlateRecognitionService, CarPlateRecognitionService>();
 builder.Services.AddScoped<ICarManagementService, CarManagementService>();
 builder.Services.AddScoped<IBrandModelQueryService, BrandModelQueryService>();
