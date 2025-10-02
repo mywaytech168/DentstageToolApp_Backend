@@ -496,11 +496,12 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 建立估價單唯一識別碼，使用 Qu_ 前綴搭配 GUID。
+    /// 建立估價單唯一識別碼，使用 Q_ 前綴搭配 GUID。
     /// </summary>
     private static string BuildQuotationUid()
     {
-        return $"Qu_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+        // 以 Q_ 開頭並接續大寫 GUID，對齊前端既有格式需求，方便辨識資料來源。
+        return $"Q_{Guid.NewGuid().ToString().ToUpperInvariant()}";
     }
 
     /// <summary>
@@ -508,7 +509,9 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static string BuildQuotationNo(int serialNumber, DateTime timestamp)
     {
-        return $"Q{timestamp:yyyyMMdd}-{serialNumber:0000}";
+        // 採用 Q + 年份末兩碼 + 月份 + 四碼流水號（例如：Q25070078），
+        // 與舊系統保持一致以便前後端串接查詢。
+        return $"Q{timestamp:yyMM}{serialNumber:0000}";
     }
 
     /// <summary>
