@@ -99,12 +99,7 @@ public class QuotationsController : ControllerBase
             "carUid": "Ca_805E328B-A461-4D62-B6F7-B7E8D0414842"
           },
           "customer": {
-            "customerUid": "CUST-20240228-0001",
-            "name": "林小華",
-            "phone": "0988123456",
-            "gender": "Male",
-            "source": "Facebook",
-            "remark": "首次諮詢"
+            "customerUid": "Cu_C40A5D87-FD06-48E9-9DB3-1C9677303992"
           },
           "serviceCategories": {
             "dent": {

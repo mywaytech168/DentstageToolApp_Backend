@@ -24,7 +24,7 @@ public class CreateQuotationRequest
     /// 客戶相關資訊。
     /// </summary>
     [Required]
-    public QuotationCustomerInfo Customer { get; set; } = new();
+    public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
     /// 服務類別的明細資訊。
@@ -171,7 +171,19 @@ public class QuotationCarInfo
 }
 
 /// <summary>
-/// 客戶相關資料欄位。
+/// 建立估價單時僅需提供客戶唯一識別碼的精簡輸入結構。
+/// </summary>
+public class CreateQuotationCustomerInfo
+{
+    /// <summary>
+    /// 客戶唯一識別碼，透過此欄位自動帶入客戶姓名與聯絡資訊。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇客戶資料。")]
+    public string? CustomerUid { get; set; }
+}
+
+/// <summary>
+/// 客戶相關資料欄位（回傳用）。
 /// </summary>
 public class QuotationCustomerInfo
 {
