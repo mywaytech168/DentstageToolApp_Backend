@@ -804,6 +804,14 @@ public class QuotationService : IQuotationService
             TryAdd(uniqueUids, body.SignaturePhotoUid);
             TryAdd(uniqueUids, body.Signature);
 
+            if (body.SignaturePhotoUids is { Count: > 0 })
+            {
+                foreach (var signatureUid in body.SignaturePhotoUids)
+                {
+                    TryAdd(uniqueUids, signatureUid);
+                }
+            }
+
             if (body.Checklist is { Count: > 0 })
             {
                 foreach (var item in body.Checklist)
