@@ -53,7 +53,7 @@ public class QuotationSummaryResponse
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價技師姓名，優先採用技師主檔資料，若無則使用估價單原欄位。
+    /// 估價人員姓名，優先採用使用者主檔資料，若無則使用估價單原欄位。
     /// </summary>
     public string? EstimatorName { get; set; }
 
