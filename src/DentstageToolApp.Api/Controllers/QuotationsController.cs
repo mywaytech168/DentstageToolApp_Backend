@@ -116,17 +116,17 @@ public class QuotationsController : ControllerBase
               },
               "damages": [
                 {
-                  "position": "右前門",
-                  "dentStatus": "中度凹陷",
-                  "description": "需板金搭配烤漆",
-                  "estimatedAmount": 4500,
-                  "photos": [
+                  "圖片": [
                     {
                       "photoUid": "PH_01",
                       "description": "右前門受損特寫",
                       "isPrimary": true
                     }
-                  ]
+                  ],
+                  "位置": "右前門",
+                  "凹痕狀況": "中度凹陷",
+                  "說明": "需板金搭配烤漆",
+                  "預估金額": 4500
                 }
               ],
               "amount": {
