@@ -48,12 +48,13 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 建立估價單時，僅需提供技師與來源資訊的店家欄位。
+/// 建立估價單時，僅需提供操作者與來源資訊的店家欄位。
 /// </summary>
 public class CreateQuotationStoreInfo
 {
     /// <summary>
     /// 技師識別碼，改為以 UID 字串傳遞，可自動帶出所屬門市與技師名稱。
+    /// （後端仍保留舊欄位，待前端改版後可進一步移除。）
     /// </summary>
     [Required(ErrorMessage = "請選擇估價技師。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
@@ -77,17 +78,17 @@ public class QuotationStoreInfo
     public string? StoreUid { get; set; }
 
     /// <summary>
-    /// 技師識別碼（UID），可透過此欄位查詢技師主檔。
+    /// 建立估價單的使用者識別碼（UID），供前端回填操作者資訊。
     /// </summary>
-    public string? TechnicianUid { get; set; }
+    public string? UserUid { get; set; }
 
     /// <summary>
-    /// 店鋪名稱，若未提供會依據技師或門市主檔自動補齊。
+    /// 店鋪名稱，若未提供會依據使用者或門市主檔自動補齊。
     /// </summary>
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價技師。
+    /// 估價人員。
     /// </summary>
     public string? EstimatorName { get; set; }
 
