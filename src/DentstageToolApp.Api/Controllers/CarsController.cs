@@ -37,14 +37,14 @@ public class CarsController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 新增車輛資料，建立車牌、品牌、型號與備註等欄位。
+    /// 新增車輛資料，建立車牌、品牌 UID、型號 UID 與備註等欄位。
     /// </summary>
     /// <remarks>
     /// 
     /// {
     ///   "carPlateNumber": "AAA-4445",
-    ///   "brandId": 1,
-    ///   "modelId": 1,
+    ///   "brandUid": "Br_123",
+    ///   "modelUid": "Mo_456",
     ///   "color": "黃",
     ///   "remark": ""
     /// }
@@ -55,8 +55,8 @@ public class CarsController : ControllerBase
         """
         {
           "carPlateNumber": "AAA-1234",
-          "brandId": 1,
-          "modelId": 2,
+          "brandUid": "Br_123",
+          "modelUid": "Mo_456",
           "color": "白",
           "remark": "測試建立車輛資料"
         }
