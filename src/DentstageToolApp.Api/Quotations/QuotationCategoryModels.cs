@@ -217,6 +217,11 @@ public class QuotationCarBodyConfirmation
     public List<QuotationCarBodyChecklistItem> Checklist { get; set; } = new();
 
     /// <summary>
+    /// 車體受損標記列表，透過座標與損傷類型記錄於車身示意圖。
+    /// </summary>
+    public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
+
+    /// <summary>
     /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
     /// </summary>
     [Obsolete("請改用 SignaturePhotoUid 傳遞圖片識別碼。")]
@@ -226,6 +231,11 @@ public class QuotationCarBodyConfirmation
     /// 客戶簽名影像的 PhotoUID。
     /// </summary>
     public string? SignaturePhotoUid { get; set; }
+
+    /// <summary>
+    /// 多份簽名圖片清單，支援一次上傳多張簽名檔並由後端綁定。
+    /// </summary>
+    public List<string> SignaturePhotoUids { get; set; } = new();
 }
 
 /// <summary>
@@ -252,5 +262,41 @@ public class QuotationCarBodyChecklistItem
     /// 單一檢查項目的補充圖片，需傳入 PhotoUID 以便後端綁定。
     /// </summary>
     public List<string> Photos { get; set; } = new();
+}
+
+/// <summary>
+/// 車體受損標記資訊，透過座標定位並標記損傷類型。
+/// </summary>
+public class QuotationCarBodyDamageMarker
+{
+    /// <summary>
+    /// 標記在示意圖上的 X 座標（0~1），用於呈現水平位置。
+    /// </summary>
+    public double? X { get; set; }
+
+    /// <summary>
+    /// 標記在示意圖上的 Y 座標（0~1），用於呈現垂直位置。
+    /// </summary>
+    public double? Y { get; set; }
+
+    /// <summary>
+    /// 是否為凹痕，對應前端勾選的凹痕類型。
+    /// </summary>
+    public bool HasDent { get; set; }
+
+    /// <summary>
+    /// 是否為刮痕，對應前端勾選的刮痕類型。
+    /// </summary>
+    public bool HasScratch { get; set; }
+
+    /// <summary>
+    /// 是否為掉漆，對應前端勾選的掉漆類型。
+    /// </summary>
+    public bool HasPaintPeel { get; set; }
+
+    /// <summary>
+    /// 補充備註，協助記錄詳細損傷描述。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 
