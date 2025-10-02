@@ -92,32 +92,14 @@ public class QuotationsController : ControllerBase
         """
         {
           "store": {
-            "storeId": 1,
-            "storeUid": "KH001",
             "technicianId": 12,
-            "storeName": "高雄旗艦店",
-            "estimatorName": "張技師",
-            "creatorName": "王主管",
-            "createdDate": "2024-03-01T10:00:00",
-            "reservationDate": "2024-03-05T15:00:00",
-            "source": "官方網站",
-            "repairDate": "2024-03-08T09:00:00"
+            "source": "官方網站"
           },
           "car": {
-            "carUid": "CAR-20240301-0001",
-            "licensePlate": "AAA-1234",
-            "brand": "Toyota",
-            "model": "Altis",
-            "color": "銀",
-            "remark": "前保桿有刮傷"
+            "carUid": "Ca_805E328B-A461-4D62-B6F7-B7E8D0414842"
           },
           "customer": {
-            "customerUid": "CUST-20240228-0001",
-            "name": "林小華",
-            "phone": "0988123456",
-            "gender": "Male",
-            "source": "Facebook",
-            "remark": "首次諮詢"
+            "customerUid": "Cu_C40A5D87-FD06-48E9-9DB3-1C9677303992"
           },
           "serviceCategories": {
             "dent": {
@@ -132,7 +114,7 @@ public class QuotationsController : ControllerBase
               },
               "damages": [
                 {
-                  "photo": "dent-front-door.jpg",
+                  "photoUid": "PH_01",
                   "position": "右前門",
                   "dentStatus": "中度凹陷",
                   "description": "需板金搭配烤漆",
@@ -154,8 +136,8 @@ public class QuotationsController : ControllerBase
             "roundingDiscount": 0
           },
           "carBodyConfirmation": {
-            "annotatedImage": "https://cdn.dentstage.com/annotated/car-001.png",
-            "signature": "https://cdn.dentstage.com/signature/customer-001.png"
+            "annotatedPhotoUid": "PH_02",
+            "signaturePhotoUid": "PH_03"
           },
           "remark": "請於修復後通知客戶取車"
         }
@@ -165,10 +147,17 @@ public class QuotationsController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CreateQuotationResponse>> CreateQuotationAsync([FromBody] CreateQuotationRequest request, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            // 若傳入參數未通過驗證，直接回傳標準 ProblemDetails 結構。
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
-            var operatorName = GetCurrentOperatorName();
-            var response = await _quotationService.CreateQuotationAsync(request, operatorName, cancellationToken);
+            // 組裝目前登入者的上下文資訊，讓服務層可自動帶入使用者相關欄位。
+            var operatorContext = GetCurrentOperatorContext();
+            var response = await _quotationService.CreateQuotationAsync(request, operatorContext, cancellationToken);
             return StatusCode(StatusCodes.Status201Created, response);
         }
         catch (QuotationManagementException ex)
@@ -300,6 +289,18 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 組合目前登入者的估價單操作上下文，包含名稱與唯一識別碼。
+    /// </summary>
+    private QuotationOperatorContext GetCurrentOperatorContext()
+    {
+        return new QuotationOperatorContext
+        {
+            OperatorName = GetCurrentOperatorName(),
+            UserUid = GetCurrentUserUid()
+        };
+    }
+
+    /// <summary>
     /// 從 JWT 權杖中取得操作人員名稱，優先顯示名稱再回退至識別碼。
     /// </summary>
     private string GetCurrentOperatorName()
@@ -324,6 +325,27 @@ public class QuotationsController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
+    }
+
+    /// <summary>
+    /// 取得目前登入者的唯一識別碼，供建立估價單時寫入資料庫。
+    /// </summary>
+    private string? GetCurrentUserUid()
+    {
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
     }
 
     // ---------- 生命週期 ----------
