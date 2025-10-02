@@ -10,10 +10,10 @@ namespace DentstageToolApp.Api.Services.Technician;
 public interface ITechnicianQueryService
 {
     /// <summary>
-    /// 依據查詢條件取得技師名單資料。
+    /// 依據目前登入者的使用者識別碼取得技師名單資料。
     /// </summary>
-    /// <param name="query">查詢參數，包含店家識別碼。</param>
+    /// <param name="userUid">登入者的唯一識別碼，作為反查門市的依據。</param>
     /// <param name="cancellationToken">取消權杖，供前端中止操作。</param>
     /// <returns>回傳整理後的技師名單。</returns>
-    Task<TechnicianListResponse> GetTechniciansAsync(TechnicianListQuery query, CancellationToken cancellationToken);
+    Task<TechnicianListResponse> GetTechniciansAsync(string userUid, CancellationToken cancellationToken);
 }
