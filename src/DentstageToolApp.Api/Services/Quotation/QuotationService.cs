@@ -234,14 +234,21 @@ public class QuotationService : IQuotationService
         var color = NormalizeOptionalText(carEntity.Color);
         var carRemark = NormalizeOptionalText(carEntity.CarRemark);
 
-        // 透過客戶主檔自動帶出姓名與聯絡資訊，保留前端自訂覆寫的彈性。
-        var customerEntity = await GetCustomerEntityAsync(customerInfo.CustomerUid, cancellationToken);
-        var customerUid = customerEntity?.CustomerUid ?? NormalizeOptionalText(customerInfo.CustomerUid);
-        var customerName = NormalizeRequiredText(customerInfo.Name ?? customerEntity?.Name, "客戶名稱");
-        var customerPhone = NormalizeOptionalText(customerInfo.Phone ?? customerEntity?.Phone);
-        var customerGender = NormalizeOptionalText(customerInfo.Gender ?? customerEntity?.Gender);
-        var customerSource = NormalizeOptionalText(customerInfo.Source ?? customerEntity?.Source);
-        var customerRemark = NormalizeOptionalText(customerInfo.Remark ?? customerEntity?.ConnectRemark);
+        // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
+        var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
+        var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
+        if (customerEntity is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的客戶資料。");
+        }
+
+        // 透過客戶主檔補齊姓名、聯絡電話等欄位，確保僅憑 UID 即可完成建檔。
+        var customerUid = NormalizeRequiredText(customerEntity.CustomerUid, "客戶識別碼");
+        var customerName = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
+        var customerPhone = NormalizeOptionalText(customerEntity.Phone);
+        var customerGender = NormalizeOptionalText(customerEntity.Gender);
+        var customerSource = NormalizeOptionalText(customerEntity.Source);
+        var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
         var plainRemark = NormalizeOptionalText(request.Remark);
 
