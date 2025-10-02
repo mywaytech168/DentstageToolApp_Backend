@@ -4,6 +4,7 @@ using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using CarEntity = DentstageToolApp.Infrastructure.Entities.Car;
 using CustomerEntity = DentstageToolApp.Infrastructure.Entities.Customer;
+using FixTypeEntity = DentstageToolApp.Infrastructure.Entities.FixType;
 using StoreEntity = DentstageToolApp.Infrastructure.Entities.Store;
 using TechnicianEntity = DentstageToolApp.Infrastructure.Entities.Technician;
 using Microsoft.EntityFrameworkCore;
@@ -263,6 +264,21 @@ public class QuotationService : IQuotationService
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
+
+        // ---------- 維修設定處理 ----------
+        // 依據維修類型 UID 驗證主檔，並轉換常見布林選項為資料表欄位使用的旗標文字。
+        var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
+        var fixTypeUid = NormalizeRequiredText(maintenanceInfo.FixTypeUid, "維修類型");
+        var fixTypeEntity = await GetFixTypeEntityAsync(fixTypeUid, cancellationToken);
+        var fixTypeName = NormalizeOptionalText(maintenanceInfo.FixTypeName)
+            ?? NormalizeOptionalText(fixTypeEntity?.FixTypeName)
+            ?? fixTypeUid;
+        var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
+        var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
+        var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
+        var repaintFlag = ConvertBooleanToFlag(maintenanceInfo.HasRepainted);
+        var toolFlag = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
+
         // ---------- 預約與維修日期處理 ----------
         // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
         var reservationDate = NormalizeOptionalDate(storeInfo.ReservationDate);
@@ -345,6 +361,13 @@ public class QuotationService : IQuotationService
             BookDate = reservationDate,
             FixDate = repairDate,
             Source = source,
+            FixTypeUid = fixTypeUid,
+            FixType = fixTypeName,
+            CarReserved = reserveCarFlag,
+            Coat = coatingFlag,
+            Envelope = wrappingFlag,
+            Paint = repaintFlag,
+            ToolTest = toolFlag,
             CarUid = carUid,
             CarNo = licensePlate,
             CarNoInput = licensePlate,
@@ -398,7 +421,8 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
             .Include(q => q.BrandNavigation)
-            .Include(q => q.ModelNavigation);
+            .Include(q => q.ModelNavigation)
+            .Include(q => q.FixTypeNavigation);
 
         query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
@@ -470,7 +494,18 @@ public class QuotationService : IQuotationService
             Remark = plainRemark,
             ServiceCategories = extraData?.ServiceCategories,
             CategoryTotal = extraData?.CategoryTotal,
-            CarBodyConfirmation = extraData?.CarBodyConfirmation
+            CarBodyConfirmation = extraData?.CarBodyConfirmation,
+            Maintenance = new QuotationMaintenanceInfo
+            {
+                FixTypeUid = quotation.FixTypeUid,
+                FixTypeName = NormalizeOptionalText(quotation.FixTypeNavigation?.FixTypeName)
+                    ?? NormalizeOptionalText(quotation.FixType),
+                ReserveCar = ParseBooleanFlag(quotation.CarReserved),
+                ApplyCoating = ParseBooleanFlag(quotation.Coat),
+                ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
+                HasRepainted = ParseBooleanFlag(quotation.Paint),
+                NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest)
+            }
         };
     }
 
@@ -687,6 +722,29 @@ public class QuotationService : IQuotationService
         }
 
         return store;
+    }
+
+    /// <summary>
+    /// 依據維修類型識別碼取得維修類型主檔，若不存在則提示呼叫端重新選擇。
+    /// </summary>
+    private async Task<FixTypeEntity?> GetFixTypeEntityAsync(string? fixTypeUid, CancellationToken cancellationToken)
+    {
+        var normalizedUid = NormalizeOptionalText(fixTypeUid);
+        if (normalizedUid is null)
+        {
+            return null;
+        }
+
+        var fixType = await _context.FixTypes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.FixTypeUid == normalizedUid, cancellationToken);
+
+        if (fixType is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的維修類型，請重新選擇。");
+        }
+
+        return fixType;
     }
 
     /// <summary>
@@ -1015,6 +1073,38 @@ public class QuotationService : IQuotationService
 
         var digits = new string(phone.Where(char.IsDigit).ToArray());
         return string.IsNullOrWhiteSpace(digits) ? null : digits;
+    }
+
+    /// <summary>
+    /// 將布林旗標轉換為資料庫慣用的 Y / N 字元。
+    /// </summary>
+    private static string? ConvertBooleanToFlag(bool? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        return value.Value ? "Y" : "N";
+    }
+
+    /// <summary>
+    /// 將資料庫紀錄的文字旗標轉回布林值，支援 Y/N、True/False、是/否等常見寫法。
+    /// </summary>
+    private static bool? ParseBooleanFlag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var normalized = value.Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "y" or "yes" or "true" or "1" or "是" or "有" => true,
+            "n" or "no" or "false" or "0" or "否" or "無" => false,
+            _ => null
+        };
     }
 
     /// <summary>
