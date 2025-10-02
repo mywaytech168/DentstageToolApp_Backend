@@ -215,14 +215,21 @@ public class QuotationService : IQuotationService
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
 
-        // 透過車輛主檔自動帶出車牌與品牌資訊，若未選擇車輛則沿用前端輸入值。
-        var carEntity = await GetCarEntityAsync(carInfo.CarUid, cancellationToken);
-        var carUid = carEntity?.CarUid ?? NormalizeOptionalText(carInfo.CarUid);
-        var licensePlate = NormalizeRequiredText(carInfo.LicensePlate ?? carEntity?.CarNo, "車牌號碼").ToUpperInvariant();
-        var brand = NormalizeOptionalText(carInfo.Brand ?? carEntity?.Brand);
-        var model = NormalizeOptionalText(carInfo.Model ?? carEntity?.Model);
-        var color = NormalizeOptionalText(carInfo.Color ?? carEntity?.Color);
-        var carRemark = NormalizeOptionalText(carInfo.Remark ?? carEntity?.CarRemark);
+        // 透過車輛主檔自動帶出車牌與品牌資訊，流程僅需車輛 UID 即可，先驗證識別碼後統一補齊細節。
+        var requestCarUid = NormalizeRequiredText(carInfo.CarUid, "車輛識別碼");
+        var carEntity = await GetCarEntityAsync(requestCarUid, cancellationToken);
+        if (carEntity is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
+        }
+
+        // 透過車輛主檔補齊車牌、品牌等欄位，並確保車牌為統一的大寫格式。
+        var carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
+        var licensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼").ToUpperInvariant();
+        var brand = NormalizeOptionalText(carEntity.Brand);
+        var model = NormalizeOptionalText(carEntity.Model);
+        var color = NormalizeOptionalText(carEntity.Color);
+        var carRemark = NormalizeOptionalText(carEntity.CarRemark);
 
         // 透過客戶主檔自動帶出姓名與聯絡資訊，保留前端自訂覆寫的彈性。
         var customerEntity = await GetCustomerEntityAsync(customerInfo.CustomerUid, cancellationToken);

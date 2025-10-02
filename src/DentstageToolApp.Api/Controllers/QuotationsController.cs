@@ -96,12 +96,7 @@ public class QuotationsController : ControllerBase
             "source": "官方網站"
           },
           "car": {
-            "carUid": "CAR-20240301-0001",
-            "licensePlate": "AAA-1234",
-            "brand": "Toyota",
-            "model": "Altis",
-            "color": "銀",
-            "remark": "前保桿有刮傷"
+            "carUid": "Ca_805E328B-A461-4D62-B6F7-B7E8D0414842"
           },
           "customer": {
             "customerUid": "CUST-20240228-0001",
