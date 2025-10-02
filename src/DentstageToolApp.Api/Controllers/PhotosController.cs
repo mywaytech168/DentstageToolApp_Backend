@@ -20,6 +20,11 @@ namespace DentstageToolApp.Api.Controllers;
 [Authorize]
 public class PhotosController : ControllerBase
 {
+    /// <summary>
+    /// 下載圖片命名路由常數，避免各處硬編碼。
+    /// </summary>
+    private const string DownloadRouteName = "DownloadPhoto";
+
     private readonly IPhotoService _photoService;
     private readonly ILogger<PhotosController> _logger;
 
@@ -62,7 +67,16 @@ public class PhotosController : ControllerBase
         try
         {
             var response = await _photoService.UploadAsync(request.File, request.Remark, cancellationToken);
-            return CreatedAtAction(nameof(DownloadAsync), new { photoUid = response.PhotoUid }, response);
+
+            // 由於 CreatedAtAction 需要產生有效路由資訊，若缺少 PhotoUID 則以 200 回應避免例外。
+            if (string.IsNullOrWhiteSpace(response.PhotoUid))
+            {
+                _logger.LogWarning("上傳圖片成功但缺少 PhotoUID，改以 200 回傳結果");
+                return Ok(response);
+            }
+
+            // 透過命名路由回傳 201 Created，確保位置標頭正確並避免產生找不到路由的例外。
+            return CreatedAtRoute(DownloadRouteName, new { photoUid = response.PhotoUid }, response);
         }
         catch (QuotationManagementException ex)
         {
@@ -89,7 +103,7 @@ public class PhotosController : ControllerBase
     /// <summary>
     /// 依 PhotoUID 下載圖片檔案，前端可直接取得原檔供預覽或下載。
     /// </summary>
-    [HttpGet("{photoUid}")]
+    [HttpGet("{photoUid}", Name = DownloadRouteName)]
     [ProducesResponseType(typeof(FileStreamResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DownloadAsync([FromRoute] string photoUid, CancellationToken cancellationToken)
