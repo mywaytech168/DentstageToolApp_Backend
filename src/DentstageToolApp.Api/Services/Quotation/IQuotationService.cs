@@ -21,9 +21,9 @@ public interface IQuotationService
     /// 建立估價單並回傳基本資訊。
     /// </summary>
     /// <param name="request">建立所需的欄位資料。</param>
-    /// <param name="operatorName">操作人員名稱，會填入建立與修改者欄位。</param>
+    /// <param name="operatorContext">操作人員上下文資訊，包含使用者識別碼與顯示名稱。</param>
     /// <param name="cancellationToken">取消權杖，支援前端取消請求。</param>
-    Task<CreateQuotationResponse> CreateQuotationAsync(CreateQuotationRequest request, string operatorName, CancellationToken cancellationToken);
+    Task<CreateQuotationResponse> CreateQuotationAsync(CreateQuotationRequest request, QuotationOperatorContext operatorContext, CancellationToken cancellationToken);
 
     /// <summary>
     /// 取得單一估價單的詳細資訊。
