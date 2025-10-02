@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Options;
@@ -29,12 +27,6 @@ public class PhotoService : IPhotoService
     private readonly ILogger<PhotoService> _logger;
     private readonly PhotoStorageOptions _storageOptions;
     private readonly FileExtensionContentTypeProvider _contentTypeProvider = new();
-    private readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        WriteIndented = false
-    };
 
     /// <summary>
     /// 建構子，注入資料庫內容物件、日誌工具與儲存設定。
@@ -52,7 +44,7 @@ public class PhotoService : IPhotoService
     // ---------- API 邏輯區 ----------
 
     /// <inheritdoc />
-    public async Task<UploadPhotoResponse> UploadAsync(IFormFile file, string? remark, CancellationToken cancellationToken)
+    public async Task<UploadPhotoResponse> UploadAsync(IFormFile file, CancellationToken cancellationToken)
     {
         if (file is null)
         {
@@ -90,21 +82,13 @@ public class PhotoService : IPhotoService
                 ? GuessContentType(extension) ?? "application/octet-stream"
                 : file.ContentType;
 
-            var metadata = new PhotoMetadata
-            {
-                OriginalFileName = file.FileName,
-                ContentType = contentType,
-                FileExtension = extension,
-                Remark = NormalizeRemark(remark)
-            };
-
             var entity = new PhotoDatum
             {
                 PhotoUid = photoUid,
                 QuotationUid = null,
                 RelatedUid = null,
-                Comment = JsonSerializer.Serialize(metadata, _jsonOptions),
-                Posion = metadata.Remark
+                Comment = null,
+                Posion = null
             };
 
             await _context.PhotoData.AddAsync(entity, cancellationToken);
@@ -116,7 +100,7 @@ public class PhotoService : IPhotoService
             {
                 PhotoUid = photoUid,
                 FileName = file.FileName,
-                ContentType = metadata.ContentType,
+                ContentType = contentType,
                 FileSize = file.Length
             };
         }
@@ -152,10 +136,8 @@ public class PhotoService : IPhotoService
             return null;
         }
 
-        var metadata = ParseMetadata(entity.Comment);
-        var extension = metadata?.FileExtension ?? ".bin";
         var storageRoot = EnsureStorageRoot();
-        var physicalPath = Path.Combine(storageRoot, normalizedUid + extension);
+        var physicalPath = ResolvePhysicalPath(storageRoot, normalizedUid);
 
         if (!File.Exists(physicalPath))
         {
@@ -163,8 +145,9 @@ public class PhotoService : IPhotoService
             return null;
         }
 
-        var contentType = metadata?.ContentType ?? GuessContentType(extension) ?? "application/octet-stream";
-        var downloadFileName = metadata?.OriginalFileName ?? normalizedUid + extension;
+        var extension = Path.GetExtension(physicalPath);
+        var contentType = GuessContentType(extension) ?? "application/octet-stream";
+        var downloadFileName = Path.GetFileName(physicalPath);
 
         var fileStream = new FileStream(physicalPath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return new PhotoFile(fileStream, contentType, downloadFileName);
@@ -235,27 +218,11 @@ public class PhotoService : IPhotoService
     /// <summary>
     /// 統一產生 PhotoUID，使用 Guid 確保唯一性。
     /// </summary>
-    private static string GeneratePhotoUid() => $"PH_{Guid.NewGuid():N}";
-
-    /// <summary>
-    /// 解析儲存在資料庫中的照片中繼資料。
-    /// </summary>
-    private PhotoMetadata? ParseMetadata(string? json)
+    private static string GeneratePhotoUid()
     {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return null;
-        }
-
-        try
-        {
-            return JsonSerializer.Deserialize<PhotoMetadata>(json, _jsonOptions);
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogWarning(ex, "解析照片中繼資料失敗，原始內容：{Json}", json);
-            return null;
-        }
+        // 依照需求使用「Ph_」前綴搭配大寫 Guid，利於前後端辨識資料類型。
+        var guid = Guid.NewGuid().ToString().ToUpperInvariant();
+        return $"Ph_{guid}";
     }
 
     /// <summary>
@@ -319,19 +286,6 @@ public class PhotoService : IPhotoService
     }
 
     /// <summary>
-    /// 正規化備註，若為空白則回傳 null。
-    /// </summary>
-    private static string? NormalizeRemark(string? remark)
-    {
-        if (string.IsNullOrWhiteSpace(remark))
-        {
-            return null;
-        }
-
-        return remark.Trim();
-    }
-
-    /// <summary>
     /// 正規化 PhotoUID，將空字串視為無效。
     /// </summary>
     private static string? NormalizeUid(string? uid)
@@ -366,13 +320,20 @@ public class PhotoService : IPhotoService
     // 由 DI 控制生命週期，未持有非受控資源，無需額外釋放。
 
     /// <summary>
-    /// 照片中繼資料，儲存在資料庫的 Comment 欄位。
+    /// 透過 PhotoUID 推測實際儲存檔案的完整路徑。
     /// </summary>
-    private class PhotoMetadata
+    private string ResolvePhysicalPath(string storageRoot, string photoUid)
     {
-        public string? OriginalFileName { get; set; }
-        public string? ContentType { get; set; }
-        public string? FileExtension { get; set; }
-        public string? Remark { get; set; }
+        // 透過萬用字元尋找符合 PhotoUID 的檔案，確保可支援不同副檔名。
+        var directPath = Directory.EnumerateFiles(storageRoot, photoUid + ".*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(directPath))
+        {
+            return directPath;
+        }
+
+        // 若找不到副檔名版本，回傳未附檔名的路徑給呼叫端檢查。
+        return Path.Combine(storageRoot, photoUid);
     }
 }

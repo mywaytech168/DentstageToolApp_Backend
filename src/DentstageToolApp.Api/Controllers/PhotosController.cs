@@ -66,7 +66,7 @@ public class PhotosController : ControllerBase
 
         try
         {
-            var response = await _photoService.UploadAsync(request.File, request.Remark, cancellationToken);
+            var response = await _photoService.UploadAsync(request.File, cancellationToken);
 
             // 由於 CreatedAtAction 需要產生有效路由資訊，若缺少 PhotoUID 則以 200 回應避免例外。
             if (string.IsNullOrWhiteSpace(response.PhotoUid))

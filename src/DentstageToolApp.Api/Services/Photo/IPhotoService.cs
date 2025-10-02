@@ -15,9 +15,8 @@ public interface IPhotoService
     /// 上傳圖片並產出 PhotoUID，後續可透過此識別碼下載或綁定估價單。
     /// </summary>
     /// <param name="file">前端傳遞的圖片檔案。</param>
-    /// <param name="remark">補充說明，會一併寫入照片備註欄位。</param>
     /// <param name="cancellationToken">取消權杖，供呼叫端中止上傳流程。</param>
-    Task<UploadPhotoResponse> UploadAsync(IFormFile file, string? remark, CancellationToken cancellationToken);
+    Task<UploadPhotoResponse> UploadAsync(IFormFile file, CancellationToken cancellationToken);
 
     /// <summary>
     /// 依 PhotoUID 取得圖片檔案內容與對應的 Content-Type。
