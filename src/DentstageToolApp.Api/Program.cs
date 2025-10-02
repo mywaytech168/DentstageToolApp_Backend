@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Options;
+using DentstageToolApp.Api.Infrastructure.Database;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
 using DentstageToolApp.Api.Services.BrandModels;
@@ -155,6 +156,7 @@ builder.Services.AddScoped<IBrandModelQueryService, BrandModelQueryService>();
 builder.Services.AddScoped<ICustomerManagementService, CustomerManagementService>();
 builder.Services.AddScoped<ICustomerLookupService, CustomerLookupService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
+builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 
 var app = builder.Build();
@@ -185,5 +187,13 @@ app.UseAuthorization();
 // 將控制器路由對應到實際的端點
 app.MapControllers();
 
+// ---------- 資料庫結構補強 ----------
+// 啟動時補齊缺漏欄位，避免舊資料庫缺乏 TechnicianUID 欄位導致查詢失敗。
+using (var scope = app.Services.CreateScope())
+{
+    var schemaInitializer = scope.ServiceProvider.GetRequiredService<IDatabaseSchemaInitializer>();
+    await schemaInitializer.EnsureQuotationTechnicianColumnAsync();
+}
+
 // 啟動 Web 應用程式
-app.Run();
+await app.RunAsync();
