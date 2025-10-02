@@ -345,7 +345,9 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
             .Include(q => q.BrandNavigation)
-            .Include(q => q.ModelNavigation);
+            .Include(q => q.ModelNavigation)
+            // 透過導覽屬性載入技師主檔，後續即可檢查 TechnicianUID 是否存在對應資料。
+            .Include(q => q.TechnicianNavigation);
 
         query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
@@ -369,7 +371,8 @@ public class QuotationService : IQuotationService
                 StoreUid = quotation.StoreUid,
                 TechnicianUid = quotation.TechnicianUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
-                EstimatorName = quotation.UserName,
+                // 技師名稱優先顯示主檔資料，若查無對應技師則回退為建立者姓名。
+                EstimatorName = quotation.TechnicianNavigation?.TechnicianName ?? quotation.UserName,
                 CreatorName = quotation.CreatedBy,
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
