@@ -145,6 +145,15 @@ public class QuotationsController : ControllerBase
             "annotatedPhotoUid": "PH_02",
             "signaturePhotoUid": "PH_03"
           },
+          "maintenance": {
+            "fixTypeUid": "Fx_A1B2C3D4E5",
+            "fixTypeName": "外觀鈑金",
+            "reserveCar": true,
+            "applyCoating": false,
+            "applyWrapping": false,
+            "hasRepainted": false,
+            "needToolEvaluation": true
+          },
           "remark": "請於修復後通知客戶取車"
         }
         """)]
