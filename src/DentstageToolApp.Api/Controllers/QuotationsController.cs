@@ -114,21 +114,19 @@ public class QuotationsController : ControllerBase
                 "estimatedRestorationLevel": "9 成新",
                 "isRepairable": true
               },
-              "damages": [
-                {
-                  "圖片": [
-                    {
-                      "photoUid": "PH_01",
-                      "description": "右前門受損特寫",
-                      "isPrimary": true
-                    }
-                  ],
-                  "位置": "右前門",
-                  "凹痕狀況": "中度凹陷",
-                  "說明": "需板金搭配烤漆",
-                  "預估金額": 4500
-                }
-              ],
+              "damages": {
+                "圖片": [
+                  {
+                    "photoUid": "PH_01",
+                    "description": "右前門受損特寫",
+                    "isPrimary": true
+                  }
+                ],
+                "位置": "右前門",
+                "凹痕狀況": "中度凹陷",
+                "說明": "需板金搭配烤漆",
+                "預估金額": 4500
+              },
               "amount": {
                 "damageSubtotal": 4500,
                 "additionalFee": 500,
