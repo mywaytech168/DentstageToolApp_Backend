@@ -119,7 +119,7 @@ public class QuotationsController : ControllerBase
               },
               "damages": [
                 {
-                  "photo": "dent-front-door.jpg",
+                  "photoUid": "PH_01",
                   "position": "右前門",
                   "dentStatus": "中度凹陷",
                   "description": "需板金搭配烤漆",
@@ -141,8 +141,8 @@ public class QuotationsController : ControllerBase
             "roundingDiscount": 0
           },
           "carBodyConfirmation": {
-            "annotatedImage": "https://cdn.dentstage.com/annotated/car-001.png",
-            "signature": "https://cdn.dentstage.com/signature/customer-001.png"
+            "annotatedPhotoUid": "PH_02",
+            "signaturePhotoUid": "PH_03"
           },
           "remark": "請於修復後通知客戶取車"
         }
