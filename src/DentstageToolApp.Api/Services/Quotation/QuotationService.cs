@@ -134,37 +134,80 @@ public class QuotationService : IQuotationService
             join store in _context.Stores.AsNoTracking()
                 on quotation.StoreUid equals store.StoreUid into storeGroup
             from store in storeGroup.DefaultIfEmpty()
-            join technician in _context.Technicians.AsNoTracking()
-                on quotation.TechnicianUid equals technician.TechnicianUid into technicianGroup
-            from technician in technicianGroup.DefaultIfEmpty()
             orderby quotation.CreationTimestamp ?? DateTime.MinValue descending,
                 quotation.QuotationNo descending
-            select new { quotation, brand, model, fixType, store, technician };
+            select new { quotation, brand, model, fixType, store };
 
-        var pagedQuery = orderedQuery
+        // 先取出分頁後的原始資料集合，避免一次載入過多資料。
+        var pagedSource = await orderedQuery
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(result => new QuotationSummaryResponse
-            {
-                QuotationNo = result.quotation.QuotationNo,
-                Status = result.quotation.Status,
-                CustomerName = result.quotation.Name,
-                CustomerPhone = result.quotation.Phone,
-                CarBrand = result.brand != null ? result.brand.BrandName : result.quotation.Brand,
-                CarModel = result.model != null ? result.model.ModelName : result.quotation.Model,
-                CarPlateNumber = result.quotation.CarNo,
-                // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
-                StoreName = result.store != null ? result.store.StoreName : result.quotation.CurrentStatusUser,
-                // 估價技師同樣先以主檔名稱為主。
-                EstimatorName = result.technician != null ? result.technician.TechnicianName : result.quotation.UserName,
-                // 建立人員暫做為製單技師資訊。
-                CreatorName = result.quotation.CreatedBy,
-                CreatedAt = result.quotation.CreationTimestamp,
-                // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
-                FixType = result.fixType != null ? result.fixType.FixTypeName : result.quotation.FixType
-            });
+            .ToListAsync(cancellationToken);
 
-        var items = await pagedQuery.ToListAsync(cancellationToken);
+        // 彙整當前頁面所需的技師 UID，僅針對有值的項目進行查詢，降低額外資料庫負擔。
+        var technicianUids = pagedSource
+            .Select(result => result.quotation.TechnicianUid)
+            .Where(uid => !string.IsNullOrWhiteSpace(uid))
+            .Select(uid => uid!)
+            .Distinct()
+            .ToList();
+
+        var technicianMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (technicianUids.Count > 0)
+        {
+            // 針對當前頁面使用到的技師 UID 一次撈取名稱，並建立快取以供後續查找。
+            var technicians = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => technician.TechnicianUid != null && technicianUids.Contains(technician.TechnicianUid))
+                .ToListAsync(cancellationToken);
+
+            technicianMap = technicians
+                .Where(technician => !string.IsNullOrWhiteSpace(technician.TechnicianUid))
+                .ToDictionary(
+                    technician => technician.TechnicianUid!,
+                    technician => technician.TechnicianName,
+                    StringComparer.OrdinalIgnoreCase);
+        }
+
+        var items = pagedSource
+            .Select(result =>
+            {
+                var quotation = result.quotation;
+                var brand = result.brand;
+                var model = result.model;
+                var fixType = result.fixType;
+                var store = result.store;
+
+                // 優先使用技師主檔名稱，若查無對應資料則回退為估價單建立者名稱。
+                var estimatorName = quotation.UserName;
+                if (!string.IsNullOrWhiteSpace(quotation.TechnicianUid) &&
+                    technicianMap.TryGetValue(quotation.TechnicianUid, out var technicianName) &&
+                    !string.IsNullOrWhiteSpace(technicianName))
+                {
+                    estimatorName = technicianName;
+                }
+
+                return new QuotationSummaryResponse
+                {
+                    QuotationNo = quotation.QuotationNo,
+                    Status = quotation.Status,
+                    CustomerName = quotation.Name,
+                    CustomerPhone = quotation.Phone,
+                    CarBrand = brand != null ? brand.BrandName : quotation.Brand,
+                    CarModel = model != null ? model.ModelName : quotation.Model,
+                    CarPlateNumber = quotation.CarNo,
+                    // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
+                    StoreName = store != null ? store.StoreName : quotation.CurrentStatusUser,
+                    // 估價技師名稱若查無主檔資料，則使用估價單建立者名稱，維持舊資料相容性。
+                    EstimatorName = estimatorName,
+                    // 建立人員暫做為製單技師資訊。
+                    CreatorName = quotation.CreatedBy,
+                    CreatedAt = quotation.CreationTimestamp,
+                    // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
+                    FixType = fixType != null ? fixType.FixTypeName : quotation.FixType
+                };
+            })
+            .ToList();
 
         // ---------- 回傳結果 ----------
         return new QuotationListResponse
@@ -345,9 +388,7 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
             .Include(q => q.BrandNavigation)
-            .Include(q => q.ModelNavigation)
-            // 透過導覽屬性載入技師主檔，後續即可檢查 TechnicianUID 是否存在對應資料。
-            .Include(q => q.TechnicianNavigation);
+            .Include(q => q.ModelNavigation);
 
         query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
@@ -358,6 +399,24 @@ public class QuotationService : IQuotationService
         }
 
         var (plainRemark, extraData) = ParseRemark(quotation.Remark);
+
+        // ---------- 技師名稱組裝 ----------
+        // 若舊資料缺少對應的 TechnicianUID，直接使用估價單上的建立者名稱避免查詢失敗。
+        var estimatorName = quotation.UserName;
+        if (!string.IsNullOrWhiteSpace(quotation.TechnicianUid))
+        {
+            // 僅在 UID 有值時才查詢技師主檔，避免對舊資料造成不必要的 join。
+            var technicianName = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => technician.TechnicianUid == quotation.TechnicianUid)
+                .Select(technician => technician.TechnicianName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(technicianName))
+            {
+                estimatorName = technicianName;
+            }
+        }
 
         return new QuotationDetailResponse
         {
@@ -372,7 +431,7 @@ public class QuotationService : IQuotationService
                 TechnicianUid = quotation.TechnicianUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
                 // 技師名稱優先顯示主檔資料，若查無對應技師則回退為建立者姓名。
-                EstimatorName = quotation.TechnicianNavigation?.TechnicianName ?? quotation.UserName,
+                EstimatorName = estimatorName,
                 CreatorName = quotation.CreatedBy,
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
