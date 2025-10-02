@@ -18,7 +18,7 @@ public class CreateQuotationRequest
     /// 車輛相關資訊。
     /// </summary>
     [Required]
-    public QuotationCarInfo Car { get; set; } = new();
+    public CreateQuotationCarInfo Car { get; set; } = new();
 
     /// <summary>
     /// 客戶相關資訊。
@@ -123,18 +123,29 @@ public class QuotationStoreInfo
 }
 
 /// <summary>
+/// 建立估價單時僅需提供車輛唯一識別碼的精簡輸入結構。
+/// </summary>
+public class CreateQuotationCarInfo
+{
+    /// <summary>
+    /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌等細節。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇車輛資料。")]
+    public string? CarUid { get; set; }
+}
+
+/// <summary>
 /// 車輛相關資料欄位。
 /// </summary>
 public class QuotationCarInfo
 {
     /// <summary>
-    /// 車輛唯一識別碼，若提供則會自動帶出車牌與車況資訊。
+    /// 車輛唯一識別碼。
     /// </summary>
-    [Required(ErrorMessage = "請選擇車輛資料。")]
     public string? CarUid { get; set; }
 
     /// <summary>
-    /// 車牌號碼，若未提供會依據車輛主檔自動補齊。
+    /// 車牌號碼。
     /// </summary>
     public string? LicensePlate { get; set; }
 
