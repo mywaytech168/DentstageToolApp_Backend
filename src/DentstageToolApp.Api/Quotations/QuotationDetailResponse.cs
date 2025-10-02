@@ -66,5 +66,10 @@ public class QuotationDetailResponse
     /// 車體確認單資料。
     /// </summary>
     public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
+
+    /// <summary>
+    /// 維修需求設定資料，提供前端回填維修選項。
+    /// </summary>
+    public QuotationMaintenanceInfo Maintenance { get; set; } = new();
 }
 
