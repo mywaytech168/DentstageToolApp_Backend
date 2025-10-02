@@ -199,20 +199,20 @@ public class QuotationService : IQuotationService
         var carInfo = request.Car ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供車輛資訊。");
         var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
 
-        // 若僅提供技師識別碼，自動帶出對應門市與技師資訊，並檢查門市一致性。
+        // 僅透過技師識別碼即可反查門市資料，減少前端傳遞欄位。
         var technicianEntity = await GetTechnicianEntityAsync(storeInfo.TechnicianId, cancellationToken);
-        if (technicianEntity is not null && storeInfo.StoreId.HasValue && storeInfo.StoreId.Value != technicianEntity.StoreId)
+        if (technicianEntity is null)
         {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "選擇的技師與門市不一致，請重新確認。");
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的估價技師。");
         }
 
-        var storeEntity = await GetStoreEntityAsync(storeInfo, technicianEntity, cancellationToken);
-        var storeName = NormalizeRequiredText(storeInfo.StoreName ?? storeEntity?.StoreName, "店鋪名稱");
+        // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊。
+        var storeEntity = await GetStoreEntityAsync(technicianEntity, cancellationToken);
+        var storeName = NormalizeRequiredText(storeEntity?.StoreName, "店鋪名稱");
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
         var operatorUid = NormalizeOptionalText(operatorContext.UserUid);
-        var estimatorName = NormalizeOptionalText(storeInfo.EstimatorName ?? technicianEntity?.TechnicianName ?? operatorLabel);
-        var creatorName = NormalizeOptionalText(storeInfo.CreatorName ?? operatorLabel);
-        var storeUid = NormalizeOptionalText(storeInfo.StoreUid);
+        var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
+        var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
 
         // 透過車輛主檔自動帶出車牌與品牌資訊，若未選擇車輛則沿用前端輸入值。
@@ -235,10 +235,11 @@ public class QuotationService : IQuotationService
 
         var plainRemark = NormalizeOptionalText(request.Remark);
 
-        var createdAt = storeInfo.CreatedDate?.ToUniversalTime() ?? DateTime.UtcNow;
-        var quotationDate = DateOnly.FromDateTime((storeInfo.CreatedDate ?? DateTime.UtcNow).Date);
-        var reservationDate = ToDateOnly(storeInfo.ReservationDate);
-        var repairDate = ToDateOnly(storeInfo.RepairDate);
+        // 建立日期改由系統產生，減少前端填寫欄位。
+        var createdAt = DateTime.UtcNow;
+        var quotationDate = DateOnly.FromDateTime(createdAt);
+        DateOnly? reservationDate = null;
+        DateOnly? repairDate = null;
         var phoneQuery = NormalizePhoneQuery(customerPhone);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -247,7 +248,7 @@ public class QuotationService : IQuotationService
         var serialNumber = await GenerateNextSerialNumberAsync(cancellationToken);
         var quotationUid = BuildQuotationUid();
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
-        var storeId = await ResolveStoreIdAsync(storeInfo, technicianEntity, storeEntity, storeName, cancellationToken);
+        var storeId = ResolveStoreId(technicianEntity, storeEntity);
 
         var extraData = new QuotationExtraData
         {
@@ -268,16 +269,16 @@ public class QuotationService : IQuotationService
             QuotationNo = quotationNo,
             SerialNum = serialNumber,
             CreationTimestamp = createdAt,
-            CreatedBy = creatorName ?? operatorLabel,
+            CreatedBy = creatorName,
             ModificationTimestamp = createdAt,
             ModifiedBy = operatorLabel,
             UserUid = operatorUid,
             Date = quotationDate,
             StoreId = storeId,
-            StoreUid = storeUid,
+            StoreUid = null,
             TechnicianId = technicianEntity?.TechnicianId,
             CurrentStatusUser = storeName,
-            UserName = estimatorName,
+            UserName = estimatorName ?? operatorLabel,
             BookDate = reservationDate,
             FixDate = repairDate,
             Source = source,
@@ -522,41 +523,16 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 嘗試依據店家資訊解析出門市識別碼，優先採用技師或已載入的門市主檔。
+    /// 嘗試依據技師或門市主檔解析出門市識別碼。
     /// </summary>
-    private async Task<int?> ResolveStoreIdAsync(
-        QuotationStoreInfo storeInfo,
-        TechnicianEntity? technician,
-        StoreEntity? storeEntity,
-        string storeName,
-        CancellationToken cancellationToken)
+    private static int? ResolveStoreId(TechnicianEntity? technician, StoreEntity? storeEntity)
     {
         if (technician is not null)
         {
             return technician.StoreId;
         }
 
-        if (storeInfo.StoreId.HasValue)
-        {
-            return storeInfo.StoreId;
-        }
-
-        if (storeEntity is not null)
-        {
-            return storeEntity.StoreId;
-        }
-
-        var normalizedName = NormalizeOptionalText(storeName);
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            return null;
-        }
-
-        var store = await _context.Stores
-            .AsNoTracking()
-            .FirstOrDefaultAsync(entity => entity.StoreName == normalizedName, cancellationToken);
-
-        return store?.StoreId;
+        return storeEntity?.StoreId;
     }
 
     /// <summary>
@@ -585,42 +561,28 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 根據技師或門市識別碼取得門市主檔資料，確保後續可自動帶入店鋪名稱。
     /// </summary>
-    private async Task<StoreEntity?> GetStoreEntityAsync(QuotationStoreInfo storeInfo, TechnicianEntity? technician, CancellationToken cancellationToken)
+    private async Task<StoreEntity?> GetStoreEntityAsync(TechnicianEntity? technician, CancellationToken cancellationToken)
     {
-        if (technician is not null)
+        if (technician is null)
         {
-            if (technician.Store is not null)
-            {
-                return technician.Store;
-            }
-
-            var store = await _context.Stores
-                .AsNoTracking()
-                .FirstOrDefaultAsync(entity => entity.StoreId == technician.StoreId, cancellationToken);
-
-            if (store is null)
-            {
-                throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料。");
-            }
-
-            return store;
+            return null;
         }
 
-        if (storeInfo.StoreId.HasValue)
+        if (technician.Store is not null)
         {
-            var store = await _context.Stores
-                .AsNoTracking()
-                .FirstOrDefaultAsync(entity => entity.StoreId == storeInfo.StoreId.Value, cancellationToken);
-
-            if (store is null)
-            {
-                throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料。");
-            }
-
-            return store;
+            return technician.Store;
         }
 
-        return null;
+        var store = await _context.Stores
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.StoreId == technician.StoreId, cancellationToken);
+
+        if (store is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料。");
+        }
+
+        return store;
     }
 
     /// <summary>
@@ -860,19 +822,6 @@ public class QuotationService : IQuotationService
         }
 
         return operatorName.Trim();
-    }
-
-    /// <summary>
-    /// 將 DateTime? 轉換為 DateOnly?，方便儲存至資料庫。
-    /// </summary>
-    private static DateOnly? ToDateOnly(DateTime? value)
-    {
-        if (!value.HasValue)
-        {
-            return null;
-        }
-
-        return DateOnly.FromDateTime(value.Value.Date);
     }
 
     /// <summary>
