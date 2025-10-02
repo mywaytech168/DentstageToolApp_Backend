@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace DentstageToolApp.Api.Quotations;
 
@@ -37,7 +38,7 @@ public class QuotationCategoryBlock
     public QuotationCategoryOverallInfo Overall { get; set; } = new();
 
     /// <summary>
-    /// 傷痕細項列表，紀錄各位置的照片與估價金額。
+    /// 傷痕細項列表，輸入輸出時會以中文欄位（圖片、位置、凹痕狀況、說明、預估金額）呈現。
     /// </summary>
     public List<QuotationDamageItem> Damages { get; set; } = new();
 
@@ -98,32 +99,158 @@ public class QuotationDamageItem
     /// 傳統版本僅支援單張照片，保留此欄位以維持相容性。
     /// </summary>
     [Obsolete("請改用 Photos 集合傳遞多張傷痕圖片。")]
+    [JsonIgnore]
     public string? Photo { get; set; }
 
     /// <summary>
-    /// 傷痕相關的圖片列表，支援多角度或不同標註的影像。
+    /// 舊欄位別名，允許仍以 photo 傳值，但輸出時隱藏英文欄位。
     /// </summary>
+    [JsonPropertyName("photo")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPhoto
+    {
+        get => null;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
+    /// </summary>
+    [JsonIgnore]
     public List<QuotationDamagePhoto> Photos { get; set; } = new();
 
     /// <summary>
-    /// 傷痕所在位置描述，例如左前門或後保桿。
+    /// 新欄位：提供前端顯示「圖片」欄位使用，並將資料寫入共用清單。
     /// </summary>
+    [JsonPropertyName("圖片")]
+    public List<QuotationDamagePhoto> DisplayPhotos
+    {
+        get => Photos;
+        set => Photos = value ?? new List<QuotationDamagePhoto>();
+    }
+
+    /// <summary>
+    /// 舊欄位對應，仍允許前端傳入 photos 以保留相容性，輸出時隱藏。
+    /// </summary>
+    [JsonPropertyName("photos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<QuotationDamagePhoto>? LegacyPhotos
+    {
+        get => null;
+        set
+        {
+            // 舊欄位仍可寫入，若為 null 則建立空集合以免殘留舊資料。
+            Photos = value ?? new List<QuotationDamagePhoto>();
+        }
+    }
+
+    /// <summary>
+    /// 內部使用的位置字串，供新舊欄位共用。
+    /// </summary>
+    [JsonIgnore]
     public string? Position { get; set; }
 
     /// <summary>
-    /// 凹痕狀況或受損程度描述。
+    /// 新欄位：提供中文欄位名稱「位置」，方便前端直接對應表格欄位。
     /// </summary>
+    [JsonPropertyName("位置")]
+    public string? DisplayPosition
+    {
+        get => Position;
+        set => Position = value;
+    }
+
+    /// <summary>
+    /// 舊欄位位置，仍接受 position 以兼容舊版請求，序列化時不輸出。
+    /// </summary>
+    [JsonPropertyName("position")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPosition
+    {
+        get => null;
+        set => Position = value;
+    }
+
+    /// <summary>
+    /// 內部使用的凹痕狀態描述。
+    /// </summary>
+    [JsonIgnore]
     public string? DentStatus { get; set; }
 
     /// <summary>
-    /// 備註或補充說明，可記錄施工方式。
+    /// 新欄位：前端顯示中文「凹痕狀況」，與舊資料共用同一來源。
     /// </summary>
+    [JsonPropertyName("凹痕狀況")]
+    public string? DisplayDentStatus
+    {
+        get => DentStatus;
+        set => DentStatus = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 dentStatus，輸出時不顯示英文欄位。
+    /// </summary>
+    [JsonPropertyName("dentStatus")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyDentStatus
+    {
+        get => null;
+        set => DentStatus = value;
+    }
+
+    /// <summary>
+    /// 內部使用的備註內容。
+    /// </summary>
+    [JsonIgnore]
     public string? Description { get; set; }
 
     /// <summary>
-    /// 該傷痕預估的施工金額。
+    /// 新欄位：中文欄位名稱「說明」，提供表單直接綁定。
     /// </summary>
+    [JsonPropertyName("說明")]
+    public string? DisplayDescription
+    {
+        get => Description;
+        set => Description = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 description，避免舊版呼叫失效。
+    /// </summary>
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyDescription
+    {
+        get => null;
+        set => Description = value;
+    }
+
+    /// <summary>
+    /// 內部使用的估價金額。
+    /// </summary>
+    [JsonIgnore]
     public decimal? EstimatedAmount { get; set; }
+
+    /// <summary>
+    /// 新欄位：中文欄位名稱「預估金額」，傳入時同步寫入內部欄位。
+    /// </summary>
+    [JsonPropertyName("預估金額")]
+    public decimal? DisplayEstimatedAmount
+    {
+        get => EstimatedAmount;
+        set => EstimatedAmount = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 estimatedAmount，確保與舊版資料格式相容。
+    /// </summary>
+    [JsonPropertyName("estimatedAmount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? LegacyEstimatedAmount
+    {
+        get => null;
+        set => EstimatedAmount = value;
+    }
 }
 
 /// <summary>
