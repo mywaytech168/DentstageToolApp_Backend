@@ -12,7 +12,7 @@ public class CreateQuotationRequest
     /// 店家相關資訊。
     /// </summary>
     [Required]
-    public QuotationStoreInfo Store { get; set; } = new();
+    public CreateQuotationStoreInfo Store { get; set; } = new();
 
     /// <summary>
     /// 車輛相關資訊。
@@ -48,7 +48,26 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 估價單店家資訊欄位。
+/// 建立估價單時，僅需提供技師與來源資訊的店家欄位。
+/// </summary>
+public class CreateQuotationStoreInfo
+{
+    /// <summary>
+    /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇估價技師。")]
+    [Range(1, int.MaxValue, ErrorMessage = "請選擇有效的估價技師。")]
+    public int? TechnicianId { get; set; }
+
+    /// <summary>
+    /// 維修來源。
+    /// </summary>
+    [Required(ErrorMessage = "請輸入維修來源。")]
+    public string? Source { get; set; }
+}
+
+/// <summary>
+/// 估價單店家資訊欄位（回傳用）。
 /// </summary>
 public class QuotationStoreInfo
 {
@@ -65,8 +84,6 @@ public class QuotationStoreInfo
     /// <summary>
     /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
     /// </summary>
-    [Required(ErrorMessage = "請選擇估價技師。")]
-    [Range(1, int.MaxValue, ErrorMessage = "請選擇有效的估價技師。")]
     public int? TechnicianId { get; set; }
 
     /// <summary>
@@ -97,7 +114,6 @@ public class QuotationStoreInfo
     /// <summary>
     /// 維修來源。
     /// </summary>
-    [Required(ErrorMessage = "請輸入維修來源。")]
     public string? Source { get; set; }
 
     /// <summary>

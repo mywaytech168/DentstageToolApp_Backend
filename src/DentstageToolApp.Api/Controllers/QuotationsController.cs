@@ -92,16 +92,8 @@ public class QuotationsController : ControllerBase
         """
         {
           "store": {
-            "storeId": 1,
-            "storeUid": "KH001",
             "technicianId": 12,
-            "storeName": "高雄旗艦店",
-            "estimatorName": "張技師",
-            "creatorName": "王主管",
-            "createdDate": "2024-03-01T10:00:00",
-            "reservationDate": "2024-03-05T15:00:00",
-            "source": "官方網站",
-            "repairDate": "2024-03-08T09:00:00"
+            "source": "官方網站"
           },
           "car": {
             "carUid": "CAR-20240301-0001",
