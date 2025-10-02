@@ -65,6 +65,16 @@ public class CreateQuotationStoreInfo
     /// </summary>
     [Required(ErrorMessage = "請輸入維修來源。")]
     public string? Source { get; set; }
+
+    /// <summary>
+    /// 預約日期，允許前端依需求傳入，若為空則代表尚未排定。
+    /// </summary>
+    public DateTime? ReservationDate { get; set; }
+
+    /// <summary>
+    /// 預計維修日期，允許前端依需求傳入，若為空則代表尚未排程。
+    /// </summary>
+    public DateTime? RepairDate { get; set; }
 }
 
 /// <summary>
