@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
@@ -94,9 +95,15 @@ public class QuotationCategoryOverallInfo
 public class QuotationDamageItem
 {
     /// <summary>
-    /// 傷痕照片的檔案識別，通常為檔名或外部儲存的 URL。
+    /// 傳統版本僅支援單張照片，保留此欄位以維持相容性。
     /// </summary>
+    [Obsolete("請改用 Photos 集合傳遞多張傷痕圖片。")]
     public string? Photo { get; set; }
+
+    /// <summary>
+    /// 傷痕相關的圖片列表，支援多角度或不同標註的影像。
+    /// </summary>
+    public List<QuotationDamagePhoto> Photos { get; set; } = new();
 
     /// <summary>
     /// 傷痕所在位置描述，例如左前門或後保桿。
@@ -117,6 +124,33 @@ public class QuotationDamageItem
     /// 該傷痕預估的施工金額。
     /// </summary>
     public decimal? EstimatedAmount { get; set; }
+}
+
+/// <summary>
+/// 傷痕影像的補充資訊，可記錄拍攝角度或描述說明。
+/// </summary>
+public class QuotationDamagePhoto
+{
+    /// <summary>
+    /// 舊版欄位，改為傳遞 PhotoUID，保留以相容既有流程。
+    /// </summary>
+    [Obsolete("請改用 PhotoUid 傳遞圖片識別碼。")]
+    public string? File { get; set; }
+
+    /// <summary>
+    /// 圖片唯一識別碼，對應圖片上傳 API 回傳的 PhotoUID。
+    /// </summary>
+    public string? PhotoUid { get; set; }
+
+    /// <summary>
+    /// 圖片描述，說明拍攝角度或重點標註。
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// 是否為主要展示圖片，可協助前端挑選封面影像。
+    /// </summary>
+    public bool? IsPrimary { get; set; }
 }
 
 /// <summary>
@@ -167,13 +201,102 @@ public class QuotationCategoryTotal
 public class QuotationCarBodyConfirmation
 {
     /// <summary>
-    /// 已標註受損位置的車身圖片，可為檔案識別或 URL。
+    /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
     /// </summary>
+    [Obsolete("請改用 AnnotatedPhotoUid 傳遞圖片識別碼。")]
     public string? AnnotatedImage { get; set; }
 
     /// <summary>
-    /// 客戶簽名影像資料。
+    /// 已標註受損位置的車身圖片識別碼。
     /// </summary>
+    public string? AnnotatedPhotoUid { get; set; }
+
+    /// <summary>
+    /// 車體確認細項列表，可對應檢查部位與勾選結果。
+    /// </summary>
+    public List<QuotationCarBodyChecklistItem> Checklist { get; set; } = new();
+
+    /// <summary>
+    /// 車體受損標記列表，透過座標與損傷類型記錄於車身示意圖。
+    /// </summary>
+    public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
+
+    /// <summary>
+    /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
+    /// </summary>
+    [Obsolete("請改用 SignaturePhotoUid 傳遞圖片識別碼。")]
     public string? Signature { get; set; }
+
+    /// <summary>
+    /// 客戶簽名影像的 PhotoUID。
+    /// </summary>
+    public string? SignaturePhotoUid { get; set; }
+
+    /// <summary>
+    /// 多份簽名圖片清單，支援一次上傳多張簽名檔並由後端綁定。
+    /// </summary>
+    public List<string> SignaturePhotoUids { get; set; } = new();
+}
+
+/// <summary>
+/// 車體確認單的檢查項目，紀錄車身部位與核對狀態。
+/// </summary>
+public class QuotationCarBodyChecklistItem
+{
+    /// <summary>
+    /// 檢查部位或面板名稱，例如左前門或後保桿。
+    /// </summary>
+    public string? Part { get; set; }
+
+    /// <summary>
+    /// 檢查結果或狀態描述，例如正常、待修或已處理。
+    /// </summary>
+    public string? Status { get; set; }
+
+    /// <summary>
+    /// 相關備註，可記錄異常說明或維修建議。
+    /// </summary>
+    public string? Remark { get; set; }
+
+    /// <summary>
+    /// 單一檢查項目的補充圖片，需傳入 PhotoUID 以便後端綁定。
+    /// </summary>
+    public List<string> Photos { get; set; } = new();
+}
+
+/// <summary>
+/// 車體受損標記資訊，透過座標定位並標記損傷類型。
+/// </summary>
+public class QuotationCarBodyDamageMarker
+{
+    /// <summary>
+    /// 標記在示意圖上的 X 座標（0~1），用於呈現水平位置。
+    /// </summary>
+    public double? X { get; set; }
+
+    /// <summary>
+    /// 標記在示意圖上的 Y 座標（0~1），用於呈現垂直位置。
+    /// </summary>
+    public double? Y { get; set; }
+
+    /// <summary>
+    /// 是否為凹痕，對應前端勾選的凹痕類型。
+    /// </summary>
+    public bool HasDent { get; set; }
+
+    /// <summary>
+    /// 是否為刮痕，對應前端勾選的刮痕類型。
+    /// </summary>
+    public bool HasScratch { get; set; }
+
+    /// <summary>
+    /// 是否為掉漆，對應前端勾選的掉漆類型。
+    /// </summary>
+    public bool HasPaintPeel { get; set; }
+
+    /// <summary>
+    /// 補充備註，協助記錄詳細損傷描述。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 

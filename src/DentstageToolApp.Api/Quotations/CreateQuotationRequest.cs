@@ -12,19 +12,19 @@ public class CreateQuotationRequest
     /// 店家相關資訊。
     /// </summary>
     [Required]
-    public QuotationStoreInfo Store { get; set; } = new();
+    public CreateQuotationStoreInfo Store { get; set; } = new();
 
     /// <summary>
     /// 車輛相關資訊。
     /// </summary>
     [Required]
-    public QuotationCarInfo Car { get; set; } = new();
+    public CreateQuotationCarInfo Car { get; set; } = new();
 
     /// <summary>
     /// 客戶相關資訊。
     /// </summary>
     [Required]
-    public QuotationCustomerInfo Customer { get; set; } = new();
+    public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
     /// 服務類別的明細資訊。
@@ -48,7 +48,26 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 估價單店家資訊欄位。
+/// 建立估價單時，僅需提供技師與來源資訊的店家欄位。
+/// </summary>
+public class CreateQuotationStoreInfo
+{
+    /// <summary>
+    /// 技師識別碼，僅需提供此欄位即可自動帶出所屬門市與技師名稱。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇估價技師。")]
+    [Range(1, int.MaxValue, ErrorMessage = "請選擇有效的估價技師。")]
+    public int? TechnicianId { get; set; }
+
+    /// <summary>
+    /// 維修來源。
+    /// </summary>
+    [Required(ErrorMessage = "請輸入維修來源。")]
+    public string? Source { get; set; }
+}
+
+/// <summary>
+/// 估價單店家資訊欄位（回傳用）。
 /// </summary>
 public class QuotationStoreInfo
 {
@@ -104,17 +123,29 @@ public class QuotationStoreInfo
 }
 
 /// <summary>
+/// 建立估價單時僅需提供車輛唯一識別碼的精簡輸入結構。
+/// </summary>
+public class CreateQuotationCarInfo
+{
+    /// <summary>
+    /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌等細節。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇車輛資料。")]
+    public string? CarUid { get; set; }
+}
+
+/// <summary>
 /// 車輛相關資料欄位。
 /// </summary>
 public class QuotationCarInfo
 {
     /// <summary>
-    /// 車輛唯一識別碼，若提供則會自動帶出車牌與車況資訊。
+    /// 車輛唯一識別碼。
     /// </summary>
     public string? CarUid { get; set; }
 
     /// <summary>
-    /// 車牌號碼，若未提供會依據車輛主檔自動補齊。
+    /// 車牌號碼。
     /// </summary>
     public string? LicensePlate { get; set; }
 
@@ -140,13 +171,26 @@ public class QuotationCarInfo
 }
 
 /// <summary>
-/// 客戶相關資料欄位。
+/// 建立估價單時僅需提供客戶唯一識別碼的精簡輸入結構。
+/// </summary>
+public class CreateQuotationCustomerInfo
+{
+    /// <summary>
+    /// 客戶唯一識別碼，透過此欄位自動帶入客戶姓名與聯絡資訊。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇客戶資料。")]
+    public string? CustomerUid { get; set; }
+}
+
+/// <summary>
+/// 客戶相關資料欄位（回傳用）。
 /// </summary>
 public class QuotationCustomerInfo
 {
     /// <summary>
     /// 客戶唯一識別碼，若提供則會自動帶出客戶聯絡資料。
     /// </summary>
+    [Required(ErrorMessage = "請選擇客戶資料。")]
     public string? CustomerUid { get; set; }
 
     /// <summary>
