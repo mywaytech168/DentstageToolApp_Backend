@@ -1,0 +1,20 @@
+ALTER TABLE quatations 
+    ADD COLUMN FixTypeUID VARCHAR(100),
+    ADD COLUMN BrandUID VARCHAR(100),
+    ADD COLUMN ModelUID VARCHAR(100);
+
+-- FixTypeUID
+UPDATE quatations q
+JOIN fix_types f ON q.Fix_Type = f.FixTypeName
+SET q.FixTypeUID = f.FixTypeUID;
+
+-- BrandUID
+UPDATE quatations q
+JOIN brands b ON q.Brand = b.BrandName
+SET q.BrandUID = b.BrandUID;
+
+-- ModelUID
+UPDATE quatations q
+JOIN models m ON q.Model = m.ModelName
+             AND q.Brand = (SELECT BrandName FROM brands WHERE BrandUID = m.BrandUID)
+SET q.ModelUID = m.ModelUID;

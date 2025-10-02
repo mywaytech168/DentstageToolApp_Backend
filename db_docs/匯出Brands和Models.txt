@@ -1,30 +1,29 @@
-INSERT INTO brands (BrandName)
-SELECT DISTINCT Brand
-FROM quatations
-WHERE Brand IS NOT NULL AND Brand <> '';
+CREATE TABLE brands (
+    BrandUID VARCHAR(100) NOT NULL PRIMARY KEY,
+    BrandName VARCHAR(100) NOT NULL
+) ENGINE=InnoDB;
 
-INSERT INTO models (BrandId, ModelName)
-SELECT b.BrandId, q.Model
+CREATE TABLE models (
+    ModelUID VARCHAR(100) NOT NULL PRIMARY KEY,
+    BrandUID VARCHAR(100),
+    ModelName VARCHAR(100) NOT NULL,
+    FOREIGN KEY (BrandUID) REFERENCES brands(BrandUID)
+) ENGINE=InnoDB;
+
+INSERT INTO brands (BrandUID, BrandName)
+SELECT 
+    CONCAT('B_', UPPER(UUID())) AS BrandUID,
+    q.Brand
+FROM quatations q
+WHERE q.Brand IS NOT NULL AND q.Brand <> ''
+GROUP BY q.Brand;
+
+INSERT INTO models (ModelUID, BrandUID, ModelName)
+SELECT 
+    CONCAT('M_', UPPER(UUID())) AS ModelUID,
+    b.BrandUID,
+    q.Model
 FROM quatations q
 JOIN brands b ON q.Brand = b.BrandName
 WHERE q.Model IS NOT NULL AND q.Model <> ''
-GROUP BY b.BrandId, q.Model;
-
-ALTER TABLE quatations
-    ADD COLUMN BrandId INT NULL,
-    ADD COLUMN ModelId INT NULL;
-
-UPDATE quatations q
-JOIN brands b ON q.Brand = b.BrandName
-SET q.BrandId = b.BrandId;
-
-UPDATE quatations q
-JOIN models m ON q.Model = m.ModelName
-JOIN brands b ON q.Brand = b.BrandName AND m.BrandId = b.BrandId
-SET q.ModelId = m.ModelId;
-
-SELECT q.QuotationUID, q.Brand, q.Model, b.BrandId, m.ModelId
-FROM quatations q
-LEFT JOIN brands b ON q.BrandId = b.BrandId
-LEFT JOIN models m ON q.ModelId = m.ModelId
-LIMIT 20;
+GROUP BY b.BrandUID, q.Model;

@@ -1,43 +1,37 @@
 CREATE TABLE stores (
-    StoreId INT AUTO_INCREMENT PRIMARY KEY,
-    StoreName VARCHAR(100) NOT NULL UNIQUE
-);
+    StoreUID VARCHAR(100) NOT NULL PRIMARY KEY,
+    StoreName VARCHAR(100) NOT NULL
+) ENGINE=InnoDB;
 
 CREATE TABLE technicians (
-    TechnicianId INT AUTO_INCREMENT PRIMARY KEY,
+    TechnicianUID VARCHAR(100) NOT NULL PRIMARY KEY,
     TechnicianName VARCHAR(100) NOT NULL,
-    StoreId INT NOT NULL,
-    FOREIGN KEY (StoreId) REFERENCES stores(StoreId),
-    UNIQUE KEY uq_technician (TechnicianName, StoreId)
-);
+    StoreUID VARCHAR(100),
+    FOREIGN KEY (StoreUID) REFERENCES stores(StoreUID)
+) ENGINE=InnoDB;
 
-INSERT INTO stores (StoreName)
-SELECT DISTINCT CurrentStatus_User
-FROM quatations
-WHERE CurrentStatus_User IS NOT NULL AND CurrentStatus_User <> '';
-
-INSERT INTO technicians (TechnicianName, StoreId)
-SELECT DISTINCT q.UserName, s.StoreId
+SELECT 
+    TRIM(q.StoreUID) AS StoreUID,
+    TRIM(q.Status110_User) AS Status110_User,
+    TRIM(q.Status180_User) AS Status180_User,
+    TRIM(q.Status190_User) AS Status190_User,
+    TRIM(q.Status191_User) AS Status191_User,
+    TRIM(q.Status199_User) AS Status199_User,
+    COUNT(*) AS GroupCount
 FROM quatations q
-JOIN stores s ON q.CurrentStatus_User = s.StoreName
-WHERE q.UserName IS NOT NULL AND q.UserName <> '';
+WHERE q.StoreUID IS NOT NULL 
+  AND TRIM(q.StoreUID) <> '' 
+  AND q.Status110_User <> '' 
+  AND q.Status110_User NOT LIKE '%測試%' 
+  AND q.Status199_User NOT LIKE 'U%'
+GROUP BY 
+    TRIM(q.StoreUID),
+    TRIM(q.Status110_User),
+    TRIM(q.Status180_User),
+    TRIM(q.Status190_User),
+    TRIM(q.Status191_User),
+    TRIM(q.Status199_User)
+ORDER BY GroupCount DESC;
 
-ALTER TABLE quatations
-    ADD COLUMN StoreId INT NULL,
-    ADD COLUMN TechnicianId INT NULL,
-    ADD CONSTRAINT fk_quatations_store FOREIGN KEY (StoreId) REFERENCES stores(StoreId),
-    ADD CONSTRAINT fk_quatations_technician FOREIGN KEY (TechnicianId) REFERENCES technicians(TechnicianId);
+自己創建
 
-UPDATE quatations q
-JOIN stores s ON q.CurrentStatus_User = s.StoreName
-SET q.StoreId = s.StoreId;
-
-UPDATE quatations q
-JOIN technicians t ON q.UserName = t.TechnicianName
-   AND q.StoreId = t.StoreId
-SET q.TechnicianId = t.TechnicianId;
-
-SELECT s.StoreName, GROUP_CONCAT(t.TechnicianName ORDER BY t.TechnicianName SEPARATOR ', ') AS Technicians
-FROM technicians t
-JOIN stores s ON t.StoreId = s.StoreId
-GROUP BY s.StoreName;
