@@ -97,6 +97,67 @@ public class CarsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 編輯車輛資料，更新車牌、品牌、型號與備註等欄位。
+    /// </summary>
+    /// <remarks>
+    /// {
+    ///   "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
+    ///   "carPlateNumber": "AAA-1233",
+    ///   "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
+    ///   "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
+    ///   "color": "黑",
+    ///   "remark": "客戶更換為黑色烤漆"
+    /// }
+    /// </remarks>
+    [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
+          "carPlateNumber": "AAA-5678",
+          "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
+          "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
+          "color": "黑",
+          "remark": "客戶更換為黑色烤漆"
+        }
+        """)]
+    [ProducesResponseType(typeof(EditCarResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<EditCarResponse>> EditCarAsync([FromBody] EditCarRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            // ModelState 會帶有詳細欄位錯誤，直接回傳標準 ProblemDetails。
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 透過 JWT 取得操作人員名稱，統一填寫修改者資訊。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _carManagementService.EditCarAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (CarManagementException ex)
+        {
+            _logger.LogWarning(ex, "編輯車輛失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "編輯車輛資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("編輯車輛流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "編輯車輛資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "編輯車輛流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "編輯車輛資料失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
