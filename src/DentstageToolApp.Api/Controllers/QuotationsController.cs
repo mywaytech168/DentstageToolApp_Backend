@@ -187,7 +187,7 @@ public class QuotationsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "quotationNo": "Q25070001"
+          "quotationNo": "Q25100001"
         }
         """)]
     [ProducesResponseType(typeof(QuotationDetailResponse), StatusCodes.Status200OK)]
@@ -224,63 +224,58 @@ public class QuotationsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "quotationUid": "QTN-20240301-0001",
+          "quotationNo": "Q25100001",
+          "store": {
+            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "source": "官方網站",
+            "reservationDate": "2024-10-15T10:00:00",
+            "repairDate": "2024-10-25T09:00:00"
+          },
           "car": {
-            "licensePlate": "AAA-1234",
-            "brand": "Toyota",
-            "model": "Altis",
-            "color": "銀",
-            "remark": "已更新照片"
+            "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
           },
           "customer": {
-            "name": "林小華",
-            "phone": "0988123456",
-            "gender": "Male",
-            "source": "Facebook",
-            "remark": "同意估價"
+            "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
-          "categoryRemarks": {
-            "dent": "追加處理左後門凹痕",
-            "paint": "等待調色"
-          },
-          "remark": "預計 3/8 完成",
           "damages": [
             {
-              "photos": "Ph_40F81F71-19C4-48FF-AC6A-1CFB07B8BE9B",
-              "position": "後保桿",
-              "dentStatus": "輕微凹陷",
-              "description": "需拆卸調整並搭配烤漆",
-              "estimatedAmount": 3500
+              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+              "position": "保桿",
+              "dentStatus": "大面積",
+              "description": "需板金搭配烤漆",
+              "estimatedAmount": 4500
             }
           ],
           "carBodyConfirmation": {
-            "signaturePhotoUid": "Ph_9973BFA3-2E36-45F2-9BDE-AB1D6B7F73B1",
+            "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
             "damageMarkers": [
               {
-                "x": 0.35,
-                "y": 0.62,
+                "x": 0.42,
+                "y": 0.63,
                 "hasDent": true,
                 "hasScratch": false,
                 "hasPaintPeel": false,
-                "remark": "主要受損位置"
+                "remark": "主要凹痕"
               }
             ]
           },
           "maintenance": {
             "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
-            "reserveCar": false,
+            "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
             "hasRepainted": false,
             "needToolEvaluation": true,
-            "otherFee": 500,
-            "roundingDiscount": 0,
-            "percentageDiscount": 5,
-            "discountReason": "老客戶回訪",
+            "otherFee": 800,
+            "roundingDiscount": 200,
+            "percentageDiscount": 10,
+            "discountReason": "回饋老客戶",
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,
-            "remark": "更新備註內容"
+            "suggestedPaintReason": null,
+            "unrepairableReason": null,
+            "remark": "請於修復後通知客戶取車"
           }
         }
         """)]
