@@ -308,6 +308,48 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 將估價單狀態更新為估價完成 (180)。
+    /// </summary>
+    [HttpPost("evaluate")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001"
+        }
+        """)]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> CompleteEvaluationAsync([FromBody] QuotationEvaluateRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 從權杖解析目前操作人員名稱，供服務層記錄狀態異動。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.CompleteEvaluationAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "估價完成失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "估價完成失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("估價完成流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "估價完成取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "估價完成流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "估價完成失敗");
+        }
+    }
+
+    /// <summary>
     /// 取消估價單，將狀態改為 195 並記錄操作時間。
     /// </summary>
     [HttpPost("cancel")]
