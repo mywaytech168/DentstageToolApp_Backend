@@ -2,6 +2,8 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using DentstageToolApp.Api.Technicians;
 using DentstageToolApp.Api.Services.Technician;
 using Microsoft.AspNetCore.Authorization;
@@ -12,7 +14,7 @@ using Microsoft.Extensions.Logging;
 namespace DentstageToolApp.Api.Controllers;
 
 /// <summary>
-/// 技師資料查詢 API，提供前端取得特定店家的技師名單。
+/// 技師資料查詢 API，提供前端取得登入者所屬門市的技師名單。
 /// </summary>
 [ApiController]
 [Route("api/technicians")]
@@ -36,25 +38,27 @@ public class TechniciansController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得指定店家的技師名單，供前端建立下拉選單使用。
+    /// 取得目前登入者所屬門市的技師名單，供前端建立下拉選單使用。
     /// </summary>
-    /// <param name="query">查詢參數，需包含店家識別碼。</param>
     /// <param name="cancellationToken">取消權杖，供前端取消請求。</param>
     [HttpGet]
     [ProducesResponseType(typeof(TechnicianListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<TechnicianListResponse>> GetTechniciansAsync([FromQuery] TechnicianListQuery query, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<TechnicianListResponse>> GetTechniciansAsync(CancellationToken cancellationToken)
     {
-        if (!ModelState.IsValid)
-        {
-            // 若查詢參數未符合驗證條件，直接回傳標準 ProblemDetails 供前端顯示。
-            return ValidationProblem(ModelState);
-        }
-
         try
         {
-            _logger.LogDebug("查詢店家 {StoreUid} 的技師名單。", query.StoreUid);
-            var response = await _technicianQueryService.GetTechniciansAsync(query, cancellationToken);
+            // 由 JWT 取得目前登入者識別碼，並作為查詢門市與技師的依據。
+            var userUid = GetCurrentUserUid();
+            if (string.IsNullOrWhiteSpace(userUid))
+            {
+                _logger.LogWarning("JWT 欠缺使用者識別碼，無法查詢技師名單。");
+                return BuildProblemDetails(HttpStatusCode.Unauthorized, "驗證資訊缺少使用者識別碼，請重新登入後再試。", "查詢技師名單失敗");
+            }
+
+            _logger.LogDebug("查詢使用者 {UserUid} 所屬門市的技師名單。", userUid);
+            var response = await _technicianQueryService.GetTechniciansAsync(userUid, cancellationToken);
             return Ok(response);
         }
         catch (TechnicianQueryServiceException ex)
@@ -93,6 +97,28 @@ public class TechniciansController : ControllerBase
         };
 
         return StatusCode(problem.Status ?? StatusCodes.Status500InternalServerError, problem);
+    }
+
+    /// <summary>
+    /// 從 JWT 權杖中解析目前登入者的唯一識別碼，作為查詢門市的憑證。
+    /// </summary>
+    private string? GetCurrentUserUid()
+    {
+        // 依序使用常見的使用者識別 Claims，確保舊版與新版權杖皆能被支援。
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
     }
 
     // ---------- 生命週期 ----------

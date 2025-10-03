@@ -28,30 +28,36 @@ public class TechnicianQueryService : ITechnicianQueryService
     }
 
     /// <inheritdoc />
-    public async Task<TechnicianListResponse> GetTechniciansAsync(TechnicianListQuery query, CancellationToken cancellationToken)
+    public async Task<TechnicianListResponse> GetTechniciansAsync(string userUid, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (query is null)
+            var normalizedUserUid = (userUid ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedUserUid))
             {
-                // 控制器理論上會先處理空值，仍保留檢查避免被其他呼叫端誤用。
-                throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "查詢參數不可為空。");
+                // 若缺少使用者識別碼，代表權杖已失效或遭竄改，直接拋出可預期例外。
+                throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "請提供有效的使用者識別碼。");
             }
 
-            var storeUid = query.StoreUid?.Trim();
-            if (string.IsNullOrWhiteSpace(storeUid))
+            // ---------- 門市解析區 ----------
+            // 目前帳號與門市以相同 UID 進行綁定，因此可直接使用使用者識別碼回查門市資料。
+            var store = await _dbContext.Stores
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedUserUid, cancellationToken);
+
+            if (store is null)
             {
-                // 若店家識別碼為空字串，代表格式錯誤，直接拋出可預期例外。
-                throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "請提供有效的店家識別碼。");
+                // 找不到對應門市時回傳 404，提示後台確認使用者與門市的綁定設定。
+                throw new TechnicianQueryServiceException(HttpStatusCode.NotFound, "找不到使用者對應的門市資料。");
             }
 
             // ---------- 查詢組合區 ----------
             // 透過技師主檔資料表過濾店家識別碼，並僅保留必要欄位，降低資料傳輸量。
             var technicians = await _dbContext.Technicians
                 .AsNoTracking()
-                .Where(technician => technician.StoreUid == storeUid)
+                .Where(technician => technician.StoreUid == store.StoreUid)
                 .Select(technician => new TechnicianItem
                 {
                     TechnicianUid = technician.TechnicianUid,

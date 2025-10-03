@@ -92,8 +92,10 @@ public class QuotationsController : ControllerBase
         """
         {
           "store": {
-            "technicianId": 12,
-            "source": "官方網站"
+            "technicianUid": "Tc_4F5562E1-6C71-4A3A-9E0B-0A3A3F62C9C8",
+            "source": "官方網站",
+            "reservationDate": "2024-03-15T10:00:00",
+            "repairDate": "2024-03-20T09:00:00"
           },
           "car": {
             "carUid": "Ca_805E328B-A461-4D62-B6F7-B7E8D0414842"
@@ -112,15 +114,19 @@ public class QuotationsController : ControllerBase
                 "estimatedRestorationLevel": "9 成新",
                 "isRepairable": true
               },
-              "damages": [
-                {
-                  "photoUid": "PH_01",
-                  "position": "右前門",
-                  "dentStatus": "中度凹陷",
-                  "description": "需板金搭配烤漆",
-                  "estimatedAmount": 4500
-                }
-              ],
+              "damages": {
+                "圖片": [
+                  {
+                    "photoUid": "PH_01",
+                    "description": "右前門受損特寫",
+                    "isPrimary": true
+                  }
+                ],
+                "位置": "右前門",
+                "凹痕狀況": "中度凹陷",
+                "說明": "需板金搭配烤漆",
+                "預估金額": 4500
+              },
               "amount": {
                 "damageSubtotal": 4500,
                 "additionalFee": 500,
@@ -138,6 +144,15 @@ public class QuotationsController : ControllerBase
           "carBodyConfirmation": {
             "annotatedPhotoUid": "PH_02",
             "signaturePhotoUid": "PH_03"
+          },
+          "maintenance": {
+            "fixTypeUid": "Fx_A1B2C3D4E5",
+            "fixTypeName": "外觀鈑金",
+            "reserveCar": true,
+            "applyCoating": false,
+            "applyWrapping": false,
+            "hasRepainted": false,
+            "needToolEvaluation": true
           },
           "remark": "請於修復後通知客戶取車"
         }
