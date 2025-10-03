@@ -270,9 +270,7 @@ public class QuotationService : IQuotationService
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
         var fixTypeUid = NormalizeRequiredText(maintenanceInfo.FixTypeUid, "維修類型");
         var fixTypeEntity = await GetFixTypeEntityAsync(fixTypeUid, cancellationToken);
-        var fixTypeName = NormalizeOptionalText(maintenanceInfo.FixTypeName)
-            ?? NormalizeOptionalText(fixTypeEntity?.FixTypeName)
-            ?? fixTypeUid;
+        var fixTypeName = NormalizeOptionalText(fixTypeEntity?.FixTypeName) ?? fixTypeUid;
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
@@ -539,8 +537,6 @@ public class QuotationService : IQuotationService
             Maintenance = new QuotationMaintenanceInfo
             {
                 FixTypeUid = quotation.FixTypeUid,
-                FixTypeName = NormalizeOptionalText(quotation.FixTypeNavigation?.FixTypeName)
-                    ?? NormalizeOptionalText(quotation.FixType),
                 ReserveCar = ParseBooleanFlag(quotation.CarReserved),
                 ApplyCoating = ParseBooleanFlag(quotation.Coat),
                 ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
@@ -1006,7 +1002,7 @@ public class QuotationService : IQuotationService
 
         if (request.CarBodyConfirmation is { } body)
         {
-            TryAdd(uniqueUids, body.AnnotatedPhotoUid);
+            // 車體確認單僅需綁定簽名圖片，舊欄位仍保留以相容歷史資料。
             TryAdd(uniqueUids, body.AnnotatedImage);
             TryAdd(uniqueUids, body.SignaturePhotoUid);
             TryAdd(uniqueUids, body.Signature);

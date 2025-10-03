@@ -672,15 +672,10 @@ public class QuotationCategoryTotal
 public class QuotationCarBodyConfirmation
 {
     /// <summary>
-    /// 舊版欄位，已改為 PhotoUID，保留避免破壞相容性。
+    /// 舊版欄位，仍保留字串路徑以兼容舊資料。
     /// </summary>
-    [Obsolete("請改用 AnnotatedPhotoUid 傳遞圖片識別碼。")]
+    [Obsolete("車體確認單已移除標註圖片欄位，僅保留簽名影像。")]
     public string? AnnotatedImage { get; set; }
-
-    /// <summary>
-    /// 已標註受損位置的車身圖片識別碼。
-    /// </summary>
-    public string? AnnotatedPhotoUid { get; set; }
 
     /// <summary>
     /// 車體受損標記列表，透過座標與損傷類型記錄於車身示意圖。
@@ -694,7 +689,7 @@ public class QuotationCarBodyConfirmation
     public string? Signature { get; set; }
 
     /// <summary>
-    /// 客戶簽名影像的 PhotoUID。
+    /// 客戶簽名影像的 PhotoUID，為目前唯一需要綁定的影像欄位。
     /// </summary>
     public string? SignaturePhotoUid { get; set; }
 }

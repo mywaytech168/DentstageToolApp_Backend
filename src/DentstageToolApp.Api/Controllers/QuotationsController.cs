@@ -120,7 +120,6 @@ public class QuotationsController : ControllerBase
             }
           ],
           "carBodyConfirmation": {
-            "annotatedPhotoUid": "PH_10",
             "signaturePhotoUid": "PH_11",
             "damageMarkers": [
               {
@@ -135,7 +134,6 @@ public class QuotationsController : ControllerBase
           },
           "maintenance": {
             "fixTypeUid": "Fx_A1B2C3D4E5",
-            "fixTypeName": "外觀鈑金",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
