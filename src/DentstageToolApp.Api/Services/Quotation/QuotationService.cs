@@ -28,6 +28,8 @@ public class QuotationService : IQuotationService
 {
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 200;
+    // 序號計算時僅需少量資料即可取得最大值，限制撈取數量降低資料庫負擔。
+    private const int SerialCandidateFetchCount = 50;
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -326,6 +328,9 @@ public class QuotationService : IQuotationService
         // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
         var carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
         var originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
+        // 依需求保留原始車牌的連字號供 CarNoInput 欄位使用，同時統一為大寫格式。
+        var licensePlateWithSymbol = originalLicensePlate.ToUpperInvariant();
+        // 系統實際使用的車牌欄位需移除連字號，方便搜尋與報表統計。
         var licensePlate = NormalizeLicensePlate(originalLicensePlate);
         var brand = NormalizeOptionalText(carEntity.Brand);
         var model = NormalizeOptionalText(carEntity.Model);
@@ -446,8 +451,8 @@ public class QuotationService : IQuotationService
             ToolTest = toolFlag,
             CarUid = carUid,
             CarNo = licensePlate,
-            CarNoInput = licensePlate,
-            CarNoInputGlobal = licensePlate,
+            CarNoInput = licensePlateWithSymbol,
+            CarNoInputGlobal = licensePlateWithSymbol,
             Brand = brand,
             Model = model,
             BrandUid = brandUid,
@@ -768,23 +773,102 @@ public class QuotationService : IQuotationService
         // 依照當前年月建立序號前綴，確保每月重新由 0001 開始遞增。
         var prefix = $"Q{timestamp:yyMM}";
 
-        var maxSerial = await _context.Quatations
+        // 先以估價單編號前綴搜尋同一個年月的資料，避免跨月序號相互影響。
+        var prefixCandidates = await _context.Quatations
             .AsNoTracking()
-            .Where(q => q.QuotationNo != null && q.QuotationNo.StartsWith(prefix))
-            .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+            .Where(q => !string.IsNullOrEmpty(q.QuotationNo) && EF.Functions.Like(q.QuotationNo!, prefix + "%"))
+            .OrderByDescending(q => q.SerialNum)
+            .ThenByDescending(q => q.QuotationNo)
+            .Select(q => new SerialCandidate(q.SerialNum, q.QuotationNo))
+            .Take(SerialCandidateFetchCount)
+            .ToListAsync(cancellationToken);
 
-        if (!maxSerial.HasValue)
+        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
+
+        if (maxSerial == 0)
         {
+            // 若舊資料缺少編號前綴，改用建立時間落在當月的紀錄再次比對，確保同月仍能延續序號。
             var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
             var monthEnd = monthStart.AddMonths(1);
 
-            maxSerial = await _context.Quatations
+            var monthCandidates = await _context.Quatations
                 .AsNoTracking()
                 .Where(q => q.CreationTimestamp >= monthStart && q.CreationTimestamp < monthEnd)
-                .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+                .OrderByDescending(q => q.SerialNum)
+                .ThenByDescending(q => q.QuotationNo)
+                .Select(q => new SerialCandidate(q.SerialNum, q.QuotationNo))
+                .Take(SerialCandidateFetchCount)
+                .ToListAsync(cancellationToken);
+
+            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
         }
 
-        return (maxSerial ?? 0) + 1;
+        return maxSerial + 1;
+    }
+
+    /// <summary>
+    /// 估價單序號候選資料結構，封裝序號欄位與估價單編號，便於後續解析。
+    /// </summary>
+    private sealed record SerialCandidate(int? SerialNum, string? QuotationNo);
+
+    /// <summary>
+    /// 從資料庫撈取的候選資料中取出最大序號，支援從 QuotationNo 解析舊資料的流水號。
+    /// </summary>
+    private static int ExtractMaxSerial(IEnumerable<SerialCandidate> candidates, string prefix)
+    {
+        var maxSerial = 0;
+
+        foreach (var candidate in candidates)
+        {
+            // 先比對 SerialNum 欄位，若資料表已填寫則直接採用。
+            if (candidate.SerialNum is int serial && serial > maxSerial)
+            {
+                maxSerial = serial;
+            }
+
+            // 再從 QuotationNo 補捉舊資料留下的序號數字，避免序號回到 0001。
+            if (candidate.QuotationNo is string quotationNo)
+            {
+                var parsedSerial = TryParseSerialFromQuotationNo(quotationNo, prefix);
+                if (parsedSerial.HasValue && parsedSerial.Value > maxSerial)
+                {
+                    maxSerial = parsedSerial.Value;
+                }
+            }
+        }
+
+        return maxSerial;
+    }
+
+    /// <summary>
+    /// 嘗試從估價單編號中解析四碼流水號，支援舊格式保留的連字號或其他符號。
+    /// </summary>
+    private static int? TryParseSerialFromQuotationNo(string? quotationNo, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(quotationNo))
+        {
+            return null;
+        }
+
+        var trimmed = quotationNo.Trim();
+        if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var suffix = trimmed[prefix.Length..];
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return null;
+        }
+
+        var digits = new string(suffix.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrEmpty(digits))
+        {
+            return null;
+        }
+
+        return int.TryParse(digits, out var serialNumber) ? serialNumber : null;
     }
 
     /// <summary>
