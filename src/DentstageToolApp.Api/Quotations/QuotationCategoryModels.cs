@@ -41,9 +41,11 @@ public class QuotationCategoryBlock
 
     /// <summary>
     /// 傷痕細項列表，序列化時會轉換成單一物件（圖片、位置、凹痕狀況、說明、預估金額）以符合前端需求。
+    /// 新版格式改由頂層 damages 承載，此欄位改保留給舊資料解析使用。
     /// </summary>
     [JsonConverter(typeof(QuotationDamageCollectionConverter))]
-    public List<QuotationDamageItem> Damages { get; set; } = new();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<QuotationDamageItem>? Damages { get; set; } = new();
 
     /// <summary>
     /// 類別金額資訊，包含傷痕小計與折扣。

@@ -114,36 +114,117 @@ public class QuotationsController : ControllerBase
                 "estimatedRestorationLevel": "9 成新",
                 "isRepairable": true
               },
-              "damages": {
-                "圖片": [
-                  {
-                    "photoUid": "PH_01",
-                    "description": "右前門受損特寫",
-                    "isPrimary": true
-                  }
-                ],
-                "位置": "右前門",
-                "凹痕狀況": "中度凹陷",
-                "說明": "需板金搭配烤漆",
-                "預估金額": 4500
-              },
               "amount": {
                 "damageSubtotal": 4500,
                 "additionalFee": 500,
                 "discountPercentage": 10,
                 "discountReason": "春季活動"
               }
+            },
+            "paint": {
+              "overall": {
+                "paintCondition": "已有色差",
+                "toolEvaluation": "需烤漆房安排",
+                "needStay": false,
+                "remark": "可於半天內完成",
+                "estimatedRepairTime": "6 小時",
+                "estimatedRestorationLevel": "8 成新",
+                "isRepairable": true
+              },
+              "amount": {
+                "damageSubtotal": 2800,
+                "additionalFee": 300,
+                "discountPercentage": 0,
+                "discountReason": null
+              }
+            },
+            "other": {
+              "overall": {
+                "paintCondition": "內裝保養良好",
+                "toolEvaluation": "需一般保養工具",
+                "needStay": false,
+                "remark": "提供代步車",
+                "estimatedRepairTime": "4 小時",
+                "estimatedRestorationLevel": "維持原狀",
+                "isRepairable": true
+              },
+              "amount": {
+                "damageSubtotal": 1500,
+                "additionalFee": 0,
+                "discountPercentage": 5,
+                "discountReason": "會員折扣"
+              }
             }
           },
+          "damages": [
+            {
+              "圖片": [
+                {
+                  "photoUid": "PH_01",
+                  "description": "右前門受損特寫",
+                  "isPrimary": true
+                }
+              ],
+              "位置": "右前門",
+              "凹痕狀況": "中度凹陷",
+              "說明": "需板金搭配烤漆",
+              "預估金額": 4500
+            },
+            {
+              "圖片": [
+                {
+                  "photoUid": "PH_02",
+                  "description": "後保桿刮傷位置",
+                  "isPrimary": false
+                }
+              ],
+              "位置": "後保桿",
+              "凹痕狀況": "輕微刮傷",
+              "說明": "建議拋光與點修",
+              "預估金額": 1200
+            }
+          ],
           "categoryTotal": {
             "categorySubtotals": {
-              "dent": 5000
+              "dent": 5000,
+              "paint": 3100,
+              "other": 1500
             },
-            "roundingDiscount": 0
+            "roundingDiscount": 300
           },
           "carBodyConfirmation": {
-            "annotatedPhotoUid": "PH_02",
-            "signaturePhotoUid": "PH_03"
+            "annotatedPhotoUid": "PH_10",
+            "signaturePhotoUid": "PH_11",
+            "signaturePhotoUids": [
+              "PH_11",
+              "PH_12"
+            ],
+            "checklist": [
+              {
+                "part": "車頭鈑件",
+                "status": "正常",
+                "remark": "無需處理",
+                "photos": []
+              },
+              {
+                "part": "右前門",
+                "status": "待修",
+                "remark": "需確認折痕",
+                "photos": [
+                  "PH_13"
+                ]
+              }
+            ],
+            "damageMarkers": [
+              {
+                "x": 0.42,
+                "y": 0.63,
+                "hasDent": true,
+                "hasScratch": false,
+                "hasPaintPeel": false,
+                "remark": "主要凹痕"
+              }
+            ]
           },
           "maintenance": {
             "fixTypeUid": "Fx_A1B2C3D4E5",

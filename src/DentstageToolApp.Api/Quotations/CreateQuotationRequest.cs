@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace DentstageToolApp.Api.Quotations;
@@ -30,6 +31,11 @@ public class CreateQuotationRequest
     /// 服務類別的明細資訊。
     /// </summary>
     public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
+
+    /// <summary>
+    /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
+    /// </summary>
+    public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
     /// 各類別金額總覽。
