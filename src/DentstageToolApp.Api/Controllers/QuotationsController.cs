@@ -307,6 +307,216 @@ public class QuotationsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 取消估價單，將狀態改為 195 並記錄操作時間。
+    /// </summary>
+    [HttpPost("cancel")]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> CancelQuotationAsync([FromBody] QuotationCancelRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.CancelQuotationAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "取消估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "取消估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("取消估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "取消估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取消估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取消估價單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 將估價單轉為預約，寫入預約日期後回傳狀態資訊。
+    /// </summary>
+    [HttpPost("reserve")]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> ConvertToReservationAsync([FromBody] QuotationReservationRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.ConvertToReservationAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "轉預約失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "轉預約失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("轉預約流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "轉預約取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "轉預約流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "轉預約失敗");
+        }
+    }
+
+    /// <summary>
+    /// 更改既有預約日期，維持狀態為 190。
+    /// </summary>
+    [HttpPost("reserve/update")]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> UpdateReservationDateAsync([FromBody] QuotationReservationRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.UpdateReservationDateAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "更改預約失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "更改預約失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("更改預約流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "更改預約取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "更改預約流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "更改預約失敗");
+        }
+    }
+
+    /// <summary>
+    /// 取消既有預約，狀態改為 195 並清除預約日期。
+    /// </summary>
+    [HttpPost("reserve/cancel")]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> CancelReservationAsync([FromBody] QuotationCancelRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.CancelReservationAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "取消預約失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "取消預約失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("取消預約流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "取消預約取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取消預約流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "取消預約失敗");
+        }
+    }
+
+    /// <summary>
+    /// 將估價單狀態回朔至上一個有效狀態。
+    /// </summary>
+    [HttpPost("reserve/revert")]
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> RevertReservationStatusAsync([FromBody] QuotationRevertStatusRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.RevertQuotationStatusAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "狀態回溯失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "狀態回溯失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("狀態回溯流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "狀態回溯取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "狀態回溯流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "狀態回溯失敗");
+        }
+    }
+
+    /// <summary>
+    /// 將估價單轉為維修單，回傳新工單編號。
+    /// </summary>
+    [HttpPost("maintenance")]
+    [ProducesResponseType(typeof(QuotationMaintenanceConversionResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationMaintenanceConversionResponse>> ConvertToMaintenanceAsync([FromBody] QuotationMaintenanceRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.ConvertToMaintenanceAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "轉維修失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "轉維修失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("轉維修流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未更新。", "轉維修取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "轉維修流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "轉維修失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
     /// <summary>
     /// 將例外轉換為 ProblemDetails，統一錯誤輸出格式。

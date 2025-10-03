@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -974,6 +975,243 @@ public class QuotationService : IQuotationService
         _logger.LogInformation("操作人員 {Operator} 更新估價單 {QuotationUid} 完成。", operatorLabel, quotation.QuotationUid);
     }
 
+    /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> CancelQuotationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供取消估價單的參數。");
+        }
+
+        return await CancelQuotationInternalAsync(request, operatorName, cancellationToken, false, "估價單已取消");
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> ConvertToReservationAsync(QuotationReservationRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供轉預約的參數。");
+        }
+
+        EnsureRequestHasIdentity(request);
+
+        var reservationDate = NormalizeOptionalDate(request.ReservationDate);
+        if (!reservationDate.HasValue)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供有效的預約日期。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要轉預約的估價單。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        quotation.BookDate = reservationDate;
+        ApplyStatusAudit(quotation, "190", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 轉為預約狀態。", operatorLabel, quotation.QuotationNo);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> UpdateReservationDateAsync(QuotationReservationRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供更改預約的參數。");
+        }
+
+        EnsureRequestHasIdentity(request);
+
+        var reservationDate = NormalizeOptionalDate(request.ReservationDate);
+        if (!reservationDate.HasValue)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供有效的預約日期。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要更新預約日期的估價單。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        quotation.BookDate = reservationDate;
+        ApplyStatusAudit(quotation, "190", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 調整估價單 {QuotationNo} 的預約日期。", operatorLabel, quotation.QuotationNo);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> CancelReservationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供取消預約的參數。");
+        }
+
+        return await CancelQuotationInternalAsync(request, operatorName, cancellationToken, true, "預約已取消");
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> RevertQuotationStatusAsync(QuotationRevertStatusRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供狀態回溯的參數。");
+        }
+
+        EnsureRequestHasIdentity(request);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需回溯狀態的估價單。");
+        }
+
+        var previousStatus = ResolvePreviousStatus(quotation);
+        if (previousStatus is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "估價單缺少可回溯的上一個狀態。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        ApplyStatusAudit(quotation, previousStatus, operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 狀態回溯至 {Status}。", operatorLabel, quotation.QuotationNo, previousStatus);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <inheritdoc />
+    public async Task<QuotationMaintenanceConversionResponse> ConvertToMaintenanceAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供轉維修的參數。");
+        }
+
+        EnsureRequestHasIdentity(request);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要轉維修的估價單。");
+        }
+
+        var existingOrder = await _context.Orders
+            .AsNoTracking()
+            .Where(order => order.QuatationUid == quotation.QuotationUid)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existingOrder is not null)
+        {
+            var orderNo = existingOrder.OrderNo ?? existingOrder.OrderUid;
+            throw new QuotationManagementException(HttpStatusCode.Conflict, $"估價單已建立維修單，編號：{orderNo}");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+        var orderSerial = await GenerateNextOrderSerialAsync(now, cancellationToken);
+        var orderUid = BuildOrderUid();
+        var orderNoNew = BuildOrderNo(orderSerial, now);
+        var (plainRemark, _) = ParseRemark(quotation.Remark);
+        var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+
+        var order = new Order
+        {
+            OrderUid = orderUid,
+            OrderNo = orderNoNew,
+            SerialNum = orderSerial,
+            CreationTimestamp = now,
+            CreatedBy = operatorLabel,
+            ModificationTimestamp = now,
+            ModifiedBy = operatorLabel,
+            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.TechnicianUid ?? operatorLabel,
+            UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
+            StoreUid = quotation.StoreUid,
+            Date = DateOnly.FromDateTime(now),
+            Status = "210",
+            Status210Date = now,
+            Status210User = operatorLabel,
+            CurrentStatusDate = now,
+            CurrentStatusUser = operatorLabel,
+            QuatationUid = quotation.QuotationUid,
+            CarUid = quotation.CarUid,
+            CarNoInputGlobal = quotation.CarNoInputGlobal,
+            CarNoInput = quotation.CarNoInput,
+            CarNo = quotation.CarNo,
+            Brand = quotation.Brand,
+            Model = quotation.Model,
+            Color = quotation.Color,
+            CarRemark = quotation.CarRemark,
+            BrandModel = quotation.BrandModel,
+            CustomerUid = quotation.CustomerUid,
+            CustomerType = quotation.CustomerType,
+            PhoneInputGlobal = quotation.PhoneInputGlobal,
+            PhoneInput = quotation.PhoneInput,
+            Phone = quotation.Phone,
+            Name = quotation.Name,
+            Gender = quotation.Gender,
+            Connect = quotation.Connect,
+            County = quotation.County,
+            Township = quotation.Township,
+            Source = quotation.Source,
+            Reason = quotation.Reason,
+            Email = quotation.Email,
+            ConnectRemark = quotation.ConnectRemark,
+            BookDate = quotation.BookDate?.ToString("yyyy-MM-dd"),
+            BookMethod = quotation.BookMethod,
+            WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd"),
+            FixType = quotation.FixType,
+            CarReserved = quotation.CarReserved,
+            Content = plainRemark,
+            Remark = quotation.Remark,
+            Valuation = quotation.Valuation,
+            DiscountPercent = quotation.DiscountPercent,
+            Discount = quotation.Discount,
+            DiscountReason = quotation.DiscountReason,
+            Amount = amount,
+            FlagRegularCustomer = quotation.FlagRegularCustomer,
+            FlagExternalCooperation = false
+        };
+
+        _context.Orders.Add(order);
+
+        ApplyStatusAudit(quotation, "191", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 轉為維修單 {OrderNo}。", operatorLabel, quotation.QuotationNo, orderNoNew);
+
+        return BuildMaintenanceResponse(quotation, order, now);
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -1012,6 +1250,22 @@ public class QuotationService : IQuotationService
         // 採用 Q + 年份末兩碼 + 月份 + 四碼流水號（例如：Q25070078），
         // 與舊系統保持一致以便前後端串接查詢。
         return $"Q{timestamp:yyMM}{serialNumber:0000}";
+    }
+
+    /// <summary>
+    /// 建立維修單唯一識別碼，使用 O_ 前綴搭配 GUID。
+    /// </summary>
+    private static string BuildOrderUid()
+    {
+        return $"O_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+    }
+
+    /// <summary>
+    /// 依據序號與時間產生維修單編號。
+    /// </summary>
+    private static string BuildOrderNo(int serialNumber, DateTime timestamp)
+    {
+        return $"O{timestamp:yyMM}{serialNumber:0000}";
     }
 
     /// <summary>
@@ -1079,9 +1333,47 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
+    /// 產生維修單序號，沿用估價單的每月遞增規則。
+    /// </summary>
+    private async Task<int> GenerateNextOrderSerialAsync(DateTime timestamp, CancellationToken cancellationToken)
+    {
+        var prefix = $"O{timestamp:yyMM}";
+
+        var prefixCandidates = await _context.Orders
+            .AsNoTracking()
+            .Where(order => !string.IsNullOrEmpty(order.OrderNo) && EF.Functions.Like(order.OrderNo!, prefix + "%"))
+            .OrderByDescending(order => order.SerialNum)
+            .ThenByDescending(order => order.OrderNo)
+            .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
+            .Take(SerialCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+
+        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
+
+        if (maxSerial == 0)
+        {
+            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+
+            var monthCandidates = await _context.Orders
+                .AsNoTracking()
+                .Where(order => order.CreationTimestamp >= monthStart && order.CreationTimestamp < monthEnd)
+                .OrderByDescending(order => order.SerialNum)
+                .ThenByDescending(order => order.OrderNo)
+                .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
+                .Take(SerialCandidateFetchCount)
+                .ToListAsync(cancellationToken);
+
+            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
+        }
+
+        return maxSerial + 1;
+    }
+
+    /// <summary>
     /// 估價單序號候選資料結構，封裝序號欄位與估價單編號，便於後續解析。
     /// </summary>
-    private sealed record SerialCandidate(int? SerialNum, string? QuotationNo);
+    private sealed record SerialCandidate(int? SerialNum, string? DocumentNo);
 
     /// <summary>
     /// 從資料庫撈取的候選資料中取出最大序號，支援從 QuotationNo 解析舊資料的流水號。
@@ -1098,10 +1390,10 @@ public class QuotationService : IQuotationService
                 maxSerial = serial;
             }
 
-            // 再從 QuotationNo 補捉舊資料留下的序號數字，避免序號回到 0001。
-            if (candidate.QuotationNo is string quotationNo)
+            // 再從編號欄位補捉舊資料留下的序號數字，避免序號回到 0001。
+            if (candidate.DocumentNo is string documentNo)
             {
-                var parsedSerial = TryParseSerialFromQuotationNo(quotationNo, prefix);
+                var parsedSerial = TryParseSerialFromDocumentNo(documentNo, prefix);
                 if (parsedSerial.HasValue && parsedSerial.Value > maxSerial)
                 {
                     maxSerial = parsedSerial.Value;
@@ -1115,14 +1407,14 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 嘗試從估價單編號中解析四碼流水號，支援舊格式保留的連字號或其他符號。
     /// </summary>
-    private static int? TryParseSerialFromQuotationNo(string? quotationNo, string prefix)
+    private static int? TryParseSerialFromDocumentNo(string? documentNo, string prefix)
     {
-        if (string.IsNullOrWhiteSpace(quotationNo))
+        if (string.IsNullOrWhiteSpace(documentNo))
         {
             return null;
         }
 
-        var trimmed = quotationNo.Trim();
+        var trimmed = documentNo.Trim();
         if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
             return null;
@@ -1345,6 +1637,184 @@ public class QuotationService : IQuotationService
     {
         var query = ApplyQuotationFilter(_context.Quatations, quotationUid, quotationNo);
         return await query.FirstOrDefaultAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 統一處理取消估價與取消預約的流程。
+    /// </summary>
+    private async Task<QuotationStatusChangeResponse> CancelQuotationInternalAsync(
+        QuotationCancelRequest request,
+        string operatorName,
+        CancellationToken cancellationToken,
+        bool defaultClearReservation,
+        string defaultReason)
+    {
+        EnsureRequestHasIdentity(request);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            var message = defaultClearReservation ? "查無需要取消預約的估價單。" : "查無需要取消的估價單。";
+            throw new QuotationManagementException(HttpStatusCode.NotFound, message);
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+        var effectiveReason = NormalizeOptionalText(request.Reason) ?? defaultReason;
+
+        quotation.RejectReason = effectiveReason;
+        quotation.Reject = !string.IsNullOrWhiteSpace(effectiveReason);
+
+        var shouldClearReservation = defaultClearReservation || request.ClearReservation;
+        if (shouldClearReservation)
+        {
+            quotation.BookDate = null;
+            quotation.BookMethod = null;
+        }
+
+        ApplyStatusAudit(quotation, "195", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "操作人員 {Operator} 取消估價單 {QuotationNo}，原因：{Reason}。",
+            operatorLabel,
+            quotation.QuotationNo,
+            effectiveReason);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <summary>
+    /// 驗證請求是否具備估價單識別資訊，若缺少則轉為服務例外。
+    /// </summary>
+    private static void EnsureRequestHasIdentity(QuotationActionRequestBase request)
+    {
+        try
+        {
+            request.EnsureHasIdentity();
+        }
+        catch (ValidationException ex)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 將狀態異動統一記錄於估價單欄位與狀態時間欄位。
+    /// </summary>
+    private static void ApplyStatusAudit(Quatation quotation, string statusCode, string operatorLabel, DateTime timestamp)
+    {
+        quotation.Status = statusCode;
+        quotation.ModificationTimestamp = timestamp;
+        quotation.ModifiedBy = operatorLabel;
+        quotation.CurrentStatusDate = timestamp;
+        quotation.CurrentStatusUser = operatorLabel;
+
+        switch (statusCode)
+        {
+            case "110":
+                quotation.Status110Timestamp = timestamp;
+                quotation.Status110User = operatorLabel;
+                break;
+            case "180":
+                quotation.Status180Timestamp = timestamp;
+                quotation.Status180User = operatorLabel;
+                break;
+            case "190":
+                quotation.Status190Timestamp = timestamp;
+                quotation.Status190User = operatorLabel;
+                break;
+            case "191":
+                quotation.Status191Timestamp = timestamp;
+                quotation.Status191User = operatorLabel;
+                break;
+            case "195":
+                // 資料表目前僅提供 Status199 欄位，暫用來記錄 195 取消狀態的操作時間。
+                quotation.Status199Timestamp = timestamp;
+                quotation.Status199User = operatorLabel;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 由歷史狀態時間判斷上一個狀態碼。
+    /// </summary>
+    private static string? ResolvePreviousStatus(Quatation quotation)
+    {
+        var currentStatus = NormalizeOptionalText(quotation.Status);
+        var history = new List<(string Code, DateTime? Timestamp)>
+        {
+            ("195", quotation.Status199Timestamp),
+            ("191", quotation.Status191Timestamp),
+            ("190", quotation.Status190Timestamp),
+            ("180", quotation.Status180Timestamp),
+            ("110", quotation.Status110Timestamp)
+        };
+
+        var ordered = history
+            .Where(item => item.Timestamp.HasValue)
+            .OrderByDescending(item => item.Timestamp!.Value)
+            .ToList();
+
+        foreach (var (code, _) in ordered)
+        {
+            if (!string.Equals(code, currentStatus, StringComparison.OrdinalIgnoreCase))
+            {
+                return code;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 建立狀態異動回應，統一處理預約日期轉換。
+    /// </summary>
+    private static QuotationStatusChangeResponse BuildStatusChangeResponse(Quatation quotation, DateTime statusTime)
+    {
+        return new QuotationStatusChangeResponse
+        {
+            QuotationUid = quotation.QuotationUid,
+            QuotationNo = quotation.QuotationNo,
+            Status = quotation.Status ?? string.Empty,
+            StatusChangedAt = statusTime,
+            ReservationDate = ConvertDateOnlyToDateTime(quotation.BookDate)
+        };
+    }
+
+    /// <summary>
+    /// 建立轉維修回應，包含新建工單資訊。
+    /// </summary>
+    private static QuotationMaintenanceConversionResponse BuildMaintenanceResponse(Quatation quotation, Order order, DateTime statusTime)
+    {
+        return new QuotationMaintenanceConversionResponse
+        {
+            QuotationUid = quotation.QuotationUid,
+            QuotationNo = quotation.QuotationNo,
+            Status = quotation.Status ?? string.Empty,
+            StatusChangedAt = statusTime,
+            ReservationDate = ConvertDateOnlyToDateTime(quotation.BookDate),
+            OrderUid = order.OrderUid,
+            OrderNo = order.OrderNo ?? string.Empty,
+            OrderCreatedAt = order.CreationTimestamp ?? statusTime
+        };
+    }
+
+    /// <summary>
+    /// 依照估價金額與折扣計算維修單應付金額，避免負數結果。
+    /// </summary>
+    private static decimal? CalculateOrderAmount(decimal? valuation, decimal? discount)
+    {
+        if (!valuation.HasValue)
+        {
+            return null;
+        }
+
+        var amount = valuation.Value - (discount ?? 0m);
+        return amount < 0 ? 0m : amount;
     }
 
     /// <summary>
@@ -2219,6 +2689,14 @@ public class QuotationService : IQuotationService
 
         // 僅保留日期部分，確保與資料庫 DateOnly 欄位一致。
         return DateOnly.FromDateTime(value.Value.Date);
+    }
+
+    /// <summary>
+    /// 將 DateOnly 轉回 DateTime，方便回傳前端顯示。
+    /// </summary>
+    private static DateTime? ConvertDateOnlyToDateTime(DateOnly? value)
+    {
+        return value?.ToDateTime(TimeOnly.MinValue);
     }
 
     /// <summary>

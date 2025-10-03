@@ -39,4 +39,34 @@ public interface IQuotationService
     /// <param name="operatorName">操作人員名稱。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     Task UpdateQuotationAsync(UpdateQuotationRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 取消估價單或預約，將狀態調整為 195 並記錄操作資訊。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> CancelQuotationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 將估價單狀態轉為預約，寫入預約日期並回傳異動資訊。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> ConvertToReservationAsync(QuotationReservationRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 更新已預約估價單的預約日期，維持狀態為 190。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> UpdateReservationDateAsync(QuotationReservationRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 取消既有預約，保留取消原因並清除預約日期。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> CancelReservationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 將狀態回朔至上一個有效狀態，供預約取消後誤按回復使用。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> RevertQuotationStatusAsync(QuotationRevertStatusRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 估價單轉維修，建立維修工單並回傳工單編號。
+    /// </summary>
+    Task<QuotationMaintenanceConversionResponse> ConvertToMaintenanceAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken);
 }
