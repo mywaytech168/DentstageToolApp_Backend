@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text.Encodings.Web;
@@ -28,6 +29,9 @@ public class QuotationService : IQuotationService
 {
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 200;
+    // 序號計算時僅需少量資料即可取得最大值，限制撈取數量降低資料庫負擔。
+    private const int SerialCandidateFetchCount = 50;
+    private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -256,11 +260,29 @@ public class QuotationService : IQuotationService
         }
 
         // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊。
-        var storeEntity = await GetStoreEntityAsync(technicianEntity, cancellationToken);
-        var storeName = NormalizeRequiredText(storeEntity?.StoreName, "店鋪名稱");
-        var storeUid = NormalizeRequiredText(ResolveStoreUid(technicianEntity, storeEntity), "門市識別碼");
+        var operatorStoreUid = NormalizeOptionalText(operatorContext.StoreUid);
+        var storeEntity = await GetStoreEntityAsync(operatorStoreUid, technicianEntity, cancellationToken);
+        var storeUid = NormalizeRequiredText(
+            operatorStoreUid
+            ?? NormalizeOptionalText(storeEntity?.StoreUid)
+            ?? NormalizeOptionalText(technicianEntity?.StoreUid),
+            "門市識別碼");
+        var storeName = NormalizeRequiredText(
+            storeEntity?.StoreName
+            ?? technicianEntity?.Store?.StoreName,
+            "店鋪名稱");
+
+        if (operatorStoreUid is not null && technicianEntity?.StoreUid is not null &&
+            !string.Equals(operatorStoreUid, technicianEntity.StoreUid, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "登入門市 {OperatorStoreUid} 與技師所屬門市 {TechnicianStoreUid} 不一致，將以登入門市為主。",
+                operatorStoreUid,
+                technicianEntity.StoreUid);
+        }
+
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
-        var operatorUid = NormalizeOptionalText(operatorContext.UserUid);
+        var estimatorUid = NormalizeRequiredText(technicianEntity.TechnicianUid, "估價技師識別碼");
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
@@ -281,8 +303,18 @@ public class QuotationService : IQuotationService
         var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
         var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+        // FixExpect 欄位原以字串儲存修復完成度，需將百分比轉換後寫入以維持舊系統行為。
+        var fixExpectText = FormatEstimatedRestorationPercentage(estimatedRestorationPercentage);
+        var fixTimeHour = maintenanceInfo.FixTimeHour;
+        var fixTimeMin = maintenanceInfo.FixTimeMin;
+        // FixExpect_Day/Hour 需沿用前端填寫的預估工期，若舊欄位仍有資料則保留相容性。
+        var fixExpectDay = maintenanceInfo.EstimatedRepairDays ?? maintenanceInfo.FixExpectDay;
+        var fixExpectHour = maintenanceInfo.EstimatedRepairHours ?? maintenanceInfo.FixExpectHour;
         var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
         var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
+        // 拒絕與建議鈑烤需要落在舊系統欄位，僅在有原因時才啟用旗標並填入內容。
+        var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
+        var panelBeatFlag = !string.IsNullOrEmpty(suggestedPaintReason);
         var roundingDiscount = maintenanceInfo.RoundingDiscount;
         var percentageDiscount = maintenanceInfo.PercentageDiscount;
         var discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
@@ -300,13 +332,49 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
         }
 
-        // 透過車輛主檔補齊車牌、品牌等欄位，並確保車牌為統一的大寫格式。
+        // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
         var carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
-        var licensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼").ToUpperInvariant();
+        var originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
+        // 依需求保留原始車牌的連字號供 CarNoInput 欄位使用，同時統一為大寫格式。
+        var licensePlateWithSymbol = originalLicensePlate.ToUpperInvariant();
+        // 系統實際使用的車牌欄位需移除連字號，方便搜尋與報表統計。
+        var licensePlate = NormalizeLicensePlate(originalLicensePlate);
         var brand = NormalizeOptionalText(carEntity.Brand);
         var model = NormalizeOptionalText(carEntity.Model);
         var color = NormalizeOptionalText(carEntity.Color);
         var carRemark = NormalizeOptionalText(carEntity.CarRemark);
+
+        // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
+        var brandUid = NormalizeOptionalText(carInfo.BrandUid);
+        if (brandUid is null && brand is not null)
+        {
+            var matchedBrandUid = await _context.Brands
+                .AsNoTracking()
+                .Where(entity => entity.BrandName == brand)
+                .Select(entity => entity.BrandUid)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            brandUid = NormalizeOptionalText(matchedBrandUid);
+        }
+
+        var modelUid = NormalizeOptionalText(carInfo.ModelUid);
+        if (modelUid is null && model is not null)
+        {
+            var modelQuery = _context.Models
+                .AsNoTracking()
+                .Where(entity => entity.ModelName == model);
+
+            if (brandUid is not null)
+            {
+                modelQuery = modelQuery.Where(entity => entity.BrandUid == brandUid);
+            }
+
+            var matchedModelUid = await modelQuery
+                .Select(entity => entity.ModelUid)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            modelUid = NormalizeOptionalText(matchedModelUid);
+        }
 
         // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
         var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
@@ -321,38 +389,41 @@ public class QuotationService : IQuotationService
         var customerName = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
         var customerPhone = NormalizeOptionalText(customerEntity.Phone);
         var customerGender = NormalizeOptionalText(customerEntity.Gender);
+        var customerType = NormalizeOptionalText(customerEntity.CustomerType);
+        var customerCounty = NormalizeOptionalText(customerEntity.County);
+        var customerTownship = NormalizeOptionalText(customerEntity.Township);
+        var customerReason = NormalizeOptionalText(customerEntity.Reason);
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
         var normalizedDamages = ExtractDamageList(request);
+        var carBodyConfirmation = request.CarBodyConfirmation;
 
         // 建立日期改由系統產生，減少前端填寫欄位。
-        var createdAt = DateTime.UtcNow;
+        var createdAt = GetTaipeiNow();
         var quotationDate = DateOnly.FromDateTime(createdAt);
         var phoneQuery = NormalizePhoneQuery(customerPhone);
 
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- 系統資料計算區 ----------
-        var serialNumber = await GenerateNextSerialNumberAsync(cancellationToken);
+        var serialNumber = await GenerateNextSerialNumberAsync(createdAt, cancellationToken);
         var quotationUid = BuildQuotationUid();
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
 
-        var extraData = new QuotationExtraData
-        {
-            CarBodyConfirmation = request.CarBodyConfirmation,
-            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null,
-            OtherFee = otherFee,
-            RoundingDiscount = roundingDiscount,
-            PercentageDiscount = percentageDiscount,
-            DiscountReason = discountReason,
-            EstimatedRepairDays = estimatedRepairDays,
-            EstimatedRepairHours = estimatedRepairHours,
-            EstimatedRestorationPercentage = estimatedRestorationPercentage,
-            SuggestedPaintReason = suggestedPaintReason,
-            UnrepairableReason = unrepairableReason
-        };
-
+        // remark 改以包裝 JSON 儲存傷痕、簽名與折扣資訊，仍保留純文字備註於 PlainRemark。
+        var extraData = BuildExtraData(
+            normalizedDamages,
+            carBodyConfirmation,
+            otherFee,
+            roundingDiscount,
+            percentageDiscount,
+            discountReason,
+            estimatedRepairDays,
+            estimatedRepairHours,
+            estimatedRestorationPercentage,
+            suggestedPaintReason,
+            unrepairableReason);
         var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
         var valuation = CalculateTotalAmount(normalizedDamages, otherFee, roundingDiscount, percentageDiscount);
 
@@ -368,15 +439,18 @@ public class QuotationService : IQuotationService
             CreatedBy = creatorName,
             ModificationTimestamp = createdAt,
             ModifiedBy = operatorLabel,
-            UserUid = operatorUid,
+            UserUid = estimatorUid,
             Date = quotationDate,
             StoreUid = storeUid,
-            TechnicianUid = technicianEntity?.TechnicianUid,
+            TechnicianUid = estimatorUid,
+            Status = "110",
+            Status110Timestamp = createdAt,
+            Status110User = storeName,
+            CurrentStatusDate = createdAt,
             CurrentStatusUser = storeName,
-            UserName = estimatorName ?? operatorLabel,
+            UserName = estimatorName,
             BookDate = reservationDate,
             FixDate = repairDate,
-            Source = source,
             FixTypeUid = fixTypeUid,
             FixType = fixTypeName,
             CarReserved = reserveCarFlag,
@@ -386,10 +460,12 @@ public class QuotationService : IQuotationService
             ToolTest = toolFlag,
             CarUid = carUid,
             CarNo = licensePlate,
-            CarNoInput = licensePlate,
-            CarNoInputGlobal = licensePlate,
+            CarNoInput = licensePlateWithSymbol,
+            CarNoInputGlobal = licensePlateWithSymbol,
             Brand = brand,
             Model = model,
+            BrandUid = brandUid,
+            ModelUid = modelUid,
             BrandModel = BuildBrandModel(brand, model),
             Color = color,
             CarRemark = carRemark,
@@ -399,24 +475,44 @@ public class QuotationService : IQuotationService
             PhoneInput = customerPhone,
             PhoneInputGlobal = phoneQuery ?? customerPhone,
             Gender = customerGender,
-            CustomerType = customerSource,
+            // 客戶屬性與聯絡地址改由顧客主檔帶入，確保估價單與客戶資訊一致。
+            CustomerType = customerType,
+            County = customerCounty,
+            Township = customerTownship,
+            Reason = customerReason,
             ConnectRemark = customerRemark,
+            // 消息來源優先採用門市輸入，若門市未提供則以客戶主檔資料補齊。
+            Source = source ?? customerSource,
             Remark = remarkPayload,
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
             DiscountReason = discountReason,
-            Valuation = valuation
+            Valuation = valuation,
+            FixTimeHour = fixTimeHour,
+            FixTimeMin = fixTimeMin,
+            FixExpect = fixExpectText,
+            FixExpectDay = fixExpectDay,
+            FixExpectHour = fixExpectHour,
+            // 拒絕欄位以布林記錄，資料庫會自動轉換為 tinyint(1)。
+            Reject = rejectFlag ? true : null,
+            RejectReason = rejectFlag ? unrepairableReason : null,
+            // PanelBeat 仍採用 1/空白 字串以符合舊系統慣例。
+            PanelBeat = panelBeatFlag ? "1" : null,
+            PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null
         };
 
         await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
 
         // 將建立流程中帶入的所有 PhotoUID 一次綁定到新建立的估價單。
-        var photoUids = CollectPhotoUids(request);
+        var photoUids = CollectPhotoUids(normalizedDamages, carBodyConfirmation);
         if (photoUids.Count > 0)
         {
             await _photoService.BindToQuotationAsync(quotationEntity.QuotationUid, photoUids, cancellationToken);
         }
+
+        await SyncDamagePhotoMetadataAsync(normalizedDamages, carBodyConfirmation?.SignaturePhotoUid, cancellationToken);
+        await MarkSignaturePhotoAsync(carBodyConfirmation?.SignaturePhotoUid, cancellationToken);
 
         _logger.LogInformation("操作人員 {Operator} 建立估價單 {QuotationUid} ({QuotationNo}) 成功。", operatorLabel, quotationEntity.QuotationUid, quotationEntity.QuotationNo);
 
@@ -483,16 +579,26 @@ public class QuotationService : IQuotationService
         }
 
         var normalizedDamages = damages ?? new List<QuotationDamageItem>();
+        normalizedDamages = await NormalizeDamagesWithPhotoDataAsync(
+            quotation.QuotationUid,
+            normalizedDamages,
+            extraData?.CarBodyConfirmation?.SignaturePhotoUid,
+            cancellationToken);
         var maintenanceRemark = plainRemark;
         var otherFee = extraData?.OtherFee;
         var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
         var percentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
         var discountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
-        var estimatedRepairDays = extraData?.EstimatedRepairDays;
-        var estimatedRepairHours = extraData?.EstimatedRepairHours;
-        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
-        var suggestedPaintReason = NormalizeOptionalText(extraData?.SuggestedPaintReason);
-        var unrepairableReason = NormalizeOptionalText(extraData?.UnrepairableReason);
+        // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
+        var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
+        var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
+        // 修復完成度若尚未寫入 remark JSON，需從 FixExpect 字串回推數值供前端使用。
+        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage
+            ?? ParseEstimatedRestorationPercentage(quotation.FixExpect);
+        var suggestedPaintReason = NormalizeOptionalText(quotation.PanelBeatReason)
+            ?? NormalizeOptionalText(extraData?.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(quotation.RejectReason)
+            ?? NormalizeOptionalText(extraData?.UnrepairableReason);
 
         return new QuotationDetailResponse
         {
@@ -509,6 +615,8 @@ public class QuotationService : IQuotationService
                 // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
                 EstimatorName = estimatorName,
                 CreatorName = quotation.CreatedBy,
+                // 估價技師識別碼需與建立估價單時相同，方便前端直接帶入技師選項。
+                TechnicianUid = NormalizeOptionalText(quotation.TechnicianUid),
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
                 Source = quotation.Source,
@@ -520,6 +628,8 @@ public class QuotationService : IQuotationService
                 LicensePlate = quotation.CarNo,
                 Brand = quotation.BrandNavigation?.BrandName ?? quotation.Brand,
                 Model = quotation.ModelNavigation?.ModelName ?? quotation.Model,
+                BrandUid = quotation.BrandUid,
+                ModelUid = quotation.ModelUid,
                 Color = quotation.Color,
                 Remark = quotation.CarRemark
             },
@@ -529,7 +639,11 @@ public class QuotationService : IQuotationService
                 Name = quotation.Name,
                 Phone = quotation.Phone,
                 Gender = quotation.Gender,
-                Source = quotation.CustomerType,
+                CustomerType = quotation.CustomerType,
+                County = quotation.County,
+                Township = quotation.Township,
+                Reason = quotation.Reason,
+                Source = quotation.Source,
                 Remark = quotation.ConnectRemark
             },
             Damages = normalizedDamages,
@@ -550,6 +664,10 @@ public class QuotationService : IQuotationService
                 EstimatedRepairDays = estimatedRepairDays,
                 EstimatedRepairHours = estimatedRepairHours,
                 EstimatedRestorationPercentage = estimatedRestorationPercentage,
+                FixTimeHour = quotation.FixTimeHour,
+                FixTimeMin = quotation.FixTimeMin,
+                FixExpectDay = quotation.FixExpectDay,
+                FixExpectHour = quotation.FixExpectHour,
                 SuggestedPaintReason = suggestedPaintReason,
                 UnrepairableReason = unrepairableReason
             }
@@ -575,49 +693,271 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorName);
         var carInfo = request.Car ?? new QuotationCarInfo();
         var customerInfo = request.Customer ?? new QuotationCustomerInfo();
+        var requestedDamages = request.Damages ?? new List<QuotationDamageItem>();
+        var (plainRemark, existingExtra) = ParseRemark(quotation.Remark);
+        var maintenanceInfo = request.Maintenance;
 
-        quotation.CarNo = NormalizeOptionalText(carInfo.LicensePlate)?.ToUpperInvariant() ?? quotation.CarNo;
-        quotation.CarNoInput = quotation.CarNo;
-        quotation.CarNoInputGlobal = quotation.CarNo;
-        quotation.Brand = NormalizeOptionalText(carInfo.Brand);
-        quotation.Model = NormalizeOptionalText(carInfo.Model);
-        quotation.BrandModel = BuildBrandModel(quotation.Brand, quotation.Model);
-        quotation.Color = NormalizeOptionalText(carInfo.Color);
-        quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
-
-        quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
-        quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
-        quotation.PhoneInput = quotation.Phone;
-        quotation.PhoneInputGlobal = quotation.Phone;
-        quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
-        quotation.CustomerType = NormalizeOptionalText(customerInfo.Source);
-        quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
-
-        var (plainRemark, extraData) = ParseRemark(quotation.Remark);
-        extraData ??= new QuotationExtraData();
-        extraData.ServiceCategories ??= new QuotationServiceCategoryCollection();
-
-        foreach (var kvp in request.CategoryRemarks)
+        // ---------- 車輛資料同步 ----------
+        if (carInfo.LicensePlate is not null)
         {
-            var categoryKey = NormalizeCategoryKey(kvp.Key);
-            if (categoryKey is null)
+            var normalizedPlate = NormalizeOptionalText(carInfo.LicensePlate);
+            if (!string.IsNullOrWhiteSpace(normalizedPlate))
             {
-                continue;
+                var plateWithSymbol = normalizedPlate.ToUpperInvariant();
+                quotation.CarNo = NormalizeLicensePlate(normalizedPlate);
+                quotation.CarNoInput = plateWithSymbol;
+                quotation.CarNoInputGlobal = plateWithSymbol;
             }
-
-            var block = EnsureCategoryBlock(extraData.ServiceCategories, categoryKey);
-            block.Overall.Remark = NormalizeOptionalText(kvp.Value);
         }
 
-        var newRemark = request.Remark is not null
-            ? NormalizeOptionalText(request.Remark)
-            : plainRemark;
+        if (carInfo.Brand is not null)
+        {
+            quotation.Brand = NormalizeOptionalText(carInfo.Brand);
+        }
 
-        quotation.Remark = SerializeRemark(newRemark, extraData);
+        if (carInfo.Model is not null)
+        {
+            quotation.Model = NormalizeOptionalText(carInfo.Model);
+        }
+
+        if (carInfo.BrandUid is not null)
+        {
+            quotation.BrandUid = NormalizeOptionalText(carInfo.BrandUid);
+        }
+
+        if (carInfo.ModelUid is not null)
+        {
+            quotation.ModelUid = NormalizeOptionalText(carInfo.ModelUid);
+        }
+
+        quotation.BrandModel = BuildBrandModel(quotation.Brand, quotation.Model);
+
+        if (carInfo.Color is not null)
+        {
+            quotation.Color = NormalizeOptionalText(carInfo.Color);
+        }
+
+        if (carInfo.Remark is not null)
+        {
+            quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
+        }
+
+        // ---------- 客戶資料同步 ----------
+        quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
+
+        if (customerInfo.Phone is not null)
+        {
+            quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
+            quotation.PhoneInput = quotation.Phone;
+            quotation.PhoneInputGlobal = quotation.Phone;
+        }
+
+        if (customerInfo.Gender is not null)
+        {
+            quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
+        }
+
+        if (customerInfo.CustomerType is not null)
+        {
+            quotation.CustomerType = NormalizeOptionalText(customerInfo.CustomerType);
+        }
+
+        if (customerInfo.County is not null)
+        {
+            quotation.County = NormalizeOptionalText(customerInfo.County);
+        }
+
+        if (customerInfo.Township is not null)
+        {
+            quotation.Township = NormalizeOptionalText(customerInfo.Township);
+        }
+
+        if (customerInfo.Reason is not null)
+        {
+            quotation.Reason = NormalizeOptionalText(customerInfo.Reason);
+        }
+
+        if (customerInfo.Source is not null)
+        {
+            quotation.Source = NormalizeOptionalText(customerInfo.Source);
+        }
+
+        quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+
+        // ---------- 傷痕、簽名與維修資訊同步 ----------
+        var effectiveDamages = requestedDamages.Count > 0
+            ? requestedDamages
+            : existingExtra?.Damages ?? new List<QuotationDamageItem>();
+        var carBodyConfirmation = request.CarBodyConfirmation ?? existingExtra?.CarBodyConfirmation;
+
+        var maintenanceRemark = plainRemark;
+        decimal? otherFee = existingExtra?.OtherFee;
+        decimal? roundingDiscount = quotation.Discount ?? existingExtra?.RoundingDiscount;
+        decimal? percentageDiscount = quotation.DiscountPercent ?? existingExtra?.PercentageDiscount;
+        var discountReason = NormalizeOptionalText(existingExtra?.DiscountReason ?? quotation.DiscountReason);
+        var estimatedRepairDays = quotation.FixExpectDay ?? existingExtra?.EstimatedRepairDays;
+        var estimatedRepairHours = quotation.FixExpectHour ?? existingExtra?.EstimatedRepairHours;
+        var estimatedRestorationPercentage = existingExtra?.EstimatedRestorationPercentage
+            ?? ParseEstimatedRestorationPercentage(quotation.FixExpect);
+        var fixTimeHour = quotation.FixTimeHour;
+        var fixTimeMin = quotation.FixTimeMin;
+        var fixExpectDay = quotation.FixExpectDay ?? estimatedRepairDays;
+        var fixExpectHour = quotation.FixExpectHour ?? estimatedRepairHours;
+        var suggestedPaintReason = NormalizeOptionalText(existingExtra?.SuggestedPaintReason ?? quotation.PanelBeatReason);
+        var unrepairableReason = NormalizeOptionalText(existingExtra?.UnrepairableReason ?? quotation.RejectReason);
+
+        if (maintenanceInfo is not null)
+        {
+            maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark) ?? maintenanceRemark;
+
+            if (!string.IsNullOrWhiteSpace(maintenanceInfo.FixTypeUid) &&
+                !string.Equals(maintenanceInfo.FixTypeUid, quotation.FixTypeUid, StringComparison.OrdinalIgnoreCase))
+            {
+                var fixTypeEntity = await GetFixTypeEntityAsync(maintenanceInfo.FixTypeUid, cancellationToken);
+                quotation.FixTypeUid = NormalizeOptionalText(fixTypeEntity?.FixTypeUid) ?? NormalizeOptionalText(maintenanceInfo.FixTypeUid);
+                quotation.FixType = NormalizeOptionalText(fixTypeEntity?.FixTypeName)
+                    ?? NormalizeOptionalText(maintenanceInfo.FixTypeUid);
+            }
+
+            if (maintenanceInfo.ReserveCar.HasValue)
+            {
+                quotation.CarReserved = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
+            }
+
+            if (maintenanceInfo.ApplyCoating.HasValue)
+            {
+                quotation.Coat = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
+            }
+
+            if (maintenanceInfo.ApplyWrapping.HasValue)
+            {
+                quotation.Envelope = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
+            }
+
+            if (maintenanceInfo.HasRepainted.HasValue)
+            {
+                quotation.Paint = ConvertBooleanToFlag(maintenanceInfo.HasRepainted);
+            }
+
+            if (maintenanceInfo.NeedToolEvaluation.HasValue)
+            {
+                quotation.ToolTest = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
+            }
+
+            if (maintenanceInfo.OtherFee.HasValue)
+            {
+                otherFee = maintenanceInfo.OtherFee;
+            }
+
+            if (maintenanceInfo.RoundingDiscount.HasValue)
+            {
+                roundingDiscount = maintenanceInfo.RoundingDiscount;
+            }
+
+            if (maintenanceInfo.PercentageDiscount.HasValue)
+            {
+                percentageDiscount = maintenanceInfo.PercentageDiscount;
+            }
+
+            if (maintenanceInfo.DiscountReason is not null)
+            {
+                discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
+            }
+
+            if (maintenanceInfo.EstimatedRepairDays.HasValue)
+            {
+                estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
+                fixExpectDay = maintenanceInfo.EstimatedRepairDays;
+            }
+
+            if (maintenanceInfo.EstimatedRepairHours.HasValue)
+            {
+                estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
+                fixExpectHour = maintenanceInfo.EstimatedRepairHours;
+            }
+
+            if (maintenanceInfo.EstimatedRestorationPercentage.HasValue)
+            {
+                estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+            }
+
+            if (maintenanceInfo.FixTimeHour.HasValue)
+            {
+                fixTimeHour = maintenanceInfo.FixTimeHour;
+            }
+
+            if (maintenanceInfo.FixTimeMin.HasValue)
+            {
+                fixTimeMin = maintenanceInfo.FixTimeMin;
+            }
+
+            if (maintenanceInfo.FixExpectDay.HasValue)
+            {
+                fixExpectDay = maintenanceInfo.FixExpectDay;
+            }
+
+            if (maintenanceInfo.FixExpectHour.HasValue)
+            {
+                fixExpectHour = maintenanceInfo.FixExpectHour;
+            }
+
+            if (maintenanceInfo.SuggestedPaintReason is not null)
+            {
+                suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
+            }
+
+            if (maintenanceInfo.UnrepairableReason is not null)
+            {
+                unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
+            }
+        }
+
+        quotation.Discount = roundingDiscount;
+        quotation.DiscountPercent = percentageDiscount;
+        quotation.DiscountReason = discountReason;
+        quotation.FixTimeHour = fixTimeHour;
+        quotation.FixTimeMin = fixTimeMin;
+        quotation.FixExpectDay = fixExpectDay;
+        quotation.FixExpectHour = fixExpectHour;
+        quotation.FixExpect = FormatEstimatedRestorationPercentage(estimatedRestorationPercentage);
+
+        var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
+        quotation.Reject = rejectFlag ? true : null;
+        quotation.RejectReason = rejectFlag ? unrepairableReason : null;
+
+        var panelBeatFlag = !string.IsNullOrEmpty(suggestedPaintReason);
+        quotation.PanelBeat = panelBeatFlag ? "1" : null;
+        quotation.PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null;
+
+        var valuation = CalculateTotalAmount(effectiveDamages, otherFee, roundingDiscount, percentageDiscount);
+        quotation.Valuation = valuation;
+
+        var extraData = BuildExtraData(
+            effectiveDamages,
+            carBodyConfirmation,
+            otherFee,
+            roundingDiscount,
+            percentageDiscount,
+            discountReason,
+            estimatedRepairDays,
+            estimatedRepairHours,
+            estimatedRestorationPercentage,
+            suggestedPaintReason,
+            unrepairableReason);
+        quotation.Remark = SerializeRemark(maintenanceRemark, extraData);
         quotation.ModificationTimestamp = DateTime.UtcNow;
         quotation.ModifiedBy = operatorLabel;
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        var photoUids = CollectPhotoUids(effectiveDamages, carBodyConfirmation);
+        if (photoUids.Count > 0)
+        {
+            await _photoService.BindToQuotationAsync(quotation.QuotationUid, photoUids, cancellationToken);
+        }
+
+        await SyncDamagePhotoMetadataAsync(effectiveDamages, carBodyConfirmation?.SignaturePhotoUid, cancellationToken);
+        await MarkSignaturePhotoAsync(carBodyConfirmation?.SignaturePhotoUid, cancellationToken);
 
         _logger.LogInformation("操作人員 {Operator} 更新估價單 {QuotationUid} 完成。", operatorLabel, quotation.QuotationUid);
     }
@@ -687,31 +1027,176 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 產生下一個估價單序號，使用目前資料庫最大值加一。
     /// </summary>
-    private async Task<int> GenerateNextSerialNumberAsync(CancellationToken cancellationToken)
+    private async Task<int> GenerateNextSerialNumberAsync(DateTime timestamp, CancellationToken cancellationToken)
     {
-        var maxSerial = await _context.Quatations
-            .AsNoTracking()
-            .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+        // 依照當前年月建立序號前綴，確保每月重新由 0001 開始遞增。
+        var prefix = $"Q{timestamp:yyMM}";
 
-        return (maxSerial ?? 0) + 1;
+        // 先以估價單編號前綴搜尋同一個年月的資料，避免跨月序號相互影響。
+        var prefixCandidates = await _context.Quatations
+            .AsNoTracking()
+            .Where(q => !string.IsNullOrEmpty(q.QuotationNo) && EF.Functions.Like(q.QuotationNo!, prefix + "%"))
+            .OrderByDescending(q => q.SerialNum)
+            .ThenByDescending(q => q.QuotationNo)
+            .Select(q => new SerialCandidate(q.SerialNum, q.QuotationNo))
+            .Take(SerialCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+
+        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
+
+        if (maxSerial == 0)
+        {
+            // 若舊資料缺少編號前綴，改用建立時間落在當月的紀錄再次比對，確保同月仍能延續序號。
+            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+
+            var monthCandidates = await _context.Quatations
+                .AsNoTracking()
+                .Where(q => q.CreationTimestamp >= monthStart && q.CreationTimestamp < monthEnd)
+                .OrderByDescending(q => q.SerialNum)
+                .ThenByDescending(q => q.QuotationNo)
+                .Select(q => new SerialCandidate(q.SerialNum, q.QuotationNo))
+                .Take(SerialCandidateFetchCount)
+                .ToListAsync(cancellationToken);
+
+            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
+        }
+
+        return maxSerial + 1;
     }
 
     /// <summary>
-    /// 嘗試依據技師或門市主檔解析出門市識別碼。
+    /// 估價單序號候選資料結構，封裝序號欄位與估價單編號，便於後續解析。
     /// </summary>
-    private static string? ResolveStoreUid(TechnicianEntity? technician, StoreEntity? storeEntity)
+    private sealed record SerialCandidate(int? SerialNum, string? QuotationNo);
+
+    /// <summary>
+    /// 從資料庫撈取的候選資料中取出最大序號，支援從 QuotationNo 解析舊資料的流水號。
+    /// </summary>
+    private static int ExtractMaxSerial(IEnumerable<SerialCandidate> candidates, string prefix)
     {
-        if (!string.IsNullOrWhiteSpace(technician?.StoreUid))
+        var maxSerial = 0;
+
+        foreach (var candidate in candidates)
         {
-            return NormalizeOptionalText(technician!.StoreUid);
+            // 先比對 SerialNum 欄位，若資料表已填寫則直接採用。
+            if (candidate.SerialNum is int serial && serial > maxSerial)
+            {
+                maxSerial = serial;
+            }
+
+            // 再從 QuotationNo 補捉舊資料留下的序號數字，避免序號回到 0001。
+            if (candidate.QuotationNo is string quotationNo)
+            {
+                var parsedSerial = TryParseSerialFromQuotationNo(quotationNo, prefix);
+                if (parsedSerial.HasValue && parsedSerial.Value > maxSerial)
+                {
+                    maxSerial = parsedSerial.Value;
+                }
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(storeEntity?.StoreUid))
+        return maxSerial;
+    }
+
+    /// <summary>
+    /// 嘗試從估價單編號中解析四碼流水號，支援舊格式保留的連字號或其他符號。
+    /// </summary>
+    private static int? TryParseSerialFromQuotationNo(string? quotationNo, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(quotationNo))
         {
-            return NormalizeOptionalText(storeEntity!.StoreUid);
+            return null;
+        }
+
+        var trimmed = quotationNo.Trim();
+        if (!trimmed.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var suffix = trimmed[prefix.Length..];
+        if (string.IsNullOrWhiteSpace(suffix))
+        {
+            return null;
+        }
+
+        var digits = new string(suffix.Where(char.IsDigit).ToArray());
+        if (string.IsNullOrEmpty(digits))
+        {
+            return null;
+        }
+
+        return int.TryParse(digits, out var serialNumber) ? serialNumber : null;
+    }
+
+    /// <summary>
+    /// 將修復完成度百分比轉為資料表 FixExpect 欄位使用的字串格式。
+    /// </summary>
+    private static string? FormatEstimatedRestorationPercentage(decimal? percentage)
+    {
+        if (!percentage.HasValue)
+        {
+            return null;
+        }
+
+        // 固定使用不帶百分號的字串並採用 InvariantCulture，避免不同語系造成小數點格式差異。
+        return percentage.Value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 將 FixExpect 字串解析為修復完成度百分比數值，支援舊資料保留的百分號格式。
+    /// </summary>
+    private static decimal? ParseEstimatedRestorationPercentage(string? fixExpect)
+    {
+        if (string.IsNullOrWhiteSpace(fixExpect))
+        {
+            return null;
+        }
+
+        var trimmed = fixExpect.Trim();
+
+        if (trimmed.EndsWith("%", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[..^1];
+        }
+
+        // 先以 InvariantCulture 嘗試解析，確保與格式化時行為一致。
+        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantValue))
+        {
+            return invariantValue;
+        }
+
+        // 若資料源於舊系統語系設定，也允許使用目前文化格式解析。
+        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.CurrentCulture, out var currentValue))
+        {
+            return currentValue;
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 依據登入門市或技師所屬門市載入門市主檔資料。
+    /// </summary>
+    private async Task<StoreEntity?> GetStoreEntityAsync(string? storeUid, TechnicianEntity? technician, CancellationToken cancellationToken)
+    {
+        var normalizedStoreUid = NormalizeOptionalText(storeUid);
+        if (normalizedStoreUid is not null)
+        {
+            var store = await _context.Stores
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedStoreUid, cancellationToken);
+
+            if (store is null)
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料，請重新選擇門市。");
+            }
+
+            return store;
+        }
+
+        return await GetStoreEntityAsync(technician, cancellationToken);
     }
 
     /// <summary>
@@ -739,7 +1224,7 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 根據技師或門市識別碼取得門市主檔資料，確保後續可自動帶入店鋪名稱。
+    /// 根據技師所屬門市取得門市主檔資料，提供登入門市缺漏時的備援。
     /// </summary>
     private async Task<StoreEntity?> GetStoreEntityAsync(TechnicianEntity? technician, CancellationToken cancellationToken)
     {
@@ -876,25 +1361,6 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 將備註與擴充資料序列化為 JSON 字串，統一儲存格式。
-    /// </summary>
-    private static string SerializeRemark(string? remark, QuotationExtraData? extra)
-    {
-        if (string.IsNullOrWhiteSpace(remark) && extra is null)
-        {
-            return string.Empty;
-        }
-
-        var envelope = new QuotationRemarkEnvelope
-        {
-            PlainRemark = NormalizeOptionalText(remark),
-            Extra = extra
-        };
-
-        return JsonSerializer.Serialize(envelope, JsonOptions);
-    }
-
-    /// <summary>
     /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
     /// </summary>
     private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee, decimal? roundingDiscount, decimal? percentageDiscount)
@@ -954,24 +1420,110 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 整理建立估價單請求內所有的照片識別碼，避免遺漏綁定。
+    /// 將 remark 內容轉換為儲存格式，必要時包裝擴充資料。
     /// </summary>
-    private static List<string> CollectPhotoUids(CreateQuotationRequest request)
+    private static string SerializeRemark(string? plainRemark, QuotationExtraData? extraData)
+    {
+        var normalizedRemark = NormalizeOptionalText(plainRemark);
+        if (extraData is null)
+        {
+            return normalizedRemark ?? string.Empty;
+        }
+
+        var envelope = new QuotationRemarkEnvelope
+        {
+            Version = 2,
+            PlainRemark = normalizedRemark,
+            Extra = extraData
+        };
+
+        return JsonSerializer.Serialize(envelope, JsonOptions);
+    }
+
+    /// <summary>
+    /// 建立 remark 擴充資料，集中儲存傷痕、簽名與折扣資訊。
+    /// </summary>
+    private static QuotationExtraData? BuildExtraData(
+        List<QuotationDamageItem> damages,
+        QuotationCarBodyConfirmation? carBody,
+        decimal? otherFee,
+        decimal? roundingDiscount,
+        decimal? percentageDiscount,
+        string? discountReason,
+        int? estimatedRepairDays,
+        int? estimatedRepairHours,
+        decimal? estimatedRestorationPercentage,
+        string? suggestedPaintReason,
+        string? unrepairableReason)
+    {
+        var hasDamages = damages is { Count: > 0 };
+        var hasCarBody = HasCarBodyContent(carBody);
+        var hasMaintenanceExtra = otherFee.HasValue
+            || roundingDiscount.HasValue
+            || percentageDiscount.HasValue
+            || !string.IsNullOrWhiteSpace(discountReason)
+            || estimatedRepairDays.HasValue
+            || estimatedRepairHours.HasValue
+            || estimatedRestorationPercentage.HasValue
+            || !string.IsNullOrWhiteSpace(suggestedPaintReason)
+            || !string.IsNullOrWhiteSpace(unrepairableReason);
+
+        if (!hasDamages && !hasCarBody && !hasMaintenanceExtra)
+        {
+            return null;
+        }
+
+        return new QuotationExtraData
+        {
+            Damages = hasDamages ? damages : null,
+            CarBodyConfirmation = hasCarBody ? carBody : null,
+            OtherFee = otherFee,
+            RoundingDiscount = roundingDiscount,
+            PercentageDiscount = percentageDiscount,
+            DiscountReason = discountReason,
+            EstimatedRepairDays = estimatedRepairDays,
+            EstimatedRepairHours = estimatedRepairHours,
+            EstimatedRestorationPercentage = estimatedRestorationPercentage,
+            SuggestedPaintReason = suggestedPaintReason,
+            UnrepairableReason = unrepairableReason
+        };
+    }
+
+    /// <summary>
+    /// 判斷車體確認單是否包含需儲存的內容。
+    /// </summary>
+    private static bool HasCarBodyContent(QuotationCarBodyConfirmation? carBody)
+    {
+        if (carBody is null)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrWhiteSpace(carBody.AnnotatedImage)
+            || !string.IsNullOrWhiteSpace(carBody.SignaturePhotoUid)
+            || !string.IsNullOrWhiteSpace(carBody.Signature)
+            || (carBody.DamageMarkers is { Count: > 0 });
+    }
+
+    /// <summary>
+    /// 整理需要綁定的照片識別碼，避免遺漏傷痕或簽名圖片。
+    /// </summary>
+    private static List<string> CollectPhotoUids(IEnumerable<QuotationDamageItem> damages, QuotationCarBodyConfirmation? carBody)
     {
         var uniqueUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         static void TryAdd(HashSet<string> buffer, string? value)
         {
-            if (string.IsNullOrWhiteSpace(value))
+            var normalized = NormalizeOptionalText(value);
+            if (normalized is null)
             {
                 return;
             }
 
-            buffer.Add(value.Trim());
+            buffer.Add(normalized);
         }
 
-        var damages = ExtractDamageList(request);
-        if (damages.Count > 0)
+        if (damages is not null)
         {
             foreach (var damage in damages)
             {
@@ -1000,15 +1552,368 @@ public class QuotationService : IQuotationService
             }
         }
 
-        if (request.CarBodyConfirmation is { } body)
+        if (carBody is not null)
         {
-            // 車體確認單僅需綁定簽名圖片，舊欄位仍保留以相容歷史資料。
-            TryAdd(uniqueUids, body.AnnotatedImage);
-            TryAdd(uniqueUids, body.SignaturePhotoUid);
-            TryAdd(uniqueUids, body.Signature);
+            // 車體確認單目前僅需簽名圖片，仍保留舊欄位避免歷史資料遺漏。
+            TryAdd(uniqueUids, carBody.AnnotatedImage);
+            TryAdd(uniqueUids, carBody.SignaturePhotoUid);
+            TryAdd(uniqueUids, carBody.Signature);
         }
 
         return uniqueUids.ToList();
+    }
+
+    /// <summary>
+    /// 將傷痕欄位同步至照片主檔，確保舊系統也能讀取到位置與金額資訊。
+    /// </summary>
+    private async Task SyncDamagePhotoMetadataAsync(IEnumerable<QuotationDamageItem> damages, string? signaturePhotoUid, CancellationToken cancellationToken)
+    {
+        if (damages is null)
+        {
+            return;
+        }
+
+        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount)>();
+        var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            var position = NormalizeOptionalText(damage.DisplayPosition);
+            var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
+            var description = NormalizeOptionalText(damage.DisplayDescription);
+            var amount = damage.DisplayEstimatedAmount;
+
+            foreach (var photoUid in EnumerateDamagePhotoUids(damage))
+            {
+                if (photoUid is null)
+                {
+                    continue;
+                }
+
+                if (normalizedSignatureUid is not null && string.Equals(photoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                metadata.Add((photoUid, position, dentStatus, description, amount));
+            }
+        }
+
+        if (metadata.Count == 0)
+        {
+            return;
+        }
+
+        var photoUids = metadata
+            .Select(item => item.PhotoUid)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (photoUids.Count == 0)
+        {
+            return;
+        }
+
+        var photos = await _context.PhotoData
+            .Where(photo => photoUids.Contains(photo.PhotoUid))
+            .ToListAsync(cancellationToken);
+
+        var updated = false;
+
+        foreach (var photo in photos)
+        {
+            var info = metadata.LastOrDefault(item => string.Equals(item.PhotoUid, photo.PhotoUid, StringComparison.OrdinalIgnoreCase));
+            if (info.PhotoUid is null)
+            {
+                continue;
+            }
+
+            var comment = BuildDamageComment(info.Position, info.DentStatus, info.Description, info.Amount);
+
+            if (photo.Posion != info.Position)
+            {
+                photo.Posion = info.Position;
+                updated = true;
+            }
+
+            if (photo.PhotoShapeShow != info.DentStatus)
+            {
+                photo.PhotoShapeShow = info.DentStatus;
+                updated = true;
+            }
+
+            if (photo.Comment != comment)
+            {
+                photo.Comment = comment;
+                updated = true;
+            }
+
+            if (photo.Cost != info.Amount)
+            {
+                photo.Cost = info.Amount;
+                updated = true;
+            }
+        }
+
+        if (updated)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 將簽名照片標記為簽名用途，方便舊系統辨識。
+    /// </summary>
+    private async Task MarkSignaturePhotoAsync(string? signaturePhotoUid, CancellationToken cancellationToken)
+    {
+        var normalizedUid = NormalizeOptionalText(signaturePhotoUid);
+        if (normalizedUid is null)
+        {
+            return;
+        }
+
+        var photo = await _context.PhotoData
+            .FirstOrDefaultAsync(entity => entity.PhotoUid == normalizedUid, cancellationToken);
+
+        if (photo is null)
+        {
+            return;
+        }
+
+        var updated = false;
+
+        if (!string.Equals(photo.Comment, "簽名", StringComparison.Ordinal))
+        {
+            photo.Comment = "簽名";
+            updated = true;
+        }
+
+        if (!string.Equals(photo.PhotoShapeShow, "簽名", StringComparison.Ordinal))
+        {
+            photo.PhotoShapeShow = "簽名";
+            updated = true;
+        }
+
+        if (updated)
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// 依據照片主檔補齊傷痕欄位，兼容尚未寫入 remark JSON 的舊資料。
+    /// </summary>
+    private async Task<List<QuotationDamageItem>> NormalizeDamagesWithPhotoDataAsync(
+        string? quotationUid,
+        List<QuotationDamageItem> damages,
+        string? signaturePhotoUid,
+        CancellationToken cancellationToken)
+    {
+        var normalizedQuotationUid = NormalizeOptionalText(quotationUid);
+        if (normalizedQuotationUid is null)
+        {
+            return damages;
+        }
+
+        var photos = await _context.PhotoData
+            .AsNoTracking()
+            .Where(photo => photo.QuotationUid == normalizedQuotationUid)
+            .ToListAsync(cancellationToken);
+
+        if (photos.Count == 0)
+        {
+            return damages;
+        }
+
+        var filteredPhotos = photos
+            .Where(photo => string.IsNullOrWhiteSpace(signaturePhotoUid)
+                || !string.Equals(photo.PhotoUid, signaturePhotoUid, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (damages.Count == 0)
+        {
+            return BuildDamagesFromPhotoData(filteredPhotos);
+        }
+
+        EnrichDamagesFromPhotoData(damages, filteredPhotos);
+        return damages;
+    }
+
+    /// <summary>
+    /// 由照片資料建立傷痕清單，供舊資料回傳使用。
+    /// </summary>
+    private static List<QuotationDamageItem> BuildDamagesFromPhotoData(IEnumerable<PhotoDatum> photos)
+    {
+        var result = new List<QuotationDamageItem>();
+
+        foreach (var photo in photos)
+        {
+            var photoUid = NormalizeOptionalText(photo?.PhotoUid);
+            if (photoUid is null)
+            {
+                continue;
+            }
+
+            var damage = new QuotationDamageItem
+            {
+                DisplayPhotos = new List<QuotationDamagePhoto>
+                {
+                    new()
+                    {
+                        PhotoUid = photoUid,
+                        Description = photo?.Comment,
+                        IsPrimary = true
+                    }
+                },
+                DisplayPosition = photo?.Posion,
+                DisplayDentStatus = photo?.PhotoShapeShow,
+                DisplayDescription = photo?.Comment,
+                DisplayEstimatedAmount = photo?.Cost
+            };
+
+            result.Add(damage);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 使用照片主檔補齊現有傷痕欄位，避免資料遺失。
+    /// </summary>
+    private static void EnrichDamagesFromPhotoData(List<QuotationDamageItem> damages, IReadOnlyCollection<PhotoDatum> photos)
+    {
+        if (damages.Count == 0 || photos.Count == 0)
+        {
+            return;
+        }
+
+        var photoLookup = photos
+            .Where(photo => !string.IsNullOrWhiteSpace(photo.PhotoUid))
+            .ToDictionary(photo => photo.PhotoUid!, photo => photo, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            foreach (var photoUid in EnumerateDamagePhotoUids(damage))
+            {
+                if (photoUid is null || !photoLookup.TryGetValue(photoUid, out var photo))
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.DisplayPosition) && !string.IsNullOrWhiteSpace(photo.Posion))
+                {
+                    damage.DisplayPosition = photo.Posion;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.DisplayDentStatus) && !string.IsNullOrWhiteSpace(photo.PhotoShapeShow))
+                {
+                    damage.DisplayDentStatus = photo.PhotoShapeShow;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.DisplayDescription) && !string.IsNullOrWhiteSpace(photo.Comment))
+                {
+                    damage.DisplayDescription = photo.Comment;
+                }
+
+                if (!damage.DisplayEstimatedAmount.HasValue && photo.Cost.HasValue)
+                {
+                    damage.DisplayEstimatedAmount = photo.Cost;
+                }
+
+                if (damage.Photos is { Count: > 0 })
+                {
+                    foreach (var photoInfo in damage.Photos)
+                    {
+                        if (photoInfo is null)
+                        {
+                            continue;
+                        }
+
+                        var normalizedUid = NormalizeOptionalText(photoInfo.PhotoUid) ?? NormalizeOptionalText(photoInfo.File);
+                        if (normalizedUid is null || !string.Equals(normalizedUid, photo.PhotoUid, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(photoInfo.Description) && !string.IsNullOrWhiteSpace(photo.Comment))
+                        {
+                            photoInfo.Description = photo.Comment;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 逐一列出傷痕項目所對應的照片識別碼。
+    /// </summary>
+    private static IEnumerable<string?> EnumerateDamagePhotoUids(QuotationDamageItem damage)
+    {
+        var primary = NormalizeOptionalText(damage.Photo);
+        if (primary is not null)
+        {
+            yield return primary;
+        }
+
+        if (damage.Photos is not { Count: > 0 })
+        {
+            yield break;
+        }
+
+        foreach (var photo in damage.Photos)
+        {
+            if (photo is null)
+            {
+                continue;
+            }
+
+            var uid = NormalizeOptionalText(photo.PhotoUid) ?? NormalizeOptionalText(photo.File);
+            if (uid is not null)
+            {
+                yield return uid;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 將傷痕資訊轉換成照片註解文字，方便人員辨識。
+    /// </summary>
+    private static string? BuildDamageComment(string? position, string? dentStatus, string? description, decimal? amount)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(position))
+        {
+            parts.Add($"位置：{position}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(dentStatus))
+        {
+            parts.Add($"狀況：{dentStatus}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(description))
+        {
+            parts.Add($"說明：{description}");
+        }
+
+        if (amount.HasValue)
+        {
+            parts.Add($"預估金額：{amount.Value:0.##}");
+        }
+
+        return parts.Count == 0 ? null : string.Join(" / ", parts);
     }
 
     /// <summary>
@@ -1144,6 +2049,20 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
+    /// 轉換車牌為僅保留數字與字母的大寫格式，移除中間的連字號或特殊符號。
+    /// </summary>
+    private static string NormalizeLicensePlate(string plate)
+    {
+        var filtered = new string(plate.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(filtered))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "車牌號碼格式不正確，請重新輸入。");
+        }
+
+        return filtered;
+    }
+
+    /// <summary>
     /// 將電話轉換為僅包含數字的查詢字串。
     /// </summary>
     private static string? NormalizePhoneQuery(string? phone)
@@ -1160,14 +2079,10 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將布林旗標轉換為資料庫慣用的 Y / N 字元。
     /// </summary>
-    private static string? ConvertBooleanToFlag(bool? value)
+    private static string ConvertBooleanToFlag(bool? value)
     {
-        if (!value.HasValue)
-        {
-            return null;
-        }
-
-        return value.Value ? "Y" : "N";
+        // 將布林轉為舊系統慣用的「1 / 空白」格式，方便沿用既有報表邏輯。
+        return value.HasValue && value.Value ? "1" : string.Empty;
     }
 
     /// <summary>
@@ -1177,7 +2092,7 @@ public class QuotationService : IQuotationService
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return null;
+            return false;
         }
 
         var normalized = value.Trim().ToLowerInvariant();
@@ -1201,6 +2116,33 @@ public class QuotationService : IQuotationService
 
         // 僅保留日期部分，確保與資料庫 DateOnly 欄位一致。
         return DateOnly.FromDateTime(value.Value.Date);
+    }
+
+    /// <summary>
+    /// 取得台北當地時間，並在系統缺少時區資訊時退回 +8 小時補正。
+    /// </summary>
+    private static DateTime GetTaipeiNow()
+    {
+        var utcNow = DateTime.UtcNow;
+
+        foreach (var zoneId in TaipeiTimeZoneIds)
+        {
+            try
+            {
+                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+                return TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // 若伺服器不支援該時區 ID，繼續嘗試下一組。
+            }
+            catch (InvalidTimeZoneException)
+            {
+                // 若時區設定異常，同樣嘗試下一組 ID。
+            }
+        }
+
+        return utcNow.AddHours(8);
     }
 
     // ---------- 生命週期 ----------
