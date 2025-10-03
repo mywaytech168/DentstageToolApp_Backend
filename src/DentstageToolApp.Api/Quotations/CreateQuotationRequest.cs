@@ -119,12 +119,12 @@ public class CreateQuotationMaintenanceInfo
     public decimal? OtherFee { get; set; }
 
     /// <summary>
-    /// 預估施工花費的天數，提供前端呈現整體工期。
+    /// 預估施工花費的天數，建立時會同步寫入舊系統的 FixExpect_Day 欄位。
     /// </summary>
     public int? EstimatedRepairDays { get; set; }
 
     /// <summary>
-    /// 預估施工花費的時數，可對應半天內完工等情境。
+    /// 預估施工花費的時數，建立時會同步寫入舊系統的 FixExpect_Hour 欄位。
     /// </summary>
     public int? EstimatedRepairHours { get; set; }
 
@@ -154,12 +154,12 @@ public class CreateQuotationMaintenanceInfo
     public int? FixExpectHour { get; set; }
 
     /// <summary>
-    /// 建議改採鈑烤處理的原因描述。
+    /// 建議改採鈑烤處理的原因描述，若有內容會將 PanelBeat 欄位設為 "1"。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
 
     /// <summary>
-    /// 無法修復時的原因說明，供前端與客戶溝通使用。
+    /// 無法修復時的原因說明，若有內容會將 Reject 欄位標記為 true。
     /// </summary>
     public string? UnrepairableReason { get; set; }
 
@@ -281,12 +281,12 @@ public class QuotationMaintenanceInfo
     public decimal? OtherFee { get; set; }
 
     /// <summary>
-    /// 預估花費天數。
+    /// 預估花費天數，對應資料表的 FixExpect_Day 欄位。
     /// </summary>
     public int? EstimatedRepairDays { get; set; }
 
     /// <summary>
-    /// 預估花費時數。
+    /// 預估花費時數，對應資料表的 FixExpect_Hour 欄位。
     /// </summary>
     public int? EstimatedRepairHours { get; set; }
 
@@ -316,12 +316,12 @@ public class QuotationMaintenanceInfo
     public int? FixExpectHour { get; set; }
 
     /// <summary>
-    /// 建議改採鈑烤處理的原因。
+    /// 建議改採鈑烤處理的原因，若有內容會將 PanelBeat 欄位設為 "1"。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
 
     /// <summary>
-    /// 無法修復時的原因。
+    /// 無法修復時的原因，若有內容會將 Reject 欄位標記為 true。
     /// </summary>
     public string? UnrepairableReason { get; set; }
 

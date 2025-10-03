@@ -304,10 +304,14 @@ public class QuotationService : IQuotationService
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
         var fixTimeHour = maintenanceInfo.FixTimeHour;
         var fixTimeMin = maintenanceInfo.FixTimeMin;
-        var fixExpectDay = maintenanceInfo.FixExpectDay;
-        var fixExpectHour = maintenanceInfo.FixExpectHour;
+        // FixExpect_Day/Hour 需沿用前端填寫的預估工期，若舊欄位仍有資料則保留相容性。
+        var fixExpectDay = maintenanceInfo.EstimatedRepairDays ?? maintenanceInfo.FixExpectDay;
+        var fixExpectHour = maintenanceInfo.EstimatedRepairHours ?? maintenanceInfo.FixExpectHour;
         var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
         var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
+        // 拒絕與建議鈑烤需要落在舊系統欄位，僅在有原因時才啟用旗標並填入內容。
+        var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
+        var panelBeatFlag = !string.IsNullOrEmpty(suggestedPaintReason);
         var roundingDiscount = maintenanceInfo.RoundingDiscount;
         var percentageDiscount = maintenanceInfo.PercentageDiscount;
         var discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
@@ -399,22 +403,8 @@ public class QuotationService : IQuotationService
         var quotationUid = BuildQuotationUid();
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
 
-        var extraData = new QuotationExtraData
-        {
-            CarBodyConfirmation = request.CarBodyConfirmation,
-            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null,
-            OtherFee = otherFee,
-            RoundingDiscount = roundingDiscount,
-            PercentageDiscount = percentageDiscount,
-            DiscountReason = discountReason,
-            EstimatedRepairDays = estimatedRepairDays,
-            EstimatedRepairHours = estimatedRepairHours,
-            EstimatedRestorationPercentage = estimatedRestorationPercentage,
-            SuggestedPaintReason = suggestedPaintReason,
-            UnrepairableReason = unrepairableReason
-        };
-
-        var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
+        // remark 欄位維持原始備註字串，避免舊系統讀取時出現 JSON 格式。
+        var remarkPayload = maintenanceRemark ?? string.Empty;
         var valuation = CalculateTotalAmount(normalizedDamages, otherFee, roundingDiscount, percentageDiscount);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -476,7 +466,13 @@ public class QuotationService : IQuotationService
             FixTimeHour = fixTimeHour,
             FixTimeMin = fixTimeMin,
             FixExpectDay = fixExpectDay,
-            FixExpectHour = fixExpectHour
+            FixExpectHour = fixExpectHour,
+            // 拒絕欄位以布林記錄，資料庫會自動轉換為 tinyint(1)。
+            Reject = rejectFlag ? true : null,
+            RejectReason = rejectFlag ? unrepairableReason : null,
+            // PanelBeat 仍採用 1/空白 字串以符合舊系統慣例。
+            PanelBeat = panelBeatFlag ? "1" : null,
+            PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null
         };
 
         await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
@@ -559,11 +555,14 @@ public class QuotationService : IQuotationService
         var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
         var percentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
         var discountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
-        var estimatedRepairDays = extraData?.EstimatedRepairDays;
-        var estimatedRepairHours = extraData?.EstimatedRepairHours;
+        // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
+        var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
+        var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
         var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
-        var suggestedPaintReason = NormalizeOptionalText(extraData?.SuggestedPaintReason);
-        var unrepairableReason = NormalizeOptionalText(extraData?.UnrepairableReason);
+        var suggestedPaintReason = NormalizeOptionalText(quotation.PanelBeatReason)
+            ?? NormalizeOptionalText(extraData?.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(quotation.RejectReason)
+            ?? NormalizeOptionalText(extraData?.UnrepairableReason);
 
         return new QuotationDetailResponse
         {
@@ -674,27 +673,12 @@ public class QuotationService : IQuotationService
         quotation.CustomerType = NormalizeOptionalText(customerInfo.Source);
         quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
 
-        var (plainRemark, extraData) = ParseRemark(quotation.Remark);
-        extraData ??= new QuotationExtraData();
-        extraData.ServiceCategories ??= new QuotationServiceCategoryCollection();
-
-        foreach (var kvp in request.CategoryRemarks)
-        {
-            var categoryKey = NormalizeCategoryKey(kvp.Key);
-            if (categoryKey is null)
-            {
-                continue;
-            }
-
-            var block = EnsureCategoryBlock(extraData.ServiceCategories, categoryKey);
-            block.Overall.Remark = NormalizeOptionalText(kvp.Value);
-        }
-
+        var (plainRemark, _) = ParseRemark(quotation.Remark);
         var newRemark = request.Remark is not null
             ? NormalizeOptionalText(request.Remark)
             : plainRemark;
 
-        quotation.Remark = SerializeRemark(newRemark, extraData);
+        quotation.Remark = newRemark ?? string.Empty;
         quotation.ModificationTimestamp = DateTime.UtcNow;
         quotation.ModifiedBy = operatorLabel;
 
@@ -1053,25 +1037,6 @@ public class QuotationService : IQuotationService
         {
             return (remark, null);
         }
-    }
-
-    /// <summary>
-    /// 將備註與擴充資料序列化為 JSON 字串，統一儲存格式。
-    /// </summary>
-    private static string SerializeRemark(string? remark, QuotationExtraData? extra)
-    {
-        if (string.IsNullOrWhiteSpace(remark) && extra is null)
-        {
-            return string.Empty;
-        }
-
-        var envelope = new QuotationRemarkEnvelope
-        {
-            PlainRemark = NormalizeOptionalText(remark),
-            Extra = extra
-        };
-
-        return JsonSerializer.Serialize(envelope, JsonOptions);
     }
 
     /// <summary>
