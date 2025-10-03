@@ -40,6 +40,148 @@
           }
         }
       }
+    },
+    "/api/quotations/create": {
+      "post": {
+        "tags": [
+          "Quotations"
+        ],
+        "summary": "新增估價單",
+        "description": "建立估價單時的請求格式示例，其中 damages.photos 僅需填入主要照片的 PhotoUID 字串。",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "store": {
+                    "type": "object",
+                    "description": "門市來源與技師資訊。",
+                    "properties": {
+                      "technicianUid": {
+                        "type": "string",
+                        "description": "估價技師的 UID。"
+                      },
+                      "source": {
+                        "type": "string",
+                        "description": "客戶來源描述。"
+                      }
+                    }
+                  },
+                  "car": {
+                    "type": "object",
+                    "description": "車輛相關識別資訊。",
+                    "properties": {
+                      "carUid": {
+                        "type": "string",
+                        "description": "車輛主檔 UID。"
+                      }
+                    }
+                  },
+                  "customer": {
+                    "type": "object",
+                    "description": "客戶主檔資訊。",
+                    "properties": {
+                      "customerUid": {
+                        "type": "string",
+                        "description": "客戶 UID。"
+                      }
+                    }
+                  },
+                  "damages": {
+                    "type": "array",
+                    "description": "傷痕列表，每筆僅回傳主要照片 UID。",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "photos": {
+                          "type": "string",
+                          "description": "主要傷痕照片的 PhotoUID 字串。"
+                        },
+                        "position": {
+                          "type": "string",
+                          "description": "傷痕位置描述。"
+                        },
+                        "dentStatus": {
+                          "type": "string",
+                          "description": "凹痕狀態敘述。"
+                        },
+                        "description": {
+                          "type": "string",
+                          "description": "備註說明。"
+                        },
+                        "estimatedAmount": {
+                          "type": "number",
+                          "description": "預估金額。"
+                        }
+                      },
+                      "required": [
+                        "photos"
+                      ]
+                    }
+                  },
+                  "carBodyConfirmation": {
+                    "type": "object",
+                    "description": "車體確認資訊與簽名。",
+                    "properties": {
+                      "signaturePhotoUid": {
+                        "type": "string",
+                        "description": "簽名照片的 PhotoUID。"
+                      }
+                    }
+                  },
+                  "maintenance": {
+                    "type": "object",
+                    "description": "維修設定與折扣資訊。",
+                    "properties": {
+                      "estimatedRestorationPercentage": {
+                        "type": "integer",
+                        "description": "預估修復完成度百分比。"
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "store": {
+                  "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+                  "source": "官方網站"
+                },
+                "car": {
+                  "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
+                },
+                "customer": {
+                  "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
+                },
+                "damages": [
+                  {
+                    "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                    "position": "保桿",
+                    "dentStatus": "大面積",
+                    "description": "需板金搭配烤漆",
+                    "estimatedAmount": 4500
+                  }
+                ],
+                "carBodyConfirmation": {
+                  "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8"
+                },
+                "maintenance": {
+                  "estimatedRestorationPercentage": 90
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "建立成功，回傳估價單編號。"
+          },
+          "400": {
+            "description": "請求參數有誤或缺少必要欄位。"
+          }
+        }
+      }
     }
   },
   "components": {

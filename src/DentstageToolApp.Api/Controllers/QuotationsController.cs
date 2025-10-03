@@ -105,13 +105,7 @@ public class QuotationsController : ControllerBase
           },
           "damages": [
             {
-              "photos": [
-                {
-                  "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                  "description": "位置：保桿 / 狀況：大面積 / 說明：需板金搭配烤漆 / 預估金額：4500",
-                  "isPrimary": true
-                }
-              ],
+              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
               "position": "保桿",
               "dentStatus": "大面積",
               "description": "需板金搭配烤漆",
@@ -252,13 +246,7 @@ public class QuotationsController : ControllerBase
           "remark": "預計 3/8 完成",
           "damages": [
             {
-              "photos": [
-                {
-                  "photoUid": "Ph_40F81F71-19C4-48FF-AC6A-1CFB07B8BE9B",
-                  "description": "位置：後保桿 / 狀況：輕微凹陷 / 說明：需拆卸調整並搭配烤漆 / 預估金額：3500",
-                  "isPrimary": true
-                }
-              ],
+              "photos": "Ph_40F81F71-19C4-48FF-AC6A-1CFB07B8BE9B",
               "position": "後保桿",
               "dentStatus": "輕微凹陷",
               "description": "需拆卸調整並搭配烤漆",
