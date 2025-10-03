@@ -137,6 +137,7 @@ public class QuotationDamageItem
 
     /// <summary>
     /// 新欄位：提供前端使用英文欄位「photos」，並將資料寫入共用清單。
+    /// 序列化回傳時會輸出主要圖片的 PhotoUID 字串，以符合新版欄位需求。
     /// </summary>
     [JsonPropertyName("photos")]
     public List<QuotationDamagePhoto> DisplayPhotos
@@ -363,27 +364,19 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
     }
 
     /// <summary>
-    /// 序列化時優先輸出物件格式，若有多筆資料則回退為陣列避免資訊遺失。
+    /// 序列化時一律輸出陣列格式，避免前端遇到單筆資料時需要額外處理型別差異。
     /// </summary>
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageItem> value, JsonSerializerOptions options)
     {
-        if (value is null || value.Count == 0)
-        {
-            writer.WriteStartObject();
-            writer.WriteEndObject();
-            return;
-        }
-
-        if (value.Count == 1)
-        {
-            WriteSingleDamage(writer, value[0], options);
-            return;
-        }
-
+        // 依最新需求統一輸出陣列格式，避免前端遇到單筆時需額外判斷物件型別。
         writer.WriteStartArray();
-        foreach (var item in value)
+
+        if (value is { Count: > 0 })
         {
-            JsonSerializer.Serialize(writer, item, options);
+            foreach (var item in value)
+            {
+                WriteSingleDamage(writer, item, options);
+            }
         }
 
         writer.WriteEndArray();
@@ -394,6 +387,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
     /// </summary>
     private static void WriteSingleDamage(Utf8JsonWriter writer, QuotationDamageItem? item, JsonSerializerOptions options)
     {
+        _ = options; // 目前輸出僅需主要圖片識別碼，因此未使用額外序列化選項。
         var target = item ?? new QuotationDamageItem();
 
         writer.WriteStartObject();
@@ -401,9 +395,11 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         writer.WritePropertyName("photos");
         var photos = target.Photos ?? new List<QuotationDamagePhoto>();
 
-        if (photos.Count > 0)
+        // 對外僅回傳主要圖片的 PhotoUID，確保欄位型別為字串符合前端期待。
+        var primaryPhotoUid = photos.FirstOrDefault(static p => !string.IsNullOrWhiteSpace(p?.PhotoUid))?.PhotoUid;
+        if (!string.IsNullOrWhiteSpace(primaryPhotoUid))
         {
-            JsonSerializer.Serialize(writer, photos, options);
+            writer.WriteStringValue(primaryPhotoUid!.Trim());
         }
         else
         {
