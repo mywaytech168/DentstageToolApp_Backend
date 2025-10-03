@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace DentstageToolApp.Api.Quotations;
 
@@ -56,6 +57,11 @@ public class QuotationDetailResponse
     /// 服務類別資料。
     /// </summary>
     public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
+
+    /// <summary>
+    /// 傷痕細項列表，配合新版格式於頂層呈現，方便前端直接渲染表格。
+    /// </summary>
+    public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
     /// 類別金額總覽。

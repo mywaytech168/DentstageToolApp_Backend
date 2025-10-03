@@ -317,6 +317,8 @@ public class QuotationService : IQuotationService
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
         var plainRemark = NormalizeOptionalText(request.Remark);
+        var normalizedDamages = ExtractDamageList(request);
+        var sanitizedCategories = CloneCategoriesWithoutDamages(request.ServiceCategories);
 
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = DateTime.UtcNow;
@@ -332,13 +334,14 @@ public class QuotationService : IQuotationService
 
         var extraData = new QuotationExtraData
         {
-            ServiceCategories = request.ServiceCategories,
+            ServiceCategories = sanitizedCategories,
             CategoryTotal = request.CategoryTotal,
-            CarBodyConfirmation = request.CarBodyConfirmation
+            CarBodyConfirmation = request.CarBodyConfirmation,
+            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null
         };
 
         var remarkPayload = SerializeRemark(plainRemark, extraData);
-        var valuation = CalculateTotalAmount(request.CategoryTotal, request.ServiceCategories);
+        var valuation = CalculateTotalAmount(request.CategoryTotal, sanitizedCategories);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -453,6 +456,23 @@ public class QuotationService : IQuotationService
             }
         }
 
+        var serviceCategories = extraData?.ServiceCategories;
+        var damages = extraData?.Damages;
+
+        if (serviceCategories is not null)
+        {
+            if (damages is null || damages.Count == 0)
+            {
+                var legacyDamages = FlattenCategoryDamages(serviceCategories);
+                if (legacyDamages.Count > 0)
+                {
+                    damages = legacyDamages;
+                }
+            }
+
+            serviceCategories = CloneCategoriesWithoutDamages(serviceCategories);
+        }
+
         return new QuotationDetailResponse
         {
             QuotationUid = quotation.QuotationUid,
@@ -492,7 +512,8 @@ public class QuotationService : IQuotationService
                 Remark = quotation.ConnectRemark
             },
             Remark = plainRemark,
-            ServiceCategories = extraData?.ServiceCategories,
+            ServiceCategories = serviceCategories,
+            Damages = damages ?? new List<QuotationDamageItem>(),
             CategoryTotal = extraData?.CategoryTotal,
             CarBodyConfirmation = extraData?.CarBodyConfirmation,
             Maintenance = new QuotationMaintenanceInfo
@@ -910,27 +931,32 @@ public class QuotationService : IQuotationService
             buffer.Add(value.Trim());
         }
 
-        if (request.ServiceCategories is { } categories)
+        var damages = ExtractDamageList(request);
+        if (damages.Count > 0)
         {
-            foreach (var block in EnumerateCategoryBlocks(categories))
+            foreach (var damage in damages)
             {
-                foreach (var damage in block.Damages)
+                if (damage is null)
                 {
-                    TryAdd(uniqueUids, damage.Photo);
+                    continue;
+                }
 
-                    if (damage.Photos is { Count: > 0 })
+                TryAdd(uniqueUids, damage.Photo);
+
+                if (damage.Photos is not { Count: > 0 })
+                {
+                    continue;
+                }
+
+                foreach (var photo in damage.Photos)
+                {
+                    if (photo is null)
                     {
-                        foreach (var photo in damage.Photos)
-                        {
-                            if (photo is null)
-                            {
-                                continue;
-                            }
-
-                            TryAdd(uniqueUids, photo.PhotoUid);
-                            TryAdd(uniqueUids, photo.File);
-                        }
+                        continue;
                     }
+
+                    TryAdd(uniqueUids, photo.PhotoUid);
+                    TryAdd(uniqueUids, photo.File);
                 }
             }
         }
@@ -966,6 +992,127 @@ public class QuotationService : IQuotationService
         }
 
         return uniqueUids.ToList();
+    }
+
+    /// <summary>
+    /// 從建立估價單請求中取得傷痕列表，優先使用新版獨立欄位，若未提供則回退舊版類別結構。
+    /// </summary>
+    private static List<QuotationDamageItem> ExtractDamageList(CreateQuotationRequest request)
+    {
+        if (request.Damages is { Count: > 0 })
+        {
+            return request.Damages;
+        }
+
+        if (request.ServiceCategories is null)
+        {
+            return new List<QuotationDamageItem>();
+        }
+
+        return FlattenCategoryDamages(request.ServiceCategories);
+    }
+
+    /// <summary>
+    /// 將服務類別內的傷痕集合轉換為單一清單，供相容性處理使用。
+    /// </summary>
+    private static List<QuotationDamageItem> FlattenCategoryDamages(QuotationServiceCategoryCollection categories)
+    {
+        var damages = new List<QuotationDamageItem>();
+
+        foreach (var block in EnumerateCategoryBlocks(categories))
+        {
+            if (block.Damages is not { Count: > 0 })
+            {
+                continue;
+            }
+
+            foreach (var damage in block.Damages)
+            {
+                if (damage is not null)
+                {
+                    damages.Add(damage);
+                }
+            }
+        }
+
+        return damages;
+    }
+
+    /// <summary>
+    /// 針對 remark 需儲存的服務類別資料建立淺層複本並移除舊版傷痕欄位，避免重複儲存資料。
+    /// </summary>
+    private static QuotationServiceCategoryCollection? CloneCategoriesWithoutDamages(QuotationServiceCategoryCollection? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+
+        return new QuotationServiceCategoryCollection
+        {
+            Dent = CloneCategoryBlockWithoutDamages(source.Dent),
+            Paint = CloneCategoryBlockWithoutDamages(source.Paint),
+            Other = CloneCategoryBlockWithoutDamages(source.Other)
+        };
+    }
+
+    /// <summary>
+    /// 建立單一類別區塊的複本並移除傷痕列表。
+    /// </summary>
+    private static QuotationCategoryBlock? CloneCategoryBlockWithoutDamages(QuotationCategoryBlock? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+
+        return new QuotationCategoryBlock
+        {
+            Overall = CloneCategoryOverall(source.Overall),
+            Damages = null,
+            Amount = CloneCategoryAmount(source.Amount)
+        };
+    }
+
+    /// <summary>
+    /// 建立類別整體資訊的複本，確保序列化時不受原參考影響。
+    /// </summary>
+    private static QuotationCategoryOverallInfo CloneCategoryOverall(QuotationCategoryOverallInfo? source)
+    {
+        if (source is null)
+        {
+            return new QuotationCategoryOverallInfo();
+        }
+
+        return new QuotationCategoryOverallInfo
+        {
+            PaintCondition = source.PaintCondition,
+            ToolEvaluation = source.ToolEvaluation,
+            NeedStay = source.NeedStay,
+            Remark = source.Remark,
+            EstimatedRepairTime = source.EstimatedRepairTime,
+            EstimatedRestorationLevel = source.EstimatedRestorationLevel,
+            IsRepairable = source.IsRepairable
+        };
+    }
+
+    /// <summary>
+    /// 建立類別金額資訊的複本，避免後續操作異動原始資料。
+    /// </summary>
+    private static QuotationCategoryAmount CloneCategoryAmount(QuotationCategoryAmount? source)
+    {
+        if (source is null)
+        {
+            return new QuotationCategoryAmount();
+        }
+
+        return new QuotationCategoryAmount
+        {
+            DamageSubtotal = source.DamageSubtotal,
+            AdditionalFee = source.AdditionalFee,
+            DiscountPercentage = source.DiscountPercentage,
+            DiscountReason = source.DiscountReason
+        };
     }
 
     /// <summary>
@@ -1164,5 +1311,10 @@ public class QuotationService : IQuotationService
         /// 車體確認單資料。
         /// </summary>
         public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
+
+        /// <summary>
+        /// 傷痕細項列表，配合新版格式與服務類別拆分存放。
+        /// </summary>
+        public List<QuotationDamageItem>? Damages { get; set; }
     }
 }
