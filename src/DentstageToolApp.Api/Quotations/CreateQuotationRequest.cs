@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace DentstageToolApp.Api.Quotations;
 
@@ -29,7 +30,9 @@ public class CreateQuotationRequest
 
     /// <summary>
     /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
+    /// 透過自訂轉換器支援舊版單物件與新版陣列格式，降低前端調整負擔。
     /// </summary>
+    [JsonConverter(typeof(QuotationDamageCollectionConverter))]
     public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
