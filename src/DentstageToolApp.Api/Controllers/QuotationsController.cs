@@ -181,13 +181,13 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
-    /// 取得單一估價單的詳細資料。
+    /// 取得單一估價單的詳細資料，改以估價單編號作為查詢依據。
     /// </summary>
     [HttpPost("detail")]
     [SwaggerMockRequestExample(
         """
         {
-          "quotationUid": "QTN-20240301-0001"
+          "quotationNo": "Q25070001"
         }
         """)]
     [ProducesResponseType(typeof(QuotationDetailResponse), StatusCodes.Status200OK)]

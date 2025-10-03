@@ -532,6 +532,13 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單查詢條件。");
         }
 
+        // 估價單明細頁改以編號為唯一依據，因此在進行查詢前先正規化並檢核是否有帶入資料。
+        var quotationNo = NormalizeOptionalText(request.QuotationNo);
+        if (quotationNo is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單編號。");
+        }
+
         var query = _context.Quatations
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
@@ -539,7 +546,7 @@ public class QuotationService : IQuotationService
             .Include(q => q.ModelNavigation)
             .Include(q => q.FixTypeNavigation);
 
-        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, FixTypeEntity?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
+        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, FixTypeEntity?>)ApplyQuotationFilter(query, null, quotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
@@ -969,14 +976,15 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static IQueryable<Quatation> ApplyQuotationFilter(IQueryable<Quatation> query, string? quotationUid, string? quotationNo)
     {
-        if (!string.IsNullOrWhiteSpace(quotationUid))
-        {
-            return query.Where(q => q.QuotationUid == quotationUid);
-        }
-
+        // 明細查詢改以估價單編號為主，因此先以編號比對；若舊端仍傳入 UID 則保留向後相容。
         if (!string.IsNullOrWhiteSpace(quotationNo))
         {
             return query.Where(q => q.QuotationNo == quotationNo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(quotationUid))
+        {
+            return query.Where(q => q.QuotationUid == quotationUid);
         }
 
         throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單識別資訊。");
