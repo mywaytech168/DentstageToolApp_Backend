@@ -103,7 +103,7 @@ public class CarsController : ControllerBase
     /// <remarks>
     /// {
     ///   "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
-    ///   "carPlateNumber": "AAA-5678",
+    ///   "carPlateNumber": "AAA-1233",
     ///   "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
     ///   "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
     ///   "color": "黑",
