@@ -977,6 +977,47 @@ public class QuotationService : IQuotationService
     }
 
     /// <inheritdoc />
+    public async Task<QuotationStatusChangeResponse> CompleteEvaluationAsync(QuotationEvaluateRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價完成的參數。");
+        }
+
+        // 估價單編號為必要欄位，缺少時直接終止流程。
+        var quotationNo = EnsureRequestHasQuotationNo(request);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 透過估價單編號尋找可更新的實體。
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需標記估價完成的估價單。");
+        }
+
+        // 僅允許從 110(估價中) 或已是 180 狀態再標記為估價完成，避免破壞狀態流程。
+        var currentStatus = NormalizeOptionalText(quotation.Status);
+        if (currentStatus is not null && currentStatus != "110" && currentStatus != "180")
+        {
+            var statusLabel = string.IsNullOrWhiteSpace(quotation.Status) ? "未知" : quotation.Status;
+            throw new QuotationManagementException(HttpStatusCode.Conflict, $"估價單目前狀態為 {statusLabel}，無法標記為估價完成。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        // 統一透過狀態稽核方法寫入狀態與操作時間，確保歷史記錄完整。
+        ApplyStatusAudit(quotation, "180", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 標記為估價完成。", operatorLabel, quotation.QuotationNo);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <inheritdoc />
     public async Task<QuotationStatusChangeResponse> CancelQuotationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken)
     {
         if (request is null)
