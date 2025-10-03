@@ -41,6 +41,14 @@ public interface IQuotationService
     Task UpdateQuotationAsync(UpdateQuotationRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 將估價單標記為估價完成，狀態更新為 180。
+    /// </summary>
+    /// <param name="request">估價完成請求，需帶入估價單編號。</param>
+    /// <param name="operatorName">操作人員名稱。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    Task<QuotationStatusChangeResponse> CompleteEvaluationAsync(QuotationEvaluateRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 取消估價單或預約，將狀態調整為 195 並記錄操作資訊。
     /// </summary>
     Task<QuotationStatusChangeResponse> CancelQuotationAsync(QuotationCancelRequest request, string operatorName, CancellationToken cancellationToken);
