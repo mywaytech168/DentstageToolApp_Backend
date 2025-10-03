@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DentstageToolApp.Api.Quotations;
 
@@ -37,8 +40,9 @@ public class QuotationCategoryBlock
     public QuotationCategoryOverallInfo Overall { get; set; } = new();
 
     /// <summary>
-    /// 傷痕細項列表，紀錄各位置的照片與估價金額。
+    /// 傷痕細項列表，序列化時會轉換成單一物件（圖片、位置、凹痕狀況、說明、預估金額）以符合前端需求。
     /// </summary>
+    [JsonConverter(typeof(QuotationDamageCollectionConverter))]
     public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
@@ -98,32 +102,388 @@ public class QuotationDamageItem
     /// 傳統版本僅支援單張照片，保留此欄位以維持相容性。
     /// </summary>
     [Obsolete("請改用 Photos 集合傳遞多張傷痕圖片。")]
+    [JsonIgnore]
     public string? Photo { get; set; }
 
     /// <summary>
-    /// 傷痕相關的圖片列表，支援多角度或不同標註的影像。
+    /// 舊欄位別名，允許仍以 photo 傳值，但輸出時隱藏英文欄位。
     /// </summary>
+    [JsonPropertyName("photo")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPhoto
+    {
+        get => null;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
+    /// </summary>
+    [JsonIgnore]
     public List<QuotationDamagePhoto> Photos { get; set; } = new();
 
     /// <summary>
-    /// 傷痕所在位置描述，例如左前門或後保桿。
+    /// 新欄位：提供前端顯示「圖片」欄位使用，並將資料寫入共用清單。
     /// </summary>
+    [JsonPropertyName("圖片")]
+    public List<QuotationDamagePhoto> DisplayPhotos
+    {
+        get => Photos;
+        set => Photos = value ?? new List<QuotationDamagePhoto>();
+    }
+
+    /// <summary>
+    /// 舊欄位對應，仍允許前端傳入 photos 以保留相容性，輸出時隱藏。
+    /// </summary>
+    [JsonPropertyName("photos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<QuotationDamagePhoto>? LegacyPhotos
+    {
+        get => null;
+        set
+        {
+            // 舊欄位仍可寫入，若為 null 則建立空集合以免殘留舊資料。
+            Photos = value ?? new List<QuotationDamagePhoto>();
+        }
+    }
+
+    /// <summary>
+    /// 內部使用的位置字串，供新舊欄位共用。
+    /// </summary>
+    [JsonIgnore]
     public string? Position { get; set; }
 
     /// <summary>
-    /// 凹痕狀況或受損程度描述。
+    /// 新欄位：提供中文欄位名稱「位置」，方便前端直接對應表格欄位。
     /// </summary>
+    [JsonPropertyName("位置")]
+    public string? DisplayPosition
+    {
+        get => Position;
+        set => Position = value;
+    }
+
+    /// <summary>
+    /// 舊欄位位置，仍接受 position 以兼容舊版請求，序列化時不輸出。
+    /// </summary>
+    [JsonPropertyName("position")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPosition
+    {
+        get => null;
+        set => Position = value;
+    }
+
+    /// <summary>
+    /// 內部使用的凹痕狀態描述。
+    /// </summary>
+    [JsonIgnore]
     public string? DentStatus { get; set; }
 
     /// <summary>
-    /// 備註或補充說明，可記錄施工方式。
+    /// 新欄位：前端顯示中文「凹痕狀況」，與舊資料共用同一來源。
     /// </summary>
+    [JsonPropertyName("凹痕狀況")]
+    public string? DisplayDentStatus
+    {
+        get => DentStatus;
+        set => DentStatus = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 dentStatus，輸出時不顯示英文欄位。
+    /// </summary>
+    [JsonPropertyName("dentStatus")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyDentStatus
+    {
+        get => null;
+        set => DentStatus = value;
+    }
+
+    /// <summary>
+    /// 內部使用的備註內容。
+    /// </summary>
+    [JsonIgnore]
     public string? Description { get; set; }
 
     /// <summary>
-    /// 該傷痕預估的施工金額。
+    /// 新欄位：中文欄位名稱「說明」，提供表單直接綁定。
     /// </summary>
+    [JsonPropertyName("說明")]
+    public string? DisplayDescription
+    {
+        get => Description;
+        set => Description = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 description，避免舊版呼叫失效。
+    /// </summary>
+    [JsonPropertyName("description")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyDescription
+    {
+        get => null;
+        set => Description = value;
+    }
+
+    /// <summary>
+    /// 內部使用的估價金額。
+    /// </summary>
+    [JsonIgnore]
     public decimal? EstimatedAmount { get; set; }
+
+    /// <summary>
+    /// 新欄位：中文欄位名稱「預估金額」，傳入時同步寫入內部欄位。
+    /// </summary>
+    [JsonPropertyName("預估金額")]
+    public decimal? DisplayEstimatedAmount
+    {
+        get => EstimatedAmount;
+        set => EstimatedAmount = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：接受 estimatedAmount，確保與舊版資料格式相容。
+    /// </summary>
+    [JsonPropertyName("estimatedAmount")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? LegacyEstimatedAmount
+    {
+        get => null;
+        set => EstimatedAmount = value;
+    }
+}
+
+/// <summary>
+/// 傷痕集合的自訂序列化器，將內部列表轉換成單一物件，並保留與舊版陣列格式的相容性。
+/// </summary>
+public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDamageItem>>
+{
+    /// <summary>
+    /// 反序列化時允許同時接受陣列與物件格式，確保舊資料不會壞檔。
+    /// </summary>
+    public override List<QuotationDamageItem> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null)
+        {
+            return new List<QuotationDamageItem>();
+        }
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var result = new List<QuotationDamageItem>();
+
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                var item = element.Deserialize<QuotationDamageItem>(options);
+                if (item is not null)
+                {
+                    result.Add(item);
+                }
+            }
+
+            return result;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            using var document = JsonDocument.ParseValue(ref reader);
+            var root = document.RootElement;
+            var item = new QuotationDamageItem
+            {
+                DisplayPhotos = ReadPhotoList(root, options),
+                DisplayPosition = ReadString(root, "位置", "position"),
+                DisplayDentStatus = ReadString(root, "凹痕狀況", "dentStatus"),
+                DisplayDescription = ReadString(root, "說明", "description"),
+                DisplayEstimatedAmount = ReadDecimal(root, "預估金額", "estimatedAmount")
+            };
+
+            return new List<QuotationDamageItem> { item };
+        }
+
+        throw new JsonException("傷痕資料格式不符，請提供物件或陣列。");
+    }
+
+    /// <summary>
+    /// 序列化時優先輸出物件格式，若有多筆資料則回退為陣列避免資訊遺失。
+    /// </summary>
+    public override void Write(Utf8JsonWriter writer, List<QuotationDamageItem> value, JsonSerializerOptions options)
+    {
+        if (value is null || value.Count == 0)
+        {
+            writer.WriteStartObject();
+            writer.WriteEndObject();
+            return;
+        }
+
+        if (value.Count == 1)
+        {
+            WriteSingleDamage(writer, value[0], options);
+            return;
+        }
+
+        writer.WriteStartArray();
+        foreach (var item in value)
+        {
+            JsonSerializer.Serialize(writer, item, options);
+        }
+
+        writer.WriteEndArray();
+    }
+
+    /// <summary>
+    /// 將單一傷痕輸出為前端期待的物件格式。
+    /// </summary>
+    private static void WriteSingleDamage(Utf8JsonWriter writer, QuotationDamageItem? item, JsonSerializerOptions options)
+    {
+        var target = item ?? new QuotationDamageItem();
+
+        writer.WriteStartObject();
+
+        writer.WritePropertyName("圖片");
+        JsonSerializer.Serialize(writer, target.DisplayPhotos ?? new List<QuotationDamagePhoto>(), options);
+
+        writer.WritePropertyName("位置");
+        WriteNullableString(writer, target.DisplayPosition);
+
+        writer.WritePropertyName("凹痕狀況");
+        WriteNullableString(writer, target.DisplayDentStatus);
+
+        writer.WritePropertyName("說明");
+        WriteNullableString(writer, target.DisplayDescription);
+
+        writer.WritePropertyName("預估金額");
+        if (target.DisplayEstimatedAmount.HasValue)
+        {
+            writer.WriteNumberValue(target.DisplayEstimatedAmount.Value);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+
+        writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// 讀取圖片集合，支援陣列與單一物件寫法。
+    /// </summary>
+    private static List<QuotationDamagePhoto> ReadPhotoList(JsonElement root, JsonSerializerOptions options)
+    {
+        if (!TryGetProperty(root, out var element, "圖片", "photos", "photo"))
+        {
+            return new List<QuotationDamagePhoto>();
+        }
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.Array => DeserializePhotoArray(element, options),
+            JsonValueKind.Object => new List<QuotationDamagePhoto>
+            {
+                element.Deserialize<QuotationDamagePhoto>(options) ?? new QuotationDamagePhoto()
+            },
+            _ => new List<QuotationDamagePhoto>()
+        };
+    }
+
+    /// <summary>
+    /// 嘗試從物件中讀取字串欄位，並允許同時匹配多組欄位名稱。
+    /// </summary>
+    private static string? ReadString(JsonElement root, string primaryName, params string[] alternateNames)
+    {
+        if (!TryGetProperty(root, out var element, primaryName, alternateNames))
+        {
+            return null;
+        }
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.GetDecimal().ToString(CultureInfo.InvariantCulture),
+            JsonValueKind.True => bool.TrueString,
+            JsonValueKind.False => bool.FalseString,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// 嘗試將指定欄位轉換成 decimal，支援字串與數字輸入。
+    /// </summary>
+    private static decimal? ReadDecimal(JsonElement root, string primaryName, params string[] alternateNames)
+    {
+        if (!TryGetProperty(root, out var element, primaryName, alternateNames))
+        {
+            return null;
+        }
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number when element.TryGetDecimal(out var number) => number,
+            JsonValueKind.String when decimal.TryParse(element.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// 從 JsonElement 中依序嘗試取得欄位。
+    /// </summary>
+    private static bool TryGetProperty(JsonElement root, out JsonElement element, string primaryName, params string[] alternateNames)
+    {
+        if (root.TryGetProperty(primaryName, out element))
+        {
+            return true;
+        }
+
+        foreach (var name in alternateNames)
+        {
+            if (!string.IsNullOrWhiteSpace(name) && root.TryGetProperty(name, out element))
+            {
+                return true;
+            }
+        }
+
+        element = default;
+        return false;
+    }
+
+    /// <summary>
+    /// 將圖片陣列轉換為物件列表。
+    /// </summary>
+    private static List<QuotationDamagePhoto> DeserializePhotoArray(JsonElement element, JsonSerializerOptions options)
+    {
+        var photos = new List<QuotationDamagePhoto>();
+
+        foreach (var photoElement in element.EnumerateArray())
+        {
+            if (photoElement.ValueKind == JsonValueKind.Object)
+            {
+                var photo = photoElement.Deserialize<QuotationDamagePhoto>(options);
+                if (photo is not null)
+                {
+                    photos.Add(photo);
+                }
+            }
+        }
+
+        return photos;
+    }
+
+    /// <summary>
+    /// 依據字串是否為 null 決定輸出空值或實際內容。
+    /// </summary>
+    private static void WriteNullableString(Utf8JsonWriter writer, string? value)
+    {
+        if (value is null)
+        {
+            writer.WriteNullValue();
+            return;
+        }
+
+        writer.WriteStringValue(value);
+    }
 }
 
 /// <summary>

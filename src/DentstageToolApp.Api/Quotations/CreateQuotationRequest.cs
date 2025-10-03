@@ -42,6 +42,11 @@ public class CreateQuotationRequest
     public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
 
     /// <summary>
+    /// 維修需求設定，包含維修類型與常見的處理選項。
+    /// </summary>
+    public CreateQuotationMaintenanceInfo Maintenance { get; set; } = new();
+
+    /// <summary>
     /// 估價單整體備註，會以 JSON 包裝儲存在資料庫中。
     /// </summary>
     public string? Remark { get; set; }
@@ -75,6 +80,49 @@ public class CreateQuotationStoreInfo
     /// 預計維修日期，允許前端依需求傳入，若為空則代表尚未排程。
     /// </summary>
     public DateTime? RepairDate { get; set; }
+}
+
+/// <summary>
+/// 建立估價單時需指定的維修設定欄位，統一定義維修類型與相關選項。
+/// </summary>
+public class CreateQuotationMaintenanceInfo
+{
+    /// <summary>
+    /// 維修類型識別碼（UID），用於對應維修類型主檔。
+    /// </summary>
+    [Required(ErrorMessage = "請選擇維修類型。")]
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
+    public string? FixTypeUid { get; set; }
+
+    /// <summary>
+    /// 維修類型名稱，若前端已取得可一併傳入，後端仍會以主檔名稱為準。
+    /// </summary>
+    public string? FixTypeName { get; set; }
+
+    /// <summary>
+    /// 是否需留車，True 代表需要留車。
+    /// </summary>
+    public bool? ReserveCar { get; set; }
+
+    /// <summary>
+    /// 是否需要鍍膜服務。
+    /// </summary>
+    public bool? ApplyCoating { get; set; }
+
+    /// <summary>
+    /// 是否需要包膜服務。
+    /// </summary>
+    public bool? ApplyWrapping { get; set; }
+
+    /// <summary>
+    /// 是否曾經烤漆，供估價時參考歷史處理狀態。
+    /// </summary>
+    public bool? HasRepainted { get; set; }
+
+    /// <summary>
+    /// 是否需要工具評估。
+    /// </summary>
+    public bool? NeedToolEvaluation { get; set; }
 }
 
 /// <summary>
@@ -126,6 +174,47 @@ public class QuotationStoreInfo
     /// 預計維修日期。
     /// </summary>
     public DateTime? RepairDate { get; set; }
+}
+
+/// <summary>
+/// 估價單回傳時的維修設定資訊，與建立時欄位對應。
+/// </summary>
+public class QuotationMaintenanceInfo
+{
+    /// <summary>
+    /// 維修類型識別碼。
+    /// </summary>
+    public string? FixTypeUid { get; set; }
+
+    /// <summary>
+    /// 維修類型名稱，優先使用主檔資料。
+    /// </summary>
+    public string? FixTypeName { get; set; }
+
+    /// <summary>
+    /// 是否需留車。
+    /// </summary>
+    public bool? ReserveCar { get; set; }
+
+    /// <summary>
+    /// 是否需要鍍膜。
+    /// </summary>
+    public bool? ApplyCoating { get; set; }
+
+    /// <summary>
+    /// 是否需要包膜。
+    /// </summary>
+    public bool? ApplyWrapping { get; set; }
+
+    /// <summary>
+    /// 是否曾烤漆。
+    /// </summary>
+    public bool? HasRepainted { get; set; }
+
+    /// <summary>
+    /// 是否需要工具評估。
+    /// </summary>
+    public bool? NeedToolEvaluation { get; set; }
 }
 
 /// <summary>
