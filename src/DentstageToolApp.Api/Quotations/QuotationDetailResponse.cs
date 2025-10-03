@@ -49,9 +49,9 @@ public class QuotationDetailResponse
     public QuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
-    /// 傷痕細項列表，配合新版格式於頂層呈現，方便前端直接渲染表格。
+    /// 傷痕細項列表，採用精簡輸出格式方便前端直接使用主要欄位。
     /// </summary>
-    public List<QuotationDamageItem> Damages { get; set; } = new();
+    public List<QuotationDamageSummary> Damages { get; set; } = new();
 
     /// <summary>
     /// 車體確認單資料。
@@ -62,5 +62,36 @@ public class QuotationDetailResponse
     /// 維修需求設定資料，提供前端回填維修選項。
     /// </summary>
     public QuotationMaintenanceInfo Maintenance { get; set; } = new();
+}
+
+/// <summary>
+/// 估價單傷痕的精簡輸出結構，聚焦於前端需要的核心欄位。
+/// </summary>
+public class QuotationDamageSummary
+{
+    /// <summary>
+    /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
+    /// </summary>
+    public string? Photos { get; set; }
+
+    /// <summary>
+    /// 車身部位或面板位置。
+    /// </summary>
+    public string? Position { get; set; }
+
+    /// <summary>
+    /// 凹痕狀態描述，例如大面積或輕微凹痕。
+    /// </summary>
+    public string? DentStatus { get; set; }
+
+    /// <summary>
+    /// 傷痕說明或處理建議。
+    /// </summary>
+    public string? Description { get; set; }
+
+    /// <summary>
+    /// 預估維修金額。
+    /// </summary>
+    public decimal? EstimatedAmount { get; set; }
 }
 
