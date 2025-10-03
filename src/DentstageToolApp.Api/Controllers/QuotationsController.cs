@@ -311,6 +311,13 @@ public class QuotationsController : ControllerBase
     /// 取消估價單，將狀態改為 195 並記錄操作時間。
     /// </summary>
     [HttpPost("cancel")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001",
+          "reason": "客戶臨時改期"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationStatusChangeResponse>> CancelQuotationAsync([FromBody] QuotationCancelRequest request, CancellationToken cancellationToken)
     {
@@ -346,6 +353,13 @@ public class QuotationsController : ControllerBase
     /// 將估價單轉為預約，寫入預約日期後回傳狀態資訊。
     /// </summary>
     [HttpPost("reserve")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001",
+          "reservationDate": "2024-11-20T10:00:00"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationStatusChangeResponse>> ConvertToReservationAsync([FromBody] QuotationReservationRequest request, CancellationToken cancellationToken)
     {
@@ -381,6 +395,13 @@ public class QuotationsController : ControllerBase
     /// 更改既有預約日期，維持狀態為 190。
     /// </summary>
     [HttpPost("reserve/update")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001",
+          "reservationDate": "2024-11-25T14:30:00"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationStatusChangeResponse>> UpdateReservationDateAsync([FromBody] QuotationReservationRequest request, CancellationToken cancellationToken)
     {
@@ -416,6 +437,14 @@ public class QuotationsController : ControllerBase
     /// 取消既有預約，狀態改為 195 並清除預約日期。
     /// </summary>
     [HttpPost("reserve/cancel")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001",
+          "reason": "客戶無法到場",
+          "clearReservation": true
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationStatusChangeResponse>> CancelReservationAsync([FromBody] QuotationCancelRequest request, CancellationToken cancellationToken)
     {
@@ -451,6 +480,12 @@ public class QuotationsController : ControllerBase
     /// 將估價單狀態回朔至上一個有效狀態。
     /// </summary>
     [HttpPost("reserve/revert")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationStatusChangeResponse>> RevertReservationStatusAsync([FromBody] QuotationRevertStatusRequest request, CancellationToken cancellationToken)
     {
@@ -486,6 +521,12 @@ public class QuotationsController : ControllerBase
     /// 將估價單轉為維修單，回傳新工單編號。
     /// </summary>
     [HttpPost("maintenance")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(QuotationMaintenanceConversionResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<QuotationMaintenanceConversionResponse>> ConvertToMaintenanceAsync([FromBody] QuotationMaintenanceRequest request, CancellationToken cancellationToken)
     {

@@ -1099,6 +1099,11 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorName);
         var now = GetTaipeiNow();
 
+        if (IsCancellationStatus(quotation.Status))
+        {
+            ClearCancellationAudit(quotation);
+        }
+
         ApplyStatusAudit(quotation, previousStatus, operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -1696,6 +1701,26 @@ public class QuotationService : IQuotationService
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 判斷目前狀態是否為取消 (195)。
+    /// </summary>
+    private static bool IsCancellationStatus(string? status)
+    {
+        var normalized = NormalizeOptionalText(status);
+        return string.Equals(normalized, "195", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 回溯狀態時清除取消紀錄，避免保留 199 欄位資訊。
+    /// </summary>
+    private static void ClearCancellationAudit(Quatation quotation)
+    {
+        quotation.Reject = false;
+        quotation.RejectReason = null;
+        quotation.Status199Timestamp = null;
+        quotation.Status199User = null;
     }
 
     /// <summary>
