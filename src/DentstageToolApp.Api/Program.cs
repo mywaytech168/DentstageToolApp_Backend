@@ -20,6 +20,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.FileProviders;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -179,6 +180,19 @@ if (swaggerEnabled)
 
 // 啟用 HTTPS 重新導向，確保外部存取使用安全通道
 app.UseHttpsRedirection();
+
+// 針對 docs 目錄提供靜態檔案服務，讓估價單流程說明頁面可直接透過瀏覽器檢視
+var documentationDirectory = Path.Combine(app.Environment.ContentRootPath, "docs");
+if (Directory.Exists(documentationDirectory))
+{
+    // 使用實體檔案提供者指向 docs 目錄，並以 /docs 作為網址路徑前綴
+    var documentationFileProvider = new PhysicalFileProvider(documentationDirectory);
+    app.UseStaticFiles(new StaticFileOptions
+    {
+        FileProvider = documentationFileProvider,
+        RequestPath = "/docs"
+    });
+}
 
 // 啟用身份驗證與授權流程，確保保護後續 API
 app.UseAuthentication();

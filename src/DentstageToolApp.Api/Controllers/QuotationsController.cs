@@ -105,11 +105,11 @@ public class QuotationsController : ControllerBase
           },
           "damages": [
             {
-              "圖片": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-              "位置": "保桿",
-              "凹痕狀況": "大面積",
-              "說明": "需板金搭配烤漆",
-              "預估金額": 4500
+              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+              "position": "保桿",
+              "dentStatus": "大面積",
+              "description": "需板金搭配烤漆",
+              "estimatedAmount": 4500
             }
           ],
           "carBodyConfirmation": {
@@ -181,13 +181,13 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
-    /// 取得單一估價單的詳細資料。
+    /// 取得單一估價單的詳細資料，改以估價單編號作為查詢依據。
     /// </summary>
     [HttpPost("detail")]
     [SwaggerMockRequestExample(
         """
         {
-          "quotationUid": "QTN-20240301-0001"
+          "quotationNo": "Q25070001"
         }
         """)]
     [ProducesResponseType(typeof(QuotationDetailResponse), StatusCodes.Status200OK)]
@@ -243,7 +243,45 @@ public class QuotationsController : ControllerBase
             "dent": "追加處理左後門凹痕",
             "paint": "等待調色"
           },
-          "remark": "預計 3/8 完成"
+          "remark": "預計 3/8 完成",
+          "damages": [
+            {
+              "photos": "Ph_40F81F71-19C4-48FF-AC6A-1CFB07B8BE9B",
+              "position": "後保桿",
+              "dentStatus": "輕微凹陷",
+              "description": "需拆卸調整並搭配烤漆",
+              "estimatedAmount": 3500
+            }
+          ],
+          "carBodyConfirmation": {
+            "signaturePhotoUid": "Ph_9973BFA3-2E36-45F2-9BDE-AB1D6B7F73B1",
+            "damageMarkers": [
+              {
+                "x": 0.35,
+                "y": 0.62,
+                "hasDent": true,
+                "hasScratch": false,
+                "hasPaintPeel": false,
+                "remark": "主要受損位置"
+              }
+            ]
+          },
+          "maintenance": {
+            "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
+            "reserveCar": false,
+            "applyCoating": false,
+            "applyWrapping": false,
+            "hasRepainted": false,
+            "needToolEvaluation": true,
+            "otherFee": 500,
+            "roundingDiscount": 0,
+            "percentageDiscount": 5,
+            "discountReason": "老客戶回訪",
+            "estimatedRepairDays": 1,
+            "estimatedRepairHours": 6,
+            "estimatedRestorationPercentage": 90,
+            "remark": "更新備註內容"
+          }
         }
         """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -299,7 +337,8 @@ public class QuotationsController : ControllerBase
         return new QuotationOperatorContext
         {
             OperatorName = GetCurrentOperatorName(),
-            UserUid = GetCurrentUserUid()
+            UserUid = GetCurrentUserUid(),
+            StoreUid = GetCurrentStoreUid()
         };
     }
 
@@ -349,6 +388,25 @@ public class QuotationsController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
+    }
+
+    /// <summary>
+    /// 從 JWT 權杖中取出門市識別碼，支援多種常見的 Claim Key 寫法。
+    /// </summary>
+    private string? GetCurrentStoreUid()
+    {
+        // 依序檢查常見欄位名稱，確保不同登入來源皆可正確回傳門市 UID。
+        var claimKeys = new[] { "storeUid", "StoreUid", "storeUID", "StoreUID", "storeId", "StoreId" };
+        foreach (var key in claimKeys)
+        {
+            var value = User.FindFirstValue(key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     // ---------- 生命週期 ----------

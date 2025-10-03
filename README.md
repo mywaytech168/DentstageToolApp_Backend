@@ -9,6 +9,7 @@ DentstageToolApp_Backend/
 ├─ DentstageToolApp_Backend.sln        # 方案檔，統一管理所有後端模組
 ├─ global.json                          # 指定 .NET SDK 版本，確保環境一致
 ├─ docs/
+│  ├─ quotation-create-guide.html       # 新增估價單流程與欄位對照說明頁面
 │  └─ swagger/                          # 匯出的 Swagger 規格文件
 │     └─ dentstage-tool-app-api-v1.json # 初始健康檢查 API 文件
 ├─ src/
@@ -35,6 +36,7 @@ DentstageToolApp_Backend/
 4. 以 `dotnet run --project src/DentstageToolApp.Api` 啟動後端服務。
 5. 服務啟動後，可透過 `https://localhost:7249/swagger` 瀏覽 API 說明文件。
 6. 若需離線瀏覽 API，可打開 `docs/swagger/dentstage-tool-app-api-v1.json` 於 Swagger UI 或 Postman 匯入檢視。
+7. 需要了解新增估價單欄位與流程，可直接開啟 `docs/quotation-create-guide.html` 進行瀏覽。
 
 > 若在本地環境使用 Visual Studio 或 Rider，請直接開啟 `DentstageToolApp_Backend.sln` 方案檔。
 
