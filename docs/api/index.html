@@ -359,7 +359,7 @@
                 <li><strong>分類：</strong> ${(operation.tags || ["未指定"]).join(", ")}</li>
             </ul>
             <p>
-                <a href="${buildSwaggerUiLink()}" target="_blank" rel="noopener">在 Swagger 中測試</a>
+                <a href="${buildSwaggerUiLink(operation.operationId, operation.tags && operation.tags[0])}" target="_blank" rel="noopener">在 Swagger 中測試</a>
             </p>
         `;
         container.appendChild(summaryCard);
@@ -487,17 +487,18 @@
 
         Object.entries(spec.paths).forEach(([path, methods]) => {
             Object.entries(methods).forEach(([method, operation]) => {
-                if (!operation || !operation.operationId) {
+                const ensuredId = ensureOperationId(path, method, operation);
+                if (!operation || !ensuredId) {
                     return;
                 }
                 operations.push({
                     path,
                     method: method.toUpperCase(),
-                    operationId: operation.operationId,
+                    operationId: ensuredId,
                     summary: operation.summary,
                     description: operation.description,
                     tags: operation.tags && operation.tags.length ? operation.tags : ["未指定"],
-                    swaggerUiLink: buildSwaggerUiLink()
+                    swaggerUiLink: buildSwaggerUiLink(ensuredId, operation.tags && operation.tags[0])
                 });
             });
         });
@@ -532,11 +533,12 @@
 
         for (const [path, methods] of Object.entries(spec.paths)) {
             for (const [method, operation] of Object.entries(methods)) {
-                if (operation && operation.operationId === operationId) {
+                const ensuredId = ensureOperationId(path, method, operation);
+                if (operation && ensuredId === operationId) {
                     return {
                         path,
                         method: method.toUpperCase(),
-                        operation
+                        operation: { ...operation, operationId: ensuredId }
                     };
                 }
             }
@@ -548,8 +550,52 @@
     /**
      * 建立 Swagger UI 的直接連結，方便快速測試 API。
      */
-    function buildSwaggerUiLink() {
-        return `${window.location.origin}/swagger/index.html`;
+    function buildSwaggerUiLink(operationId, tag) {
+        const origin = window.location.origin && window.location.origin !== "null"
+            ? window.location.origin
+            : "";
+        const baseUrl = origin ? `${origin}/swagger/index.html` : "/swagger/index.html";
+        if (!operationId) {
+            return baseUrl;
+        }
+
+        // Swagger UI 的錨點組成為 #/分類/OperationId，缺少分類時改用 default 維持定位。
+        const anchorTag = tag && typeof tag === "string" && tag.trim() ? encodeURIComponent(tag) : "default";
+        return `${baseUrl}#/${anchorTag}/${encodeURIComponent(operationId)}`;
+    }
+
+    /**
+     * 確保 Swagger Operation 擁有 operationId，缺漏時以方法與路徑組成備援識別碼。
+     */
+    function ensureOperationId(path, method, operation) {
+        if (!operation) {
+            return null;
+        }
+
+        if (operation.operationId && operation.operationId.trim()) {
+            return operation.operationId;
+        }
+
+        if (!path || !method) {
+            return null;
+        }
+
+        // 移除查詢與大括號後改以底線銜接，避免出現無法作為錨點的符號。
+        const sanitizedPath = path
+            .split(/[?#]/)[0]
+            .replace(/[{}]/g, "")
+            .replace(/[^a-zA-Z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+
+        const baseId = sanitizedPath ? `${method.toUpperCase()}_${sanitizedPath}` : method.toUpperCase();
+        const fallbackId = baseId.replace(/_+/g, "_");
+        if (!fallbackId.trim()) {
+            return null;
+        }
+
+        // 將結果同步回原本物件，讓後續渲染步驟可以直接使用。
+        operation.operationId = fallbackId;
+        return fallbackId;
     }
 
     /**
@@ -605,6 +651,7 @@
         }
 
         if (refName && visited.has(refName)) {
+            // 為避免循環參考造成無限遞迴，此處偵測到重複引用時直接輸出提醒。
             block.appendChild(createEmptyState("為避免循環參考，已略過重複的結構。"));
             return block;
         }
