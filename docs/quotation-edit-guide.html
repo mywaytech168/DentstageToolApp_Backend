@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <title>新增估價單流程說明</title>
+  <title>編輯估價單流程說明</title>
   <style>
     body {
       font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
@@ -59,31 +59,31 @@
   </style>
 </head>
 <body>
-  <!-- 頁首：描述本指南與 Swagger 的對應關係，方便閱讀者快速建立聯想 -->
+  <!-- 頁首：交代本頁與 Swagger 的對應關係，確保讀者明白資料來源 -->
   <header>
-    <h1>新增估價單流程與欄位對照說明</h1>
-    <p>本頁對應 Swagger 中 <code>POST /api/quotations/create</code> 定義，彙整建立估價單需要的流程步驟、請求欄位與系統自動產生的資料，協助前後端與門市人員快速掌握資料填寫規則。</p>
+    <h1>編輯估價單流程與欄位對照說明</h1>
+    <p>本頁對應 Swagger 中 <code>POST /api/quotations/edit</code> 範例，彙整編輯估價單時必備的欄位、流程與常見驗證注意事項，協助前後端同步作業邏輯。</p>
   </header>
 
-  <!-- 流程概觀：逐步描述呼叫 API 前後的注意事項 -->
+  <!-- 流程概觀：逐步說明編輯動作 -->
   <section>
     <h2>流程概觀</h2>
     <ol>
-      <li><strong>確認登入權杖：</strong>系統會依 JWT 判斷門市與建立者資訊，請先完成登入並確保權杖未過期。</li>
-      <li><strong>蒐集必要資料：</strong>依 Swagger 定義整理技師、車輛、客戶與傷痕資訊，缺漏會導致驗證失敗。</li>
-      <li><strong>依欄位表組裝 JSON：</strong>請參考下表填寫欄位名稱與型別，確保與 Swagger 一致。</li>
-      <li><strong>送出 API 請求：</strong>以 <code>application/json</code> 內容呼叫 <code>POST /api/quotations/create</code>，後端會回傳建立結果。</li>
-      <li><strong>檢查回應資料：</strong>確認估價單編號、傷痕明細與折扣設定是否符合期待，必要時再進行編輯。</li>
+      <li><strong>取得既有估價單資料：</strong>建議先呼叫 <code>POST /api/quotations/detail</code> 取得完整資料，避免覆蓋舊值。</li>
+      <li><strong>確認唯一識別：</strong>可使用 <code>quotationUid</code> 或 <code>quotationNo</code> 任一值鎖定目標估價單。</li>
+      <li><strong>整理欲更新欄位：</strong>依下方欄位對照表組裝 JSON，僅需傳入需變動的欄位即可。</li>
+      <li><strong>送出 API 請求：</strong>以 <code>application/json</code> 內容呼叫 <code>POST /api/quotations/edit</code>，成功會回傳 204。</li>
+      <li><strong>重新取得最新內容：</strong>更新後可再次查詢詳情，確認資料已同步。</li>
     </ol>
     <div class="tips">
-      <strong>小提醒：</strong>估價單流水號會依年份與月份重新起算；若同月已有資料，系統會自動遞增序號並更新 <code>QuotationNo</code> 與 <code>SerialNum</code>。
+      <strong>小提醒：</strong>若同時由多人編輯估價單，建議更新前再次確認最新資料，避免互相覆蓋。
     </div>
   </section>
 
-  <!-- 請求欄位對照表：完全以 Swagger 內容為準，並補充中文說明 -->
+  <!-- 請求欄位對照表：欄位名稱完全採用 Swagger 範例與 Schema -->
   <section>
     <h2>請求欄位對照表</h2>
-    <p>以下表格依 Swagger Schema 與範例列出所有請求欄位，欄位名稱需與 Swagger 定義完全一致，避免後端驗證失敗。</p>
+    <p>下表列出 Swagger 對應的請求欄位與中文說明。欄位名稱必須與 Swagger 一致，方能通過後端驗證。</p>
     <table>
       <thead>
         <tr>
@@ -94,104 +94,114 @@
       </thead>
       <tbody>
         <tr>
+          <td><code>quotationUid</code></td>
+          <td>估價單唯一識別碼。</td>
+          <td>選填欄位，若已掌握 UID，建議優先使用以避免編號重覆。</td>
+        </tr>
+        <tr>
+          <td><code>quotationNo</code></td>
+          <td>估價單編號。</td>
+          <td>必填欄位（或搭配 UID 其中一項），可從列表或詳情取得。</td>
+        </tr>
+        <tr>
           <td><code>store.technicianUid</code></td>
-          <td>估價技師的 UID，Swagger 標記為必要欄位。</td>
-          <td>由前端從技師清單帶入，後端據此推算門市與建立者資訊。</td>
+          <td>估價技師 UID。</td>
+          <td>選填欄位，若需變更估價技師可填入新的 UID。</td>
         </tr>
         <tr>
           <td><code>store.source</code></td>
-          <td>客戶來源描述，Swagger 標記為必要欄位。</td>
-          <td>前端填寫來源字串，例如「官方網站」或「門市來電」。</td>
+          <td>客戶來源描述。</td>
+          <td>選填欄位，用於調整估價單來源資訊。</td>
         </tr>
         <tr>
           <td><code>store.reservationDate</code></td>
-          <td>Swagger 範例中的預約日期（ISO 8601）。</td>
-          <td>選填欄位，提供預約修車時間，有助排程。</td>
+          <td>Swagger 範例中的預約日期。</td>
+          <td>選填欄位，使用 ISO 8601 字串更新預約時程。</td>
         </tr>
         <tr>
           <td><code>store.repairDate</code></td>
           <td>Swagger 範例中的預計維修日期。</td>
-          <td>選填欄位，若已排定實際施工時間可一併填寫。</td>
+          <td>選填欄位，用於同步維修排程資訊。</td>
         </tr>
         <tr>
           <td><code>car.carUid</code></td>
           <td>車輛主檔 UID。</td>
-          <td>必填欄位，選定車輛後由前端填入對應 UID。</td>
+          <td>選填欄位，僅在更換車輛時填入新的 UID。</td>
         </tr>
         <tr>
           <td><code>customer.customerUid</code></td>
           <td>客戶主檔 UID。</td>
-          <td>必填欄位，與顧客資料綁定以便回寫歷史紀錄。</td>
+          <td>選填欄位，若估價單需改由其他客戶承接時更新。</td>
         </tr>
         <tr>
           <td><code>damages[].photos</code></td>
           <td>主要傷痕照片的 PhotoUID。</td>
-          <td>必填欄位，需先透過上傳 API 取得照片 UID。</td>
+          <td>選填欄位，若調整傷痕項目需帶入最新的照片 UID。</td>
         </tr>
         <tr>
           <td><code>damages[].position</code></td>
           <td>傷痕位置描述。</td>
-          <td>選填欄位，建議填寫以利報價判讀。</td>
+          <td>選填欄位，可同步更新傷痕位置。</td>
         </tr>
         <tr>
           <td><code>damages[].dentStatus</code></td>
           <td>凹痕狀態敘述。</td>
-          <td>選填欄位，可描述凹痕大小或嚴重程度。</td>
+          <td>選填欄位，調整後請與現場狀況一致。</td>
         </tr>
         <tr>
           <td><code>damages[].description</code></td>
           <td>備註說明。</td>
-          <td>選填欄位，用於補充施工注意事項。</td>
+          <td>選填欄位，可補充施工需求或注意事項。</td>
         </tr>
         <tr>
           <td><code>damages[].estimatedAmount</code></td>
-          <td>預估金額，Swagger 定義為數值型別。</td>
-          <td>選填欄位，可填入單筆傷痕的估價金額。</td>
+          <td>預估金額。</td>
+          <td>選填欄位，數值型別，更新時請帶入完整金額。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.signaturePhotoUid</code></td>
           <td>簽名照片的 PhotoUID。</td>
-          <td>選填欄位，提供客戶簽名照片以完成車體確認單。</td>
+          <td>選填欄位，更換簽名照片時需提供新的 UID。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].x</code></td>
           <td>Swagger 範例中的車體標記 X 座標。</td>
-          <td>選填欄位，0-1 之間的浮點數，代表在圖面中的水平位置。</td>
+          <td>選填欄位，更新車體標記位置時使用。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].y</code></td>
           <td>Swagger 範例中的車體標記 Y 座標。</td>
-          <td>選填欄位，0-1 之間的浮點數，代表在圖面中的垂直位置。</td>
+          <td>選填欄位，搭配 X 座標調整標記位置。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].hasDent</code></td>
           <td>是否存在凹痕。</td>
-          <td>選填欄位，布林值；若為 <code>true</code> 代表該處有凹痕。</td>
+          <td>選填欄位，布林值；反映該位置是否有凹痕。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].hasScratch</code></td>
           <td>是否存在刮傷。</td>
-          <td>選填欄位，布林值；若為 <code>true</code> 代表該處有刮傷。</td>
+          <td>選填欄位，布林值；反映該位置是否有刮傷。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].hasPaintPeel</code></td>
           <td>是否存在漆面脫落。</td>
-          <td>選填欄位，布林值；若為 <code>true</code> 代表該處漆面受損。</td>
+          <td>選填欄位，布林值；反映該位置是否有漆面受損。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].remark</code></td>
           <td>車體標記備註。</td>
-          <td>選填欄位，可描述該位置的補充說明。</td>
+          <td>選填欄位，記錄該標記的補充說明。</td>
         </tr>
         <tr>
           <td><code>maintenance.fixTypeUid</code></td>
-          <td>維修類型 UID，Swagger 範例中提供。</td>
-          <td>選填欄位，建議帶入以便後端記錄維修分類。</td>
+          <td>維修類型 UID。</td>
+          <td>選填欄位，更新估價單所屬的維修類型。</td>
         </tr>
         <tr>
           <td><code>maintenance.reserveCar</code></td>
-          <td>是否需留車（布林值）。</td>
-          <td>選填欄位，決定是否需預留車位。</td>
+          <td>是否需留車。</td>
+          <td>選填欄位，布林值。</td>
         </tr>
         <tr>
           <td><code>maintenance.applyCoating</code></td>
@@ -206,22 +216,22 @@
         <tr>
           <td><code>maintenance.hasRepainted</code></td>
           <td>是否曾烤漆。</td>
-          <td>選填欄位，布林值；紀錄車輛既有狀態。</td>
+          <td>選填欄位，布林值；反映車輛既有狀態。</td>
         </tr>
         <tr>
           <td><code>maintenance.needToolEvaluation</code></td>
           <td>是否需要工具評估。</td>
-          <td>選填欄位，布林值；供後端安排工具。</td>
+          <td>選填欄位，布林值。</td>
         </tr>
         <tr>
           <td><code>maintenance.otherFee</code></td>
           <td>其他估價費用。</td>
-          <td>選填欄位，數值型別；填入耗材或委外費用。</td>
+          <td>選填欄位，數值型別；請填入完整金額。</td>
         </tr>
         <tr>
           <td><code>maintenance.roundingDiscount</code></td>
           <td>零頭折扣金額。</td>
-          <td>選填欄位，數值型別；可用於調整為整數金額。</td>
+          <td>選填欄位，數值型別；更新折扣時使用。</td>
         </tr>
         <tr>
           <td><code>maintenance.percentageDiscount</code></td>
@@ -230,13 +240,13 @@
         </tr>
         <tr>
           <td><code>maintenance.discountReason</code></td>
-          <td>折扣原因描述。</td>
-          <td>選填欄位，紀錄折扣依據。</td>
+          <td>折扣原因。</td>
+          <td>選填欄位，說明折扣依據。</td>
         </tr>
         <tr>
           <td><code>maintenance.estimatedRepairDays</code></td>
           <td>預估維修天數。</td>
-          <td>選填欄位，數值型別；可搭配時數呈現工期。</td>
+          <td>選填欄位，數值型別；若工期有異動請同步調整。</td>
         </tr>
         <tr>
           <td><code>maintenance.estimatedRepairHours</code></td>
@@ -245,58 +255,54 @@
         </tr>
         <tr>
           <td><code>maintenance.estimatedRestorationPercentage</code></td>
-          <td>Swagger Schema 中定義的預估修復完成度。</td>
+          <td>預估修復完成度。</td>
           <td>選填欄位，數值型別；建議使用整數百分比。</td>
         </tr>
         <tr>
           <td><code>maintenance.suggestedPaintReason</code></td>
-          <td>是否建議鈑烤的原因。</td>
-          <td>選填欄位，填寫後後端會標記建議鈑烤。</td>
+          <td>建議鈑烤原因。</td>
+          <td>選填欄位，提供改採鈑烤的理由。</td>
         </tr>
         <tr>
           <td><code>maintenance.unrepairableReason</code></td>
           <td>無法維修原因。</td>
-          <td>選填欄位，填寫後後端會標記為不可修復。</td>
+          <td>選填欄位，若確認無法修復時填寫。</td>
         </tr>
         <tr>
           <td><code>maintenance.remark</code></td>
           <td>維修設定備註。</td>
-          <td>選填欄位，可補充施工提醒事項。</td>
+          <td>選填欄位，可紀錄施工提醒。</td>
         </tr>
       </tbody>
     </table>
   </section>
 
-  <!-- 系統自動帶入欄位：告知哪些資訊不需前端處理 -->
+  <!-- 進階欄位：說明 Swagger 未列出的後端延伸欄位，方便開發人員使用 -->
   <section>
-    <h2>系統自動填寫欄位</h2>
-    <p>以下欄位由後端依規則產生，前端僅需專注於上述請求欄位：</p>
+    <h2>進階欄位（後端支援）</h2>
+    <p>後端 <code>UpdateQuotationRequest</code> 類別另外支援下列欄位，雖未在 Swagger 範例中出現，但若有進階需求可一併傳入：</p>
     <ul>
-      <li><strong>QuotationNo：</strong>格式為 <code>QYYMM####</code>，年與月取兩位數，序號每月重新起算。</li>
-      <li><strong>SerialNum：</strong>純數字序號，與 <code>QuotationNo</code> 的後四碼一致。</li>
-      <li><strong>Date：</strong>建立當日的系統時間（台北時區）。</li>
-      <li><strong>Status：</strong>預設為 <code>110</code>（估價中）。</li>
-      <li><strong>Status110_TimeStamp：</strong>建立時的時間戳記。</li>
-      <li><strong>Status110_User：</strong>建立估價單的門市名稱。</li>
+      <li><strong>categoryRemarks：</strong>以 <code>dent</code>、<code>paint</code>、<code>other</code> 為 Key 的字典，用於更新各分類備註。</li>
+      <li><strong>remark：</strong>估價單整體備註字串，更新時會覆蓋既有內容。</li>
     </ul>
     <div class="tips">
-      <strong>若需人工調整：</strong>僅能透過後端維護作業或資料庫腳本調整，避免序號或狀態失準。</div>
+      <strong>使用建議：</strong>若需導入進階欄位，請同步更新 Swagger 或補充聯合測試案例，確保協作順暢。</div>
   </section>
 
-  <!-- 錯誤排除：提供常見情境與解法 -->
+  <!-- 常見錯誤：列出常遇到的驗證問題 -->
   <section>
     <h2>常見錯誤與排除方式</h2>
     <ul>
-      <li><strong>400 驗證錯誤：</strong>確認必填欄位 <code>store.technicianUid</code>、<code>store.source</code>、<code>car.carUid</code>、<code>customer.customerUid</code> 與 <code>damages[].photos</code> 是否正確。</li>
-      <li><strong>傷痕照片無法綁定：</strong>請確認照片已由上傳 API 建立，且提供正確的 <code>PhotoUID</code>。</li>
-      <li><strong>流水號重複：</strong>若同時大量建立估價單，請確認系統時間或稍後再試，必要時聯繫後端檢視序號。</li>
+      <li><strong>400 驗證錯誤：</strong>確認至少提供 <code>quotationUid</code> 或 <code>quotationNo</code>，並檢查 JSON 結構是否符合 Swagger。</li>
+      <li><strong>找不到估價單：</strong>若回應 404，請確認編號或 UID 是否存在，必要時重新查詢列表。</li>
+      <li><strong>資料被覆蓋：</strong>更新前先取得詳情，僅傳遞需要變動的欄位，避免覆寫既有內容。</li>
     </ul>
   </section>
 
-  <!-- 結尾：標註後續聯絡方式 -->
+  <!-- 結尾：標註聯絡窗口 -->
   <section>
     <h2>維護與聯絡</h2>
-    <p>如需調整欄位或新增流程，請聯繫後端開發團隊並提供需求單，以便評估影響範圍與更新排程。</p>
+    <p>如需擴充欄位或調整流程，請聯繫後端開發團隊並提供需求單，以便評估影響範圍與排程。</p>
   </section>
 </body>
 </html>
