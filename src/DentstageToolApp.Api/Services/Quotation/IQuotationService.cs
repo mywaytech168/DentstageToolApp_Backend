@@ -28,7 +28,7 @@ public interface IQuotationService
     /// <summary>
     /// 取得單一估價單的詳細資訊。
     /// </summary>
-    /// <param name="request">查詢條件，支援以 UID 或編號取得。</param>
+    /// <param name="request">查詢條件，僅需提供估價單編號即可。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     Task<QuotationDetailResponse> GetQuotationAsync(GetQuotationRequest request, CancellationToken cancellationToken);
 

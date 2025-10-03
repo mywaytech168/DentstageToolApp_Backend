@@ -549,7 +549,7 @@ public class QuotationService : IQuotationService
             .Include(q => q.FixTypeNavigation);
 
         // 估價單編號過濾邏輯與 Include 不衝突，因此直接回寫 IQueryable 以避免轉型例外。
-        query = ApplyQuotationFilter(query, null, quotationNo);
+        query = ApplyQuotationFilter(query, quotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
@@ -694,7 +694,8 @@ public class QuotationService : IQuotationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需更新的估價單。");
@@ -994,7 +995,7 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供轉預約的參數。");
         }
 
-        EnsureRequestHasIdentity(request);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
 
         var reservationDate = NormalizeOptionalDate(request.ReservationDate);
         if (!reservationDate.HasValue)
@@ -1004,7 +1005,7 @@ public class QuotationService : IQuotationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要轉預約的估價單。");
@@ -1031,7 +1032,7 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供更改預約的參數。");
         }
 
-        EnsureRequestHasIdentity(request);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
 
         var reservationDate = NormalizeOptionalDate(request.ReservationDate);
         if (!reservationDate.HasValue)
@@ -1041,7 +1042,7 @@ public class QuotationService : IQuotationService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要更新預約日期的估價單。");
@@ -1079,11 +1080,11 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供狀態回溯的參數。");
         }
 
-        EnsureRequestHasIdentity(request);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需回溯狀態的估價單。");
@@ -1115,11 +1116,11 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供轉維修的參數。");
         }
 
-        EnsureRequestHasIdentity(request);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無要轉維修的估價單。");
@@ -1215,22 +1216,17 @@ public class QuotationService : IQuotationService
     // ---------- 方法區 ----------
 
     /// <summary>
-    /// 針對估價單查詢套用 UID 或編號的過濾條件。
+    /// 針對估價單查詢套用編號的過濾條件。
     /// </summary>
-    private static IQueryable<Quatation> ApplyQuotationFilter(IQueryable<Quatation> query, string? quotationUid, string? quotationNo)
+    private static IQueryable<Quatation> ApplyQuotationFilter(IQueryable<Quatation> query, string quotationNo)
     {
-        // 明細查詢改以估價單編號為主，因此先以編號比對；若舊端仍傳入 UID 則保留向後相容。
-        if (!string.IsNullOrWhiteSpace(quotationNo))
+        if (string.IsNullOrWhiteSpace(quotationNo))
         {
-            return query.Where(q => q.QuotationNo == quotationNo);
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單編號。");
         }
 
-        if (!string.IsNullOrWhiteSpace(quotationUid))
-        {
-            return query.Where(q => q.QuotationUid == quotationUid);
-        }
-
-        throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單識別資訊。");
+        var normalizedQuotationNo = quotationNo.Trim();
+        return query.Where(q => q.QuotationNo == normalizedQuotationNo);
     }
 
     /// <summary>
@@ -1633,9 +1629,9 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 嘗試尋找可供更新的估價單資料。
     /// </summary>
-    private async Task<Quatation?> FindQuotationForUpdateAsync(string? quotationUid, string? quotationNo, CancellationToken cancellationToken)
+    private async Task<Quatation?> FindQuotationForUpdateAsync(string quotationNo, CancellationToken cancellationToken)
     {
-        var query = ApplyQuotationFilter(_context.Quatations, quotationUid, quotationNo);
+        var query = ApplyQuotationFilter(_context.Quatations, quotationNo);
         return await query.FirstOrDefaultAsync(cancellationToken);
     }
 
@@ -1649,11 +1645,11 @@ public class QuotationService : IQuotationService
         bool defaultClearReservation,
         string defaultReason)
     {
-        EnsureRequestHasIdentity(request);
+        var quotationNo = EnsureRequestHasQuotationNo(request);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var quotation = await FindQuotationForUpdateAsync(request.QuotationUid, request.QuotationNo, cancellationToken);
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
         if (quotation is null)
         {
             var message = defaultClearReservation ? "查無需要取消預約的估價單。" : "查無需要取消的估價單。";
@@ -1688,13 +1684,13 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 驗證請求是否具備估價單識別資訊，若缺少則轉為服務例外。
+    /// 驗證請求是否具備估價單編號，若缺少則轉為服務例外。
     /// </summary>
-    private static void EnsureRequestHasIdentity(QuotationActionRequestBase request)
+    private static string EnsureRequestHasQuotationNo(QuotationActionRequestBase request)
     {
         try
         {
-            request.EnsureHasIdentity();
+            return request.EnsureAndGetQuotationNo();
         }
         catch (ValidationException ex)
         {

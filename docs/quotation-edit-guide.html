@@ -70,7 +70,7 @@
     <h2>流程概觀</h2>
     <ol>
       <li><strong>取得既有估價單資料：</strong>建議先呼叫 <code>POST /api/quotations/detail</code> 取得完整資料，避免覆蓋舊值。</li>
-      <li><strong>確認唯一識別：</strong>可使用 <code>quotationUid</code> 或 <code>quotationNo</code> 任一值鎖定目標估價單。</li>
+      <li><strong>確認唯一識別：</strong>後端以 <code>quotationNo</code> 作為唯一識別，請確保帶入正確編號。</li>
       <li><strong>整理欲更新欄位：</strong>依下方欄位對照表組裝 JSON，僅需傳入需變動的欄位即可。</li>
       <li><strong>送出 API 請求：</strong>以 <code>application/json</code> 內容呼叫 <code>POST /api/quotations/edit</code>，成功會回傳 204。</li>
       <li><strong>重新取得最新內容：</strong>更新後可再次查詢詳情，確認資料已同步。</li>
@@ -94,14 +94,9 @@
       </thead>
       <tbody>
         <tr>
-          <td><code>quotationUid</code></td>
-          <td>估價單唯一識別碼。</td>
-          <td>選填欄位，若已掌握 UID，建議優先使用以避免編號重覆。</td>
-        </tr>
-        <tr>
           <td><code>quotationNo</code></td>
           <td>估價單編號。</td>
-          <td>必填欄位（或搭配 UID 其中一項），可從列表或詳情取得。</td>
+          <td>必填欄位，可從列表或詳情取得後直接帶入。</td>
         </tr>
         <tr>
           <td><code>store.technicianUid</code></td>
@@ -293,8 +288,8 @@
   <section>
     <h2>常見錯誤與排除方式</h2>
     <ul>
-      <li><strong>400 驗證錯誤：</strong>確認至少提供 <code>quotationUid</code> 或 <code>quotationNo</code>，並檢查 JSON 結構是否符合 Swagger。</li>
-      <li><strong>找不到估價單：</strong>若回應 404，請確認編號或 UID 是否存在，必要時重新查詢列表。</li>
+      <li><strong>400 驗證錯誤：</strong>確認請求已提供 <code>quotationNo</code>，並檢查 JSON 結構是否符合 Swagger。</li>
+      <li><strong>找不到估價單：</strong>若回應 404，請確認編號是否存在，必要時重新查詢列表。</li>
       <li><strong>資料被覆蓋：</strong>更新前先取得詳情，僅傳遞需要變動的欄位，避免覆寫既有內容。</li>
     </ul>
   </section>
