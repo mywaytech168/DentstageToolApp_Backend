@@ -56,12 +56,12 @@ public class QuotationDetailResponse
     /// <summary>
     /// 車體確認單資料。
     /// </summary>
-    public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
+    public QuotationCarBodyConfirmationResponse? CarBodyConfirmation { get; set; }
 
     /// <summary>
     /// 維修需求設定資料，提供前端回填維修選項。
     /// </summary>
-    public QuotationMaintenanceInfo Maintenance { get; set; } = new();
+    public QuotationMaintenanceDetail Maintenance { get; set; } = new();
 }
 
 /// <summary>
@@ -93,5 +93,102 @@ public class QuotationDamageSummary
     /// 預估維修金額。
     /// </summary>
     public decimal? EstimatedAmount { get; set; }
+}
+
+/// <summary>
+/// 估價單車體確認單輸出結構，僅保留損傷標記資訊供前端呈現。
+/// </summary>
+public class QuotationCarBodyConfirmationResponse
+{
+    /// <summary>
+    /// 車體受損標記列表，對應前端示意圖座標與損傷狀態。
+    /// </summary>
+    public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
+}
+
+/// <summary>
+/// 估價單維修資訊的精簡輸出結構，移除多餘工時欄位後保留主要設定。
+/// </summary>
+public class QuotationMaintenanceDetail
+{
+    /// <summary>
+    /// 維修類型識別碼，保留以供前端選單回填。
+    /// </summary>
+    public string? FixTypeUid { get; set; }
+
+    /// <summary>
+    /// 是否需留車。
+    /// </summary>
+    public bool? ReserveCar { get; set; }
+
+    /// <summary>
+    /// 是否需要鍍膜。
+    /// </summary>
+    public bool? ApplyCoating { get; set; }
+
+    /// <summary>
+    /// 是否需要包膜。
+    /// </summary>
+    public bool? ApplyWrapping { get; set; }
+
+    /// <summary>
+    /// 是否曾烤漆。
+    /// </summary>
+    public bool? HasRepainted { get; set; }
+
+    /// <summary>
+    /// 是否需要工具評估。
+    /// </summary>
+    public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 其他估價費用。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 預估花費天數。
+    /// </summary>
+    public int? EstimatedRepairDays { get; set; }
+
+    /// <summary>
+    /// 預估花費時數。
+    /// </summary>
+    public int? EstimatedRepairHours { get; set; }
+
+    /// <summary>
+    /// 預估修復程度（百分比）。
+    /// </summary>
+    public decimal? EstimatedRestorationPercentage { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因。
+    /// </summary>
+    public string? SuggestedPaintReason { get; set; }
+
+    /// <summary>
+    /// 無法修復時的原因。
+    /// </summary>
+    public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 零頭折扣金額。
+    /// </summary>
+    public decimal? RoundingDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣原因。
+    /// </summary>
+    public string? DiscountReason { get; set; }
+
+    /// <summary>
+    /// 維修相關備註。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 

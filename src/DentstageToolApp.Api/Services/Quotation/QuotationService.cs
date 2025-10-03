@@ -661,7 +661,7 @@ public class QuotationService : IQuotationService
             },
             Damages = simplifiedDamages,
             CarBodyConfirmation = simplifiedCarBody,
-            Maintenance = new QuotationMaintenanceInfo
+            Maintenance = new QuotationMaintenanceDetail
             {
                 FixTypeUid = quotation.FixTypeUid,
                 ReserveCar = ParseBooleanFlag(quotation.CarReserved),
@@ -1959,7 +1959,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 精簡車體確認單資料，移除標註圖片與簽名字串欄位。
     /// </summary>
-    private static QuotationCarBodyConfirmation? SimplifyCarBodyConfirmation(QuotationCarBodyConfirmation? source)
+    private static QuotationCarBodyConfirmationResponse? SimplifyCarBodyConfirmation(QuotationCarBodyConfirmation? source)
     {
         if (source is null)
         {
@@ -1980,10 +1980,9 @@ public class QuotationService : IQuotationService
                 .ToList()
             : new List<QuotationCarBodyDamageMarker>();
 
-        return new QuotationCarBodyConfirmation
+        return new QuotationCarBodyConfirmationResponse
         {
-            DamageMarkers = markers,
-            SignaturePhotoUid = NormalizeOptionalText(source.SignaturePhotoUid)
+            DamageMarkers = markers
         };
     }
 
