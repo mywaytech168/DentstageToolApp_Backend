@@ -337,7 +337,8 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
 
             foreach (var element in document.RootElement.EnumerateArray())
             {
-                var item = element.Deserialize<QuotationDamageItem>(options);
+                // 逐筆處理傷痕資料，優先嘗試以新版格式反序列化，失敗時再 fallback。
+                var item = ParseDamageItem(element, options);
                 if (item is not null)
                 {
                     result.Add(item);
@@ -351,16 +352,11 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
-            var item = new QuotationDamageItem
-            {
-                DisplayPhotos = ReadPhotoList(root, options),
-                DisplayPosition = ReadString(root, "位置", "position"),
-                DisplayDentStatus = ReadString(root, "凹痕狀況", "dentStatus"),
-                DisplayDescription = ReadString(root, "說明", "description"),
-                DisplayEstimatedAmount = ReadDecimal(root, "預估金額", "estimatedAmount")
-            };
+            var item = ParseDamageItem(root, options);
 
-            return new List<QuotationDamageItem> { item };
+            return item is null
+                ? new List<QuotationDamageItem>()
+                : new List<QuotationDamageItem> { item };
         }
 
         throw new JsonException("傷痕資料格式不符，請提供物件或陣列。");
@@ -443,6 +439,41 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         writer.WriteEndObject();
+    }
+
+    /// <summary>
+    /// 解析單筆傷痕資料，兼容舊版字串圖片欄位與新版陣列格式。
+    /// </summary>
+    private static QuotationDamageItem? ParseDamageItem(JsonElement element, JsonSerializerOptions options)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        try
+        {
+            // 先嘗試使用原生序列化流程，若欄位型別符合新版格式會直接成功。
+            var item = element.Deserialize<QuotationDamageItem>(options);
+            if (item is not null)
+            {
+                return item;
+            }
+        }
+        catch (JsonException)
+        {
+            // 舊版資料在「圖片」欄位可能以字串傳遞，導致序列化失敗，此處改以人工映射處理。
+        }
+
+        // 以逐欄位讀取方式手動建立資料，確保舊版欄位仍可被解析。
+        return new QuotationDamageItem
+        {
+            DisplayPhotos = ReadPhotoList(element, options),
+            DisplayPosition = ReadString(element, "位置", "position"),
+            DisplayDentStatus = ReadString(element, "凹痕狀況", "dentStatus"),
+            DisplayDescription = ReadString(element, "說明", "description"),
+            DisplayEstimatedAmount = ReadDecimal(element, "預估金額", "estimatedAmount")
+        };
     }
 
     /// <summary>
