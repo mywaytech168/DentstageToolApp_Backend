@@ -453,7 +453,27 @@ public class QuotationCustomerInfo
     public string? Gender { get; set; }
 
     /// <summary>
-    /// 消息來源。
+    /// 顧客類型，對應資料庫 Customer_type 欄位，方便呈現客戶屬性分類。
+    /// </summary>
+    public string? CustomerType { get; set; }
+
+    /// <summary>
+    /// 所在縣市，對應資料庫 County 欄位。
+    /// </summary>
+    public string? County { get; set; }
+
+    /// <summary>
+    /// 所在鄉鎮市區，對應資料庫 Township 欄位。
+    /// </summary>
+    public string? Township { get; set; }
+
+    /// <summary>
+    /// 詢問原因，對應資料庫 Reason 欄位。
+    /// </summary>
+    public string? Reason { get; set; }
+
+    /// <summary>
+    /// 消息來源，沿用估價單 Source 欄位，優先使用門市輸入值。
     /// </summary>
     public string? Source { get; set; }
 

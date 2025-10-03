@@ -386,6 +386,10 @@ public class QuotationService : IQuotationService
         var customerName = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
         var customerPhone = NormalizeOptionalText(customerEntity.Phone);
         var customerGender = NormalizeOptionalText(customerEntity.Gender);
+        var customerType = NormalizeOptionalText(customerEntity.CustomerType);
+        var customerCounty = NormalizeOptionalText(customerEntity.County);
+        var customerTownship = NormalizeOptionalText(customerEntity.Township);
+        var customerReason = NormalizeOptionalText(customerEntity.Reason);
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
@@ -431,7 +435,6 @@ public class QuotationService : IQuotationService
             UserName = estimatorName,
             BookDate = reservationDate,
             FixDate = repairDate,
-            Source = source,
             FixTypeUid = fixTypeUid,
             FixType = fixTypeName,
             CarReserved = reserveCarFlag,
@@ -456,8 +459,14 @@ public class QuotationService : IQuotationService
             PhoneInput = customerPhone,
             PhoneInputGlobal = phoneQuery ?? customerPhone,
             Gender = customerGender,
-            CustomerType = customerSource,
+            // 客戶屬性與聯絡地址改由顧客主檔帶入，確保估價單與客戶資訊一致。
+            CustomerType = customerType,
+            County = customerCounty,
+            Township = customerTownship,
+            Reason = customerReason,
             ConnectRemark = customerRemark,
+            // 消息來源優先採用門市輸入，若門市未提供則以客戶主檔資料補齊。
+            Source = source ?? customerSource,
             Remark = remarkPayload,
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
@@ -603,7 +612,11 @@ public class QuotationService : IQuotationService
                 Name = quotation.Name,
                 Phone = quotation.Phone,
                 Gender = quotation.Gender,
-                Source = quotation.CustomerType,
+                CustomerType = quotation.CustomerType,
+                County = quotation.County,
+                Township = quotation.Township,
+                Reason = quotation.Reason,
+                Source = quotation.Source,
                 Remark = quotation.ConnectRemark
             },
             Damages = normalizedDamages,
@@ -670,7 +683,32 @@ public class QuotationService : IQuotationService
         quotation.PhoneInput = quotation.Phone;
         quotation.PhoneInputGlobal = quotation.Phone;
         quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
-        quotation.CustomerType = NormalizeOptionalText(customerInfo.Source);
+        // 顧客類型與地址等欄位僅在前端有提供時更新，避免編輯車輛資料時意外清空客戶資訊。
+        if (customerInfo.CustomerType is not null)
+        {
+            quotation.CustomerType = NormalizeOptionalText(customerInfo.CustomerType);
+        }
+
+        if (customerInfo.County is not null)
+        {
+            quotation.County = NormalizeOptionalText(customerInfo.County);
+        }
+
+        if (customerInfo.Township is not null)
+        {
+            quotation.Township = NormalizeOptionalText(customerInfo.Township);
+        }
+
+        if (customerInfo.Reason is not null)
+        {
+            quotation.Reason = NormalizeOptionalText(customerInfo.Reason);
+        }
+
+        if (customerInfo.Source is not null)
+        {
+            quotation.Source = NormalizeOptionalText(customerInfo.Source);
+        }
+
         quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
 
         var (plainRemark, _) = ParseRemark(quotation.Remark);
