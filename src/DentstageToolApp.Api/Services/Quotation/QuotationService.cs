@@ -278,6 +278,13 @@ public class QuotationService : IQuotationService
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
         var repaintFlag = ConvertBooleanToFlag(maintenanceInfo.HasRepainted);
         var toolFlag = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
+        var maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark);
+        var otherFee = maintenanceInfo.OtherFee;
+        var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
+        var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
+        var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+        var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
 
         // ---------- 預約與維修日期處理 ----------
         // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
@@ -316,9 +323,7 @@ public class QuotationService : IQuotationService
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
-        var plainRemark = NormalizeOptionalText(request.Remark);
         var normalizedDamages = ExtractDamageList(request);
-        var sanitizedCategories = CloneCategoriesWithoutDamages(request.ServiceCategories);
 
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = DateTime.UtcNow;
@@ -334,14 +339,18 @@ public class QuotationService : IQuotationService
 
         var extraData = new QuotationExtraData
         {
-            ServiceCategories = sanitizedCategories,
-            CategoryTotal = request.CategoryTotal,
             CarBodyConfirmation = request.CarBodyConfirmation,
-            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null
+            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null,
+            OtherFee = otherFee,
+            EstimatedRepairDays = estimatedRepairDays,
+            EstimatedRepairHours = estimatedRepairHours,
+            EstimatedRestorationPercentage = estimatedRestorationPercentage,
+            SuggestedPaintReason = suggestedPaintReason,
+            UnrepairableReason = unrepairableReason
         };
 
-        var remarkPayload = SerializeRemark(plainRemark, extraData);
-        var valuation = CalculateTotalAmount(request.CategoryTotal, sanitizedCategories);
+        var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
+        var valuation = CalculateTotalAmount(normalizedDamages, otherFee);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -456,22 +465,24 @@ public class QuotationService : IQuotationService
             }
         }
 
-        var serviceCategories = extraData?.ServiceCategories;
         var damages = extraData?.Damages;
-
-        if (serviceCategories is not null)
+        if ((damages is null || damages.Count == 0) && extraData?.ServiceCategories is not null)
         {
-            if (damages is null || damages.Count == 0)
+            var legacyDamages = FlattenCategoryDamages(extraData.ServiceCategories);
+            if (legacyDamages.Count > 0)
             {
-                var legacyDamages = FlattenCategoryDamages(serviceCategories);
-                if (legacyDamages.Count > 0)
-                {
-                    damages = legacyDamages;
-                }
+                damages = legacyDamages;
             }
-
-            serviceCategories = CloneCategoriesWithoutDamages(serviceCategories);
         }
+
+        var normalizedDamages = damages ?? new List<QuotationDamageItem>();
+        var maintenanceRemark = plainRemark;
+        var otherFee = extraData?.OtherFee;
+        var estimatedRepairDays = extraData?.EstimatedRepairDays;
+        var estimatedRepairHours = extraData?.EstimatedRepairHours;
+        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
+        var suggestedPaintReason = NormalizeOptionalText(extraData?.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(extraData?.UnrepairableReason);
 
         return new QuotationDetailResponse
         {
@@ -511,10 +522,7 @@ public class QuotationService : IQuotationService
                 Source = quotation.CustomerType,
                 Remark = quotation.ConnectRemark
             },
-            Remark = plainRemark,
-            ServiceCategories = serviceCategories,
-            Damages = damages ?? new List<QuotationDamageItem>(),
-            CategoryTotal = extraData?.CategoryTotal,
+            Damages = normalizedDamages,
             CarBodyConfirmation = extraData?.CarBodyConfirmation,
             Maintenance = new QuotationMaintenanceInfo
             {
@@ -525,7 +533,14 @@ public class QuotationService : IQuotationService
                 ApplyCoating = ParseBooleanFlag(quotation.Coat),
                 ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
                 HasRepainted = ParseBooleanFlag(quotation.Paint),
-                NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest)
+                NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest),
+                Remark = maintenanceRemark,
+                OtherFee = otherFee,
+                EstimatedRepairDays = estimatedRepairDays,
+                EstimatedRepairHours = estimatedRepairHours,
+                EstimatedRestorationPercentage = estimatedRestorationPercentage,
+                SuggestedPaintReason = suggestedPaintReason,
+                UnrepairableReason = unrepairableReason
             }
         };
     }
@@ -871,44 +886,29 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
     /// </summary>
-    private static decimal? CalculateTotalAmount(QuotationCategoryTotal? total, QuotationServiceCategoryCollection? categories)
+    private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee)
     {
         var hasValue = false;
         decimal amount = 0m;
 
-        if (total?.CategorySubtotals is { Count: > 0 })
+        if (damages is { Count: > 0 })
         {
-            foreach (var value in total.CategorySubtotals.Values)
+            foreach (var damage in damages)
             {
-                if (value.HasValue)
+                if (damage?.DisplayEstimatedAmount is not { } estimate)
                 {
-                    amount += value.Value;
-                    hasValue = true;
+                    continue;
                 }
-            }
 
-            if (total.RoundingDiscount.HasValue)
-            {
-                amount -= total.RoundingDiscount.Value;
+                amount += estimate;
                 hasValue = true;
             }
         }
-        else if (categories is not null)
-        {
-            foreach (var block in EnumerateCategoryBlocks(categories))
-            {
-                if (block.Amount.DamageSubtotal.HasValue)
-                {
-                    amount += block.Amount.DamageSubtotal.Value;
-                    hasValue = true;
-                }
 
-                if (block.Amount.AdditionalFee.HasValue)
-                {
-                    amount += block.Amount.AdditionalFee.Value;
-                    hasValue = true;
-                }
-            }
+        if (otherFee.HasValue)
+        {
+            amount += otherFee.Value;
+            hasValue = true;
         }
 
         return hasValue ? amount : null;
@@ -967,35 +967,13 @@ public class QuotationService : IQuotationService
             TryAdd(uniqueUids, body.AnnotatedImage);
             TryAdd(uniqueUids, body.SignaturePhotoUid);
             TryAdd(uniqueUids, body.Signature);
-
-            if (body.SignaturePhotoUids is { Count: > 0 })
-            {
-                foreach (var signatureUid in body.SignaturePhotoUids)
-                {
-                    TryAdd(uniqueUids, signatureUid);
-                }
-            }
-
-            if (body.Checklist is { Count: > 0 })
-            {
-                foreach (var item in body.Checklist)
-                {
-                    if (item.Photos is { Count: > 0 })
-                    {
-                        foreach (var photoUid in item.Photos)
-                        {
-                            TryAdd(uniqueUids, photoUid);
-                        }
-                    }
-                }
-            }
         }
 
         return uniqueUids.ToList();
     }
 
     /// <summary>
-    /// 從建立估價單請求中取得傷痕列表，優先使用新版獨立欄位，若未提供則回退舊版類別結構。
+    /// 從建立估價單請求中取得傷痕列表，僅使用新版頂層 damages 欄位。
     /// </summary>
     private static List<QuotationDamageItem> ExtractDamageList(CreateQuotationRequest request)
     {
@@ -1004,12 +982,7 @@ public class QuotationService : IQuotationService
             return request.Damages;
         }
 
-        if (request.ServiceCategories is null)
-        {
-            return new List<QuotationDamageItem>();
-        }
-
-        return FlattenCategoryDamages(request.ServiceCategories);
+        return new List<QuotationDamageItem>();
     }
 
     /// <summary>
@@ -1036,83 +1009,6 @@ public class QuotationService : IQuotationService
         }
 
         return damages;
-    }
-
-    /// <summary>
-    /// 針對 remark 需儲存的服務類別資料建立淺層複本並移除舊版傷痕欄位，避免重複儲存資料。
-    /// </summary>
-    private static QuotationServiceCategoryCollection? CloneCategoriesWithoutDamages(QuotationServiceCategoryCollection? source)
-    {
-        if (source is null)
-        {
-            return null;
-        }
-
-        return new QuotationServiceCategoryCollection
-        {
-            Dent = CloneCategoryBlockWithoutDamages(source.Dent),
-            Paint = CloneCategoryBlockWithoutDamages(source.Paint),
-            Other = CloneCategoryBlockWithoutDamages(source.Other)
-        };
-    }
-
-    /// <summary>
-    /// 建立單一類別區塊的複本並移除傷痕列表。
-    /// </summary>
-    private static QuotationCategoryBlock? CloneCategoryBlockWithoutDamages(QuotationCategoryBlock? source)
-    {
-        if (source is null)
-        {
-            return null;
-        }
-
-        return new QuotationCategoryBlock
-        {
-            Overall = CloneCategoryOverall(source.Overall),
-            Damages = null,
-            Amount = CloneCategoryAmount(source.Amount)
-        };
-    }
-
-    /// <summary>
-    /// 建立類別整體資訊的複本，確保序列化時不受原參考影響。
-    /// </summary>
-    private static QuotationCategoryOverallInfo CloneCategoryOverall(QuotationCategoryOverallInfo? source)
-    {
-        if (source is null)
-        {
-            return new QuotationCategoryOverallInfo();
-        }
-
-        return new QuotationCategoryOverallInfo
-        {
-            PaintCondition = source.PaintCondition,
-            ToolEvaluation = source.ToolEvaluation,
-            NeedStay = source.NeedStay,
-            Remark = source.Remark,
-            EstimatedRepairTime = source.EstimatedRepairTime,
-            EstimatedRestorationLevel = source.EstimatedRestorationLevel,
-            IsRepairable = source.IsRepairable
-        };
-    }
-
-    /// <summary>
-    /// 建立類別金額資訊的複本，避免後續操作異動原始資料。
-    /// </summary>
-    private static QuotationCategoryAmount CloneCategoryAmount(QuotationCategoryAmount? source)
-    {
-        if (source is null)
-        {
-            return new QuotationCategoryAmount();
-        }
-
-        return new QuotationCategoryAmount
-        {
-            DamageSubtotal = source.DamageSubtotal,
-            AdditionalFee = source.AdditionalFee,
-            DiscountPercentage = source.DiscountPercentage,
-            DiscountReason = source.DiscountReason
-        };
     }
 
     /// <summary>
@@ -1279,7 +1175,7 @@ public class QuotationService : IQuotationService
         /// <summary>
         /// remark 版本，預留後續擴充使用。
         /// </summary>
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 2;
 
         /// <summary>
         /// 純文字備註內容。
@@ -1293,7 +1189,7 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 估價單擴充資料，包含服務類別與車體確認單資訊。
+    /// 估價單擴充資料，包含傷痕、車體確認與維修補充資訊。
     /// </summary>
     private class QuotationExtraData
     {
@@ -1316,5 +1212,35 @@ public class QuotationService : IQuotationService
         /// 傷痕細項列表，配合新版格式與服務類別拆分存放。
         /// </summary>
         public List<QuotationDamageItem>? Damages { get; set; }
+
+        /// <summary>
+        /// 其他估價費用。
+        /// </summary>
+        public decimal? OtherFee { get; set; }
+
+        /// <summary>
+        /// 預估施工所需天數。
+        /// </summary>
+        public int? EstimatedRepairDays { get; set; }
+
+        /// <summary>
+        /// 預估施工所需時數。
+        /// </summary>
+        public int? EstimatedRepairHours { get; set; }
+
+        /// <summary>
+        /// 預估修復完成度（百分比）。
+        /// </summary>
+        public decimal? EstimatedRestorationPercentage { get; set; }
+
+        /// <summary>
+        /// 建議改採鈑烤的原因。
+        /// </summary>
+        public string? SuggestedPaintReason { get; set; }
+
+        /// <summary>
+        /// 無法修復時的原因。
+        /// </summary>
+        public string? UnrepairableReason { get; set; }
     }
 }

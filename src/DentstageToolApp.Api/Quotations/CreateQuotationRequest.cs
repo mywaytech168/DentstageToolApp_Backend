@@ -28,19 +28,9 @@ public class CreateQuotationRequest
     public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
-    /// 服務類別的明細資訊。
-    /// </summary>
-    public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
-
-    /// <summary>
     /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
     /// </summary>
     public List<QuotationDamageItem> Damages { get; set; } = new();
-
-    /// <summary>
-    /// 各類別金額總覽。
-    /// </summary>
-    public QuotationCategoryTotal? CategoryTotal { get; set; }
 
     /// <summary>
     /// 車體確認單資料。
@@ -51,11 +41,6 @@ public class CreateQuotationRequest
     /// 維修需求設定，包含維修類型與常見的處理選項。
     /// </summary>
     public CreateQuotationMaintenanceInfo Maintenance { get; set; } = new();
-
-    /// <summary>
-    /// 估價單整體備註，會以 JSON 包裝儲存在資料庫中。
-    /// </summary>
-    public string? Remark { get; set; }
 }
 
 /// <summary>
@@ -129,6 +114,41 @@ public class CreateQuotationMaintenanceInfo
     /// 是否需要工具評估。
     /// </summary>
     public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 其他估價費用，包含耗材或外包等額外支出。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 預估施工花費的天數，提供前端呈現整體工期。
+    /// </summary>
+    public int? EstimatedRepairDays { get; set; }
+
+    /// <summary>
+    /// 預估施工花費的時數，可對應半天內完工等情境。
+    /// </summary>
+    public int? EstimatedRepairHours { get; set; }
+
+    /// <summary>
+    /// 預估修復完成度（百分比），協助溝通修復後狀態。
+    /// </summary>
+    public decimal? EstimatedRestorationPercentage { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因描述。
+    /// </summary>
+    public string? SuggestedPaintReason { get; set; }
+
+    /// <summary>
+    /// 無法修復時的原因說明，供前端與客戶溝通使用。
+    /// </summary>
+    public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 維修設定備註，取代舊版放置於頂層的 remark 欄位。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 
 /// <summary>
@@ -221,6 +241,41 @@ public class QuotationMaintenanceInfo
     /// 是否需要工具評估。
     /// </summary>
     public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 其他估價費用。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 預估花費天數。
+    /// </summary>
+    public int? EstimatedRepairDays { get; set; }
+
+    /// <summary>
+    /// 預估花費時數。
+    /// </summary>
+    public int? EstimatedRepairHours { get; set; }
+
+    /// <summary>
+    /// 預估修復程度（百分比）。
+    /// </summary>
+    public decimal? EstimatedRestorationPercentage { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因。
+    /// </summary>
+    public string? SuggestedPaintReason { get; set; }
+
+    /// <summary>
+    /// 無法修復時的原因。
+    /// </summary>
+    public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 維修相關備註。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 
 /// <summary>
