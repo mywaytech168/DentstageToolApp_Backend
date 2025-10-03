@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>新增估價單流程說明</title>
+  <style>
+    body {
+      font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+      margin: 0;
+      padding: 0 24px 48px;
+      background-color: #f8fafc;
+      color: #1f2937;
+      line-height: 1.7;
+    }
+    header {
+      padding: 32px 0 16px;
+    }
+    h1, h2, h3 {
+      color: #0f172a;
+    }
+    section {
+      margin-bottom: 32px;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+      padding: 24px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      background: #fefefe;
+    }
+    th, td {
+      border: 1px solid #e2e8f0;
+      padding: 12px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background-color: #f1f5f9;
+    }
+    code {
+      font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      background-color: #e2e8f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    ul {
+      padding-left: 20px;
+    }
+    .tips {
+      border-left: 4px solid #2563eb;
+      background-color: #dbeafe;
+      padding: 12px 16px;
+      margin-top: 16px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <!-- 說明頁面頂部：簡單介紹頁面用途，方便使用者理解 -->
+  <header>
+    <h1>新增估價單流程與欄位對照說明</h1>
+    <p>本頁彙整 <code>POST /api/quotations</code> 新增估價單流程，包含流程步驟、欄位對照與欄位中文釋義，協助前後端與門市人員快速掌握資料填寫規則。</p>
+  </header>
+
+  <!-- 第一部分：流程概觀，逐步說明 API 呼叫與前置作業 -->
+  <section>
+    <h2>流程概觀</h2>
+    <ol>
+      <li><strong>準備 JWT 與登入資訊：</strong>系統會從 JWT 判斷門市（StoreUID）與建立人資訊，請先確保登入狀態有效。</li>
+      <li><strong>整理顧客與車輛資料：</strong>需包含顧客類型、聯絡資料、車牌、車型與維修需求等資訊，缺漏將影響估價單產出。</li>
+      <li><strong>組裝估價單請求：</strong>依下方欄位表格填入資訊，特別注意布林、日期與流水號等欄位格式。</li>
+      <li><strong>送出 API：</strong>透過 <code>POST /api/quotations</code> 送出 JSON，成功後會回傳完整的估價單資料與系統產生的編號。</li>
+      <li><strong>檢查回應：</strong>確認傷痕照片、技師資料與折扣設定皆與實際需求一致，必要時可使用編輯 API 進行調整。</li>
+    </ol>
+    <div class="tips">
+      <strong>小提醒：</strong>流水號會依照「年+月」組合重新起算，若同月已有資料，系統會自動遞增序號並同步更新 <code>QuotationNo</code> 與 <code>SerialNum</code>。
+    </div>
+  </section>
+
+  <!-- 第二部分：欄位對照表，將請求與資料庫對應一次列出 -->
+  <section>
+    <h2>請求欄位對照表</h2>
+    <p>以下表格列出新增估價單請求常用欄位，包含 JSON 路徑、中文說明與資料來源。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>JSON 欄位</th>
+          <th>中文說明</th>
+          <th>資料來源 / 產出規則</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>store.uid</code></td>
+          <td>門市識別碼</td>
+          <td>系統自動從 JWT 解析，無需前端提供。</td>
+        </tr>
+        <tr>
+          <td><code>store.name</code></td>
+          <td>門市名稱</td>
+          <td>從登入門市資料帶入，用於紀錄建立者。</td>
+        </tr>
+        <tr>
+          <td><code>technician.uid</code></td>
+          <td>估價技師 UID</td>
+          <td>前端須帶入選定技師，會同步寫入 <code>UserUID</code>。</td>
+        </tr>
+        <tr>
+          <td><code>technician.name</code></td>
+          <td>估價技師姓名</td>
+          <td>前端帶入顯示用名稱，後端用於 <code>UserName</code>。</td>
+        </tr>
+        <tr>
+          <td><code>customer.uid</code></td>
+          <td>顧客 UID</td>
+          <td>對應顧客主檔，用於載入類型、地址與來源資訊。</td>
+        </tr>
+        <tr>
+          <td><code>customer.type</code></td>
+          <td>顧客類型</td>
+          <td>自顧客主檔帶入，儲存於 <code>Customer_type</code>。</td>
+        </tr>
+        <tr>
+          <td><code>customer.county</code></td>
+          <td>縣市</td>
+          <td>自顧客主檔帶入，儲存於 <code>County</code>。</td>
+        </tr>
+        <tr>
+          <td><code>customer.township</code></td>
+          <td>鄉鎮區</td>
+          <td>自顧客主檔帶入，儲存於 <code>Township</code>。</td>
+        </tr>
+        <tr>
+          <td><code>customer.reason</code></td>
+          <td>合作來源/備註</td>
+          <td>自顧客主檔帶入，儲存於 <code>Reason</code>。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.carNo</code></td>
+          <td>車牌（去除連字號）</td>
+          <td>後端自動標準化，儲存於 <code>CarNo</code> 供查詢使用。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.carNoInput</code> / <code>carNoInputGlobal</code></td>
+          <td>車牌（保留連字號）</td>
+          <td>前端維持原始輸入格式，用於顯示與跨區域查詢。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.brandUid</code></td>
+          <td>車品牌識別碼</td>
+          <td>寫入 <code>BranduId</code>，供報表與查詢使用。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.modelUid</code></td>
+          <td>車款識別碼</td>
+          <td>寫入 <code>ModeluId</code>，與品牌搭配使用。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.mileage</code></td>
+          <td>里程數</td>
+          <td>選填，用於維修歷史紀錄。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.estimatedRepairDays</code></td>
+          <td>預估維修天數</td>
+          <td>轉存 <code>FixExpect_Day</code>，搭配時數組成維修工期。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.estimatedRepairHours</code></td>
+          <td>預估維修小時</td>
+          <td>轉存 <code>FixExpect_Hour</code>，搭配天數使用。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.estimatedRestorationPercentage</code></td>
+          <td>預估修復完成度</td>
+          <td>格式化為百分比字串寫入 <code>FixExpect</code> 舊欄位。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.remark</code></td>
+          <td>維修備註</td>
+          <td>儲存於 <code>Remark</code> 純文字欄位。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.unrepairableReason</code></td>
+          <td>無法維修原因</td>
+          <td>若有值會將 <code>Reject</code> 設為「1」，並寫入 <code>Reject_reason</code>。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.suggestedPaintReason</code></td>
+          <td>建議鈑烤原因</td>
+          <td>若有值會將 <code>PanelBeat</code> 設為「1」，並寫入 <code>PanelBeat_reason</code>。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.fixTime.hour</code></td>
+          <td>現場施工小時</td>
+          <td>寫入 <code>Fix_Time_Hour</code> 舊欄位。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.fixTime.minute</code></td>
+          <td>現場施工分鐘</td>
+          <td>寫入 <code>Fix_Time_Min</code> 舊欄位。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.reserved.toolTest</code></td>
+          <td>工具測試需求</td>
+          <td>布林值轉換為「1/空白」，對應資料表 <code>ToolTest</code>。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.reserved.coat</code></td>
+          <td>鍍膜需求</td>
+          <td>布林值轉換為「1/空白」，對應資料表 <code>Coat</code>。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.reserved.envelope</code></td>
+          <td>車套需求</td>
+          <td>布林值轉換為「1/空白」，對應資料表 <code>Envelope</code>。</td>
+        </tr>
+        <tr>
+          <td><code>vehicle.reserved.paint</code></td>
+          <td>烤漆需求</td>
+          <td>布林值轉換為「1/空白」，對應資料表 <code>Paint</code>。</td>
+        </tr>
+        <tr>
+          <td><code>damages</code></td>
+          <td>傷痕列表</td>
+          <td>可帶多筆位置、狀況、說明與金額，後端會與照片綁定。</td>
+        </tr>
+        <tr>
+          <td><code>damages[].photos[].photoUid</code></td>
+          <td>傷痕照片 UID</td>
+          <td>需先上傳照片取得 UID，再與傷痕記錄綁定。</td>
+        </tr>
+        <tr>
+          <td><code>signature.photoUid</code></td>
+          <td>簽名照片 UID</td>
+          <td>上傳後標記為簽名用途，便於後端辨識。</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 第三部分：系統自動填寫欄位說明，確保理解後端額外處理 -->
+  <section>
+    <h2>系統自動填寫欄位</h2>
+    <p>以下欄位由後端依規則產生，前端僅需帶入必要資訊即可：</p>
+    <ul>
+      <li><strong>QuotationNo：</strong>格式為 <code>QYYMM####</code>，年與月取兩位數，序號每月重新起算。</li>
+      <li><strong>SerialNum：</strong>純數字序號，與 <code>QuotationNo</code> 的後四碼一致。</li>
+      <li><strong>Date：</strong>系統時間（台北時區）當日日期。</li>
+      <li><strong>Status：</strong>預設為 <code>110</code>（估價中）。</li>
+      <li><strong>Status110_TimeStamp：</strong>建立時的時間戳記。</li>
+      <li><strong>Status110_User：</strong>建立估價單的門市名稱。</li>
+    </ul>
+    <div class="tips">
+      <strong>若需要覆寫：</strong>僅能透過後端維護作業或資料庫腳本調整，建議保持系統自動邏輯，以避免序號或狀態錯亂。
+    </div>
+  </section>
+
+  <!-- 第四部分：錯誤排除建議，協助快速定位問題 -->
+  <section>
+    <h2>常見錯誤與排除方式</h2>
+    <ul>
+      <li><strong>400 驗證錯誤：</strong>檢查必填欄位是否帶入，例如 <code>technician.uid</code> 或 <code>damages</code> 結構。</li>
+      <li><strong>照片無法綁定：</strong>確認照片已透過上傳 API 建立並取得 <code>photoUid</code>，且未被其他估價單占用。</li>
+      <li><strong>流水號重複：</strong>請確認系統時間是否正確，或是否在同一秒內大量建立估價單，可透過資料庫檢查最後一筆序號。</li>
+    </ul>
+  </section>
+
+  <!-- 結尾：提供維護與聯絡資訊 -->
+  <section>
+    <h2>維護與聯絡</h2>
+    <p>如需調整欄位或新增流程，請聯繫後端開發團隊並提供需求單，以便評估影響範圍與更新排程。</p>
+  </section>
+</body>
+</html>
