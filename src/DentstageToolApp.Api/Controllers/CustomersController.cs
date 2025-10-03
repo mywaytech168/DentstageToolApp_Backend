@@ -100,6 +100,77 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>
+    /// 編輯客戶資料，更新姓名、電話、來源與備註等欄位。
+    /// </summary>
+    /// <remarks>
+    /// {
+    ///   "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A",
+    ///   "customerName": "林小華",
+    ///   "phone": "0988123456",
+    ///   "category": "一般客戶",
+    ///   "gender": "Male",
+    ///   "county": "高雄市",
+    ///   "township": "左營區",
+    ///   "email": "demo@dentstage.com",
+    ///   "source": "Facebook",
+    ///   "reason": "想了解凹痕修復方案",
+    ///   "remark": "首次到店，請協助安排體驗"
+    /// }
+    /// </remarks>
+    [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A",
+          "customerName": "林小華",
+          "phone": "0988123456",
+          "category": "一般客戶",
+          "gender": "Male",
+          "county": "高雄市",
+          "township": "左營區",
+          "email": "demo@dentstage.com",
+          "source": "Facebook",
+          "reason": "想了解凹痕修復方案",
+          "remark": "首次到店，請協助安排體驗"
+        }
+        """)]
+    [ProducesResponseType(typeof(EditCustomerResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<EditCustomerResponse>> EditCustomerAsync([FromBody] EditCustomerRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            // ModelState 會帶有詳細欄位錯誤，直接回傳標準 ProblemDetails。
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 透過 JWT 取得操作人員名稱，統一填寫修改者資訊。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _customerManagementService.EditCustomerAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (CustomerManagementException ex)
+        {
+            _logger.LogWarning(ex, "編輯客戶失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "編輯客戶資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("編輯客戶流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "編輯客戶資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "編輯客戶流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "編輯客戶資料失敗");
+        }
+    }
+
+    /// <summary>
     /// 透過電話關鍵字搜尋客戶資料與維修統計資訊。
     /// </summary>
     /// <remarks>
