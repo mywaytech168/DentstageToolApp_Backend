@@ -103,118 +103,25 @@ public class QuotationsController : ControllerBase
           "customer": {
             "customerUid": "Cu_C40A5D87-FD06-48E9-9DB3-1C9677303992"
           },
-          "serviceCategories": {
-            "dent": {
-              "overall": {
-                "paintCondition": "原廠烤漆",
-                "toolEvaluation": "需特殊拉拔工具",
-                "needStay": true,
-                "remark": "建議留車一天",
-                "estimatedRepairTime": "1 天",
-                "estimatedRestorationLevel": "9 成新",
-                "isRepairable": true
-              },
-              "amount": {
-                "damageSubtotal": 4500,
-                "additionalFee": 500,
-                "discountPercentage": 10,
-                "discountReason": "春季活動"
-              }
-            },
-            "paint": {
-              "overall": {
-                "paintCondition": "已有色差",
-                "toolEvaluation": "需烤漆房安排",
-                "needStay": false,
-                "remark": "可於半天內完成",
-                "estimatedRepairTime": "6 小時",
-                "estimatedRestorationLevel": "8 成新",
-                "isRepairable": true
-              },
-              "amount": {
-                "damageSubtotal": 2800,
-                "additionalFee": 300,
-                "discountPercentage": 0,
-                "discountReason": null
-              }
-            },
-            "other": {
-              "overall": {
-                "paintCondition": "內裝保養良好",
-                "toolEvaluation": "需一般保養工具",
-                "needStay": false,
-                "remark": "提供代步車",
-                "estimatedRepairTime": "4 小時",
-                "estimatedRestorationLevel": "維持原狀",
-                "isRepairable": true
-              },
-              "amount": {
-                "damageSubtotal": 1500,
-                "additionalFee": 0,
-                "discountPercentage": 5,
-                "discountReason": "會員折扣"
-              }
-            }
-          },
           "damages": [
             {
-              "圖片": [
-                {
-                  "photoUid": "PH_01",
-                  "description": "右前門受損特寫",
-                  "isPrimary": true
-                }
-              ],
+              "圖片": "PH_01",
               "位置": "右前門",
               "凹痕狀況": "中度凹陷",
               "說明": "需板金搭配烤漆",
               "預估金額": 4500
             },
             {
-              "圖片": [
-                {
-                  "photoUid": "PH_02",
-                  "description": "後保桿刮傷位置",
-                  "isPrimary": false
-                }
-              ],
+              "圖片": "PH_02",
               "位置": "後保桿",
               "凹痕狀況": "輕微刮傷",
               "說明": "建議拋光與點修",
               "預估金額": 1200
             }
           ],
-          "categoryTotal": {
-            "categorySubtotals": {
-              "dent": 5000,
-              "paint": 3100,
-              "other": 1500
-            },
-            "roundingDiscount": 300
-          },
           "carBodyConfirmation": {
             "annotatedPhotoUid": "PH_10",
             "signaturePhotoUid": "PH_11",
-            "signaturePhotoUids": [
-              "PH_11",
-              "PH_12"
-            ],
-            "checklist": [
-              {
-                "part": "車頭鈑件",
-                "status": "正常",
-                "remark": "無需處理",
-                "photos": []
-              },
-              {
-                "part": "右前門",
-                "status": "待修",
-                "remark": "需確認折痕",
-                "photos": [
-                  "PH_13"
-                ]
-              }
-            ],
             "damageMarkers": [
               {
                 "x": 0.42,
@@ -233,9 +140,15 @@ public class QuotationsController : ControllerBase
             "applyCoating": false,
             "applyWrapping": false,
             "hasRepainted": false,
-            "needToolEvaluation": true
-          },
-          "remark": "請於修復後通知客戶取車"
+            "needToolEvaluation": true,
+            "otherFee": 800,
+            "estimatedRepairDays": 1,
+            "estimatedRepairHours": 6,
+            "estimatedRestorationPercentage": 90,
+            "suggestedPaintReason": "後保桿刮傷面積較大",
+            "unrepairableReason": null,
+            "remark": "請於修復後通知客戶取車"
+          }
         }
         """)]
     [ProducesResponseType(typeof(CreateQuotationResponse), StatusCodes.Status201Created)]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -105,7 +106,7 @@ public class QuotationDamageItem
     /// </summary>
     [Obsolete("請改用 Photos 集合傳遞多張傷痕圖片。")]
     [JsonIgnore]
-    public string? Photo { get; set; }
+    public string? Photo { get; private set; }
 
     /// <summary>
     /// 舊欄位別名，允許仍以 photo 傳值，但輸出時隱藏英文欄位。
@@ -115,14 +116,24 @@ public class QuotationDamageItem
     public string? LegacyPhoto
     {
         get => null;
-        set => Photo = value;
+        set => SetPrimaryPhoto(value);
     }
+
+    private List<QuotationDamagePhoto> _photos = new();
 
     /// <summary>
     /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
     /// </summary>
     [JsonIgnore]
-    public List<QuotationDamagePhoto> Photos { get; set; } = new();
+    public List<QuotationDamagePhoto> Photos
+    {
+        get => _photos;
+        set
+        {
+            _photos = value ?? new List<QuotationDamagePhoto>();
+            SyncLegacyPhotoFromPhotos();
+        }
+    }
 
     /// <summary>
     /// 新欄位：提供前端顯示「圖片」欄位使用，並將資料寫入共用清單。
@@ -256,6 +267,52 @@ public class QuotationDamageItem
         get => null;
         set => EstimatedAmount = value;
     }
+
+    /// <summary>
+    /// 將主要圖片同步到舊欄位，維持舊資料格式相容。
+    /// </summary>
+    private void SyncLegacyPhotoFromPhotos()
+    {
+        var primaryPhotoUid = _photos.FirstOrDefault()?.PhotoUid;
+        if (string.IsNullOrWhiteSpace(primaryPhotoUid))
+        {
+            Photo = null;
+            return;
+        }
+
+        Photo = primaryPhotoUid.Trim();
+    }
+
+    /// <summary>
+    /// 設定主要圖片，同步更新內部圖片集合與舊欄位。
+    /// </summary>
+    private void SetPrimaryPhoto(string? value)
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        if (normalized is null)
+        {
+            Photo = null;
+            if (_photos.Count > 0)
+            {
+                _photos = new List<QuotationDamagePhoto>();
+            }
+
+            return;
+        }
+
+        if (_photos.Count == 0)
+        {
+            _photos.Add(new QuotationDamagePhoto { PhotoUid = normalized });
+        }
+        else
+        {
+            var primary = _photos[0] ?? new QuotationDamagePhoto();
+            primary.PhotoUid = normalized;
+            _photos[0] = primary;
+        }
+
+        Photo = normalized;
+    }
 }
 
 /// <summary>
@@ -346,7 +403,25 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         writer.WriteStartObject();
 
         writer.WritePropertyName("圖片");
-        JsonSerializer.Serialize(writer, target.DisplayPhotos ?? new List<QuotationDamagePhoto>(), options);
+        var photos = target.Photos ?? new List<QuotationDamagePhoto>();
+        var primaryPhotoUid = !string.IsNullOrWhiteSpace(target.Photo)
+            ? target.Photo
+            : photos.FirstOrDefault()?.PhotoUid;
+
+        var shouldWriteCompact = photos.Count <= 1 && (photos.Count == 0 || IsSimplePhoto(photos[0]));
+
+        if (!string.IsNullOrWhiteSpace(primaryPhotoUid) && shouldWriteCompact)
+        {
+            writer.WriteStringValue(primaryPhotoUid);
+        }
+        else if (photos.Count > 0)
+        {
+            JsonSerializer.Serialize(writer, photos, options);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
 
         writer.WritePropertyName("位置");
         WriteNullableString(writer, target.DisplayPosition);
@@ -387,6 +462,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             {
                 element.Deserialize<QuotationDamagePhoto>(options) ?? new QuotationDamagePhoto()
             },
+            JsonValueKind.String => CreatePhotoListFromString(element.GetString()),
             _ => new List<QuotationDamagePhoto>()
         };
     }
@@ -471,6 +547,39 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         return photos;
+    }
+
+    /// <summary>
+    /// 將字串型式的圖片欄位轉換為標準照片清單。
+    /// </summary>
+    private static List<QuotationDamagePhoto> CreatePhotoListFromString(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<QuotationDamagePhoto>();
+        }
+
+        return new List<QuotationDamagePhoto>
+        {
+            new() { PhotoUid = value.Trim() }
+        };
+    }
+
+    /// <summary>
+    /// 判斷圖片資訊是否僅包含識別碼，可輸出為精簡格式。
+    /// </summary>
+    private static bool IsSimplePhoto(QuotationDamagePhoto? photo)
+    {
+        if (photo is null)
+        {
+            return true;
+        }
+
+        var hasDescription = !string.IsNullOrWhiteSpace(photo.Description);
+        var hasPrimaryFlag = photo.IsPrimary.HasValue;
+        var hasLegacyFile = !string.IsNullOrWhiteSpace(photo.File);
+
+        return !hasDescription && !hasPrimaryFlag && !hasLegacyFile;
     }
 
     /// <summary>
@@ -574,11 +683,6 @@ public class QuotationCarBodyConfirmation
     public string? AnnotatedPhotoUid { get; set; }
 
     /// <summary>
-    /// 車體確認細項列表，可對應檢查部位與勾選結果。
-    /// </summary>
-    public List<QuotationCarBodyChecklistItem> Checklist { get; set; } = new();
-
-    /// <summary>
     /// 車體受損標記列表，透過座標與損傷類型記錄於車身示意圖。
     /// </summary>
     public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
@@ -593,11 +697,6 @@ public class QuotationCarBodyConfirmation
     /// 客戶簽名影像的 PhotoUID。
     /// </summary>
     public string? SignaturePhotoUid { get; set; }
-
-    /// <summary>
-    /// 多份簽名圖片清單，支援一次上傳多張簽名檔並由後端綁定。
-    /// </summary>
-    public List<string> SignaturePhotoUids { get; set; } = new();
 }
 
 /// <summary>
