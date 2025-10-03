@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace DentstageToolApp.Api.Quotations;
 
@@ -29,7 +30,9 @@ public class CreateQuotationRequest
 
     /// <summary>
     /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
+    /// 透過自訂轉換器支援舊版單物件與新版陣列格式，降低前端調整負擔。
     /// </summary>
+    [JsonConverter(typeof(QuotationDamageCollectionConverter))]
     public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
@@ -116,12 +119,12 @@ public class CreateQuotationMaintenanceInfo
     public decimal? OtherFee { get; set; }
 
     /// <summary>
-    /// 預估施工花費的天數，提供前端呈現整體工期。
+    /// 預估施工花費的天數，建立時會同步寫入舊系統的 FixExpect_Day 欄位。
     /// </summary>
     public int? EstimatedRepairDays { get; set; }
 
     /// <summary>
-    /// 預估施工花費的時數，可對應半天內完工等情境。
+    /// 預估施工花費的時數，建立時會同步寫入舊系統的 FixExpect_Hour 欄位。
     /// </summary>
     public int? EstimatedRepairHours { get; set; }
 
@@ -131,12 +134,32 @@ public class CreateQuotationMaintenanceInfo
     public decimal? EstimatedRestorationPercentage { get; set; }
 
     /// <summary>
-    /// 建議改採鈑烤處理的原因描述。
+    /// 修復作業預估工時（小時），對應資料表 FixTimeHour 欄位。
+    /// </summary>
+    public int? FixTimeHour { get; set; }
+
+    /// <summary>
+    /// 修復作業預估工時（分鐘），對應資料表 FixTimeMin 欄位。
+    /// </summary>
+    public int? FixTimeMin { get; set; }
+
+    /// <summary>
+    /// 預估施工完成天數，對應資料表 FixExpectDay 欄位。
+    /// </summary>
+    public int? FixExpectDay { get; set; }
+
+    /// <summary>
+    /// 預估施工完成小時數，對應資料表 FixExpectHour 欄位。
+    /// </summary>
+    public int? FixExpectHour { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因描述，若有內容會將 PanelBeat 欄位設為 "1"。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
 
     /// <summary>
-    /// 無法修復時的原因說明，供前端與客戶溝通使用。
+    /// 無法修復時的原因說明，若有內容會將 Reject 欄位標記為 true。
     /// </summary>
     public string? UnrepairableReason { get; set; }
 
@@ -190,6 +213,11 @@ public class QuotationStoreInfo
     /// 製單技師。
     /// </summary>
     public string? CreatorName { get; set; }
+
+    /// <summary>
+    /// 估價技師識別碼，回傳時需與建立估價單格式一致，方便前端直接回填。
+    /// </summary>
+    public string? TechnicianUid { get; set; }
 
     /// <summary>
     /// 建立日期。
@@ -253,12 +281,12 @@ public class QuotationMaintenanceInfo
     public decimal? OtherFee { get; set; }
 
     /// <summary>
-    /// 預估花費天數。
+    /// 預估花費天數，對應資料表的 FixExpect_Day 欄位。
     /// </summary>
     public int? EstimatedRepairDays { get; set; }
 
     /// <summary>
-    /// 預估花費時數。
+    /// 預估花費時數，對應資料表的 FixExpect_Hour 欄位。
     /// </summary>
     public int? EstimatedRepairHours { get; set; }
 
@@ -268,12 +296,32 @@ public class QuotationMaintenanceInfo
     public decimal? EstimatedRestorationPercentage { get; set; }
 
     /// <summary>
-    /// 建議改採鈑烤處理的原因。
+    /// 修復作業預估工時（小時）。
+    /// </summary>
+    public int? FixTimeHour { get; set; }
+
+    /// <summary>
+    /// 修復作業預估工時（分鐘）。
+    /// </summary>
+    public int? FixTimeMin { get; set; }
+
+    /// <summary>
+    /// 預估完工天數。
+    /// </summary>
+    public int? FixExpectDay { get; set; }
+
+    /// <summary>
+    /// 預估完工小時數。
+    /// </summary>
+    public int? FixExpectHour { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因，若有內容會將 PanelBeat 欄位設為 "1"。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
 
     /// <summary>
-    /// 無法修復時的原因。
+    /// 無法修復時的原因，若有內容會將 Reject 欄位標記為 true。
     /// </summary>
     public string? UnrepairableReason { get; set; }
 
@@ -308,6 +356,16 @@ public class CreateQuotationCarInfo
     /// </summary>
     [Required(ErrorMessage = "請選擇車輛資料。")]
     public string? CarUid { get; set; }
+
+    /// <summary>
+    /// 車輛品牌識別碼（選填），若提供將同步寫入估價單的 BrandUID 欄位。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼（選填），若提供將同步寫入估價單的 ModelUID 欄位。
+    /// </summary>
+    public string? ModelUid { get; set; }
 }
 
 /// <summary>
@@ -331,9 +389,19 @@ public class QuotationCarInfo
     public string? Brand { get; set; }
 
     /// <summary>
+    /// 車輛品牌識別碼。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
     /// 車型名稱。
     /// </summary>
     public string? Model { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼。
+    /// </summary>
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車色。
@@ -385,7 +453,27 @@ public class QuotationCustomerInfo
     public string? Gender { get; set; }
 
     /// <summary>
-    /// 消息來源。
+    /// 顧客類型，對應資料庫 Customer_type 欄位，方便呈現客戶屬性分類。
+    /// </summary>
+    public string? CustomerType { get; set; }
+
+    /// <summary>
+    /// 所在縣市，對應資料庫 County 欄位。
+    /// </summary>
+    public string? County { get; set; }
+
+    /// <summary>
+    /// 所在鄉鎮市區，對應資料庫 Township 欄位。
+    /// </summary>
+    public string? Township { get; set; }
+
+    /// <summary>
+    /// 詢問原因，對應資料庫 Reason 欄位。
+    /// </summary>
+    public string? Reason { get; set; }
+
+    /// <summary>
+    /// 消息來源，沿用估價單 Source 欄位，優先使用門市輸入值。
     /// </summary>
     public string? Source { get; set; }
 

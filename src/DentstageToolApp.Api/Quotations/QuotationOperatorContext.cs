@@ -14,4 +14,9 @@ public class QuotationOperatorContext
     /// 操作人員顯示名稱，會同步寫入建立與修改者欄位。
     /// </summary>
     public string OperatorName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 操作人員所屬門市識別碼，來源為 JWT 權杖內的 StoreUid，建檔時須帶入報價單的 StoreUID 欄位。
+    /// </summary>
+    public string? StoreUid { get; set; }
 }
