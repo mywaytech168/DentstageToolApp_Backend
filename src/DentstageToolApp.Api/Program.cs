@@ -28,6 +28,9 @@ var builder = WebApplication.CreateBuilder(args);
 // ---------- 服務註冊區 ----------
 // 註冊控制器，提供 API 與路由的基礎功能
 builder.Services.AddControllers();
+// 先讀取 Swagger 相關組態，包含自訂文件連結的基底路徑
+var swaggerSection = builder.Configuration.GetSection("Swagger");
+var swaggerDocsBaseUrl = swaggerSection.GetValue<string?>("DocsBaseUrl") ?? "/docs/api";
 // 啟用 Swagger 方便初期開發與溝通 API 規格
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -82,13 +85,19 @@ builder.Services.AddSwaggerGen(options =>
 
     // 注入 Mock 範例過濾器，將屬性定義的 JSON 直接呈現在 Swagger UI 中
     options.OperationFilter<MockRequestExampleOperationFilter>();
+    // 自動掛載外部 DOCS 連結，讓開發者可直接跳轉至詳盡教學
+    options.OperationFilter<SwaggerExternalDocumentOperationFilter>(swaggerDocsBaseUrl);
 });
 // 讀取 Swagger 組態，提供後續中介層調整依據
-var swaggerSection = builder.Configuration.GetSection("Swagger");
 var swaggerEnabled = true;
 var swaggerRoutePrefix = swaggerSection.GetValue<string?>("RoutePrefix") ?? "swagger";
 var swaggerEndpointName = swaggerSection.GetValue<string?>("EndpointName") ?? "Dentstage Tool App API v1";
 var swaggerDocumentTitle = swaggerSection.GetValue<string?>("DocumentTitle") ?? "Dentstage Tool App 後端 API 文件";
+if (swaggerSection.GetValue<bool?>("Enabled") is bool enabledSetting)
+{
+    // 依照組態覆寫是否啟用 Swagger UI，避免正式環境暴露 API 互動頁面。
+    swaggerEnabled = enabledSetting;
+}
 
 // 設定資料庫內容類別，改用 MySQL 連線並確保連線字串存在
 var connectionString = builder.Configuration.GetConnectionString("DentstageToolAppDatabase");
