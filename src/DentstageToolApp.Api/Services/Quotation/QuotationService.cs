@@ -791,7 +791,10 @@ public class QuotationService : IQuotationService
             quotation.Source = NormalizeOptionalText(customerInfo.Source);
         }
 
-        quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+        if (customerInfo.Remark is not null)
+        {
+            quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+        }
 
         // ---------- 傷痕、簽名與維修資訊同步 ----------
         var effectiveDamages = requestedDamages.Count > 0
