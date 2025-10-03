@@ -126,6 +126,111 @@ public class CarManagementService : ICarManagementService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<EditCarResponse> EditCarAsync(EditCarRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new CarManagementException(HttpStatusCode.BadRequest, "請提供車輛編輯資料。");
+        }
+
+        // ---------- 參數整理區 ----------
+        // 先整理識別碼避免查詢時因前後空白導致找不到資料。
+        var carUid = NormalizeRequiredText(request.CarUid, "車輛識別碼");
+        var licensePlate = NormalizeRequiredText(request.CarPlateNumber, "車牌號碼");
+        var normalizedPlate = NormalizePlate(licensePlate);
+
+        if (string.IsNullOrWhiteSpace(normalizedPlate))
+        {
+            // 若清除後無有效字元，代表輸入內容不合法。
+            throw new CarManagementException(HttpStatusCode.BadRequest, "車牌號碼格式不正確，請確認僅輸入英數字。");
+        }
+
+        var storedPlate = licensePlate.ToUpperInvariant();
+        var operatorLabel = NormalizeOperator(operatorName);
+
+        // 先找出欲更新的車輛，若不存在直接回報錯誤避免後續更新 null 物件。
+        var carEntity = await _dbContext.Cars
+            .FirstOrDefaultAsync(car => car.CarUid == carUid, cancellationToken);
+
+        if (carEntity is null)
+        {
+            throw new CarManagementException(HttpStatusCode.NotFound, "找不到對應的車輛資料，請確認識別碼是否正確。");
+        }
+
+        var resolvedBrand = await ResolveBrandAsync(request.BrandUid, cancellationToken);
+        var resolvedModel = await ResolveModelAsync(request.ModelUid, resolvedBrand?.BrandUid, cancellationToken);
+
+        // 若模型帶有品牌資訊，但外部未傳入品牌，則以模型所屬品牌為主。
+        if (!string.IsNullOrWhiteSpace(resolvedModel?.BrandUid) && resolvedBrand is null)
+        {
+            resolvedBrand = await ResolveBrandAsync(resolvedModel!.BrandUid, cancellationToken);
+        }
+
+        // 當品牌有指定且模型也有帶入時，需驗證兩者是否一致。
+        if (resolvedBrand is not null && resolvedModel is not null && !string.Equals(resolvedBrand.BrandUid, resolvedModel.BrandUid, StringComparison.Ordinal))
+        {
+            throw new CarManagementException(HttpStatusCode.BadRequest, "車型與品牌不相符，請重新選擇後再儲存。");
+        }
+
+        var brand = NormalizeOptionalText(resolvedBrand?.BrandName);
+        var model = NormalizeOptionalText(resolvedModel?.ModelName);
+        var color = NormalizeOptionalText(request.Color);
+        var remark = NormalizeOptionalText(request.Remark);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料檢核區 ----------
+        // 檢查是否有其他車輛使用相同車牌，避免資料重複。
+        var duplicate = await _dbContext.Cars
+            .AsNoTracking()
+            .AnyAsync(car =>
+                    car.CarUid != carUid
+                    && (
+                        car.CarNo == storedPlate
+                        || car.CarNo == normalizedPlate
+                        || car.CarNoQuery == normalizedPlate
+                        || car.CarNoQuery == storedPlate
+                    ),
+                cancellationToken);
+
+        if (duplicate)
+        {
+            throw new CarManagementException(HttpStatusCode.Conflict, "車牌號碼已存在於其他車輛，請重新確認。");
+        }
+
+        // ---------- 實體更新區 ----------
+        var now = DateTime.UtcNow;
+        carEntity.CarNo = storedPlate;
+        carEntity.CarNoQuery = normalizedPlate;
+        carEntity.Brand = brand;
+        carEntity.Model = model;
+        carEntity.Color = color;
+        carEntity.CarRemark = remark;
+        carEntity.BrandModel = BuildBrandModel(brand, model);
+        carEntity.ModificationTimestamp = now;
+        carEntity.ModifiedBy = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 編輯車輛 {CarUid} ({Plate}) 成功。", operatorLabel, carEntity.CarUid, storedPlate);
+
+        // ---------- 組裝回應區 ----------
+        return new EditCarResponse
+        {
+            CarUid = carEntity.CarUid,
+            CarPlateNumber = carEntity.CarNo!,
+            BrandUid = resolvedBrand?.BrandUid,
+            Brand = carEntity.Brand,
+            Model = carEntity.Model,
+            ModelUid = resolvedModel?.ModelUid,
+            Color = carEntity.Color,
+            Remark = carEntity.CarRemark,
+            UpdatedAt = now,
+            Message = "已更新車輛資料。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -175,6 +280,19 @@ public class CarManagementService : ICarManagementService
         }
 
         return operatorName.Trim();
+    }
+
+    /// <summary>
+    /// 處理必填欄位，若為空則丟出對應的提示訊息。
+    /// </summary>
+    private static string NormalizeRequiredText(string? value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new CarManagementException(HttpStatusCode.BadRequest, $"{fieldName}為必填欄位，請重新輸入。");
+        }
+
+        return value.Trim();
     }
 
     /// <summary>

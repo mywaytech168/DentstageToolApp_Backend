@@ -114,6 +114,98 @@ public class CustomerManagementService : ICustomerManagementService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<EditCustomerResponse> EditCustomerAsync(EditCustomerRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new CustomerManagementException(HttpStatusCode.BadRequest, "請提供客戶編輯資料。");
+        }
+
+        // ---------- 參數整理區 ----------
+        var customerUid = NormalizeRequiredText(request.CustomerUid, "客戶識別碼");
+        var customerName = NormalizeRequiredText(request.CustomerName, "客戶名稱");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var customerType = NormalizeOptionalText(request.Category);
+        var gender = NormalizeOptionalText(request.Gender);
+        var county = NormalizeOptionalText(request.County);
+        var township = NormalizeOptionalText(request.Township);
+        var email = NormalizeEmail(request.Email);
+        var source = NormalizeOptionalText(request.Source);
+        var reason = NormalizeOptionalText(request.Reason);
+        var remark = NormalizeOptionalText(request.Remark);
+        var phone = NormalizeOptionalText(request.Phone);
+        var phoneQuery = NormalizePhoneQuery(phone);
+
+        // 查找既有客戶資料，避免更新不存在的紀錄。
+        var customerEntity = await _dbContext.Customers
+            .FirstOrDefaultAsync(customer => customer.CustomerUid == customerUid, cancellationToken);
+
+        if (customerEntity is null)
+        {
+            throw new CustomerManagementException(HttpStatusCode.NotFound, "找不到對應的客戶資料，請確認識別碼是否正確。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料檢核區 ----------
+        if (!string.IsNullOrEmpty(phoneQuery))
+        {
+            var duplicate = await _dbContext.Customers
+                .AsNoTracking()
+                .AnyAsync(customer =>
+                        customer.CustomerUid != customerUid
+                        && (
+                            customer.PhoneQuery == phoneQuery
+                            || customer.Phone == phone
+                        ),
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new CustomerManagementException(HttpStatusCode.Conflict, "該聯絡電話已存在客戶資料，請勿重複新增。");
+            }
+        }
+
+        // ---------- 實體更新區 ----------
+        var now = DateTime.UtcNow;
+        customerEntity.Name = customerName;
+        customerEntity.CustomerType = customerType;
+        customerEntity.Gender = gender;
+        customerEntity.Phone = phone;
+        customerEntity.PhoneQuery = phoneQuery;
+        customerEntity.Email = email;
+        customerEntity.County = county;
+        customerEntity.Township = township;
+        customerEntity.Source = source;
+        customerEntity.Reason = reason;
+        customerEntity.ConnectRemark = remark;
+        customerEntity.ModificationTimestamp = now;
+        customerEntity.ModifiedBy = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 編輯客戶 {CustomerUid} ({CustomerName}) 成功。", operatorLabel, customerEntity.CustomerUid, customerEntity.Name);
+
+        // ---------- 組裝回應區 ----------
+        return new EditCustomerResponse
+        {
+            CustomerUid = customerEntity.CustomerUid,
+            CustomerName = customerEntity.Name ?? customerName,
+            Phone = customerEntity.Phone,
+            Category = customerEntity.CustomerType,
+            Gender = customerEntity.Gender,
+            County = customerEntity.County,
+            Township = customerEntity.Township,
+            Email = customerEntity.Email,
+            Source = customerEntity.Source,
+            Reason = customerEntity.Reason,
+            Remark = customerEntity.ConnectRemark,
+            UpdatedAt = now,
+            Message = "已更新客戶資料。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
