@@ -160,6 +160,29 @@
             background: #f3f4f6;
         }
 
+        .schema-nested-note {
+            margin: 16px 0 8px;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .schema-nested-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .schema-nested-block {
+            border-left: 3px solid rgba(22, 104, 193, 0.35);
+            padding-left: 12px;
+        }
+
+        .schema-nested-block h6 {
+            margin: 0 0 6px 0;
+            font-size: 15px;
+            color: var(--primary-color);
+        }
+
         .empty-state {
             padding: 16px;
             border-radius: 8px;
@@ -713,16 +736,47 @@
             const requiredFields = new Set(target.required || []);
             Object.entries(target.properties || {}).forEach(([propertyName, propertySchema]) => {
                 const row = document.createElement("tr");
+                const resolvedProperty = resolveSchema(propertySchema, spec);
+                const propertyDescription = propertySchema.description
+                    || (resolvedProperty && resolvedProperty.target && resolvedProperty.target.description)
+                    || "--";
                 row.innerHTML = `
                     <td>${propertyName}</td>
                     <td>${describeSchemaType(propertySchema, spec)}</td>
                     <td>${requiredFields.has(propertyName) ? "是" : "否"}</td>
-                    <td>${propertySchema.description || "--"}</td>
+                    <td>${propertyDescription}</td>
                 `;
                 table.querySelector("tbody").appendChild(row);
             });
 
             block.appendChild(table);
+
+            const nestedContainer = document.createElement("div");
+            nestedContainer.className = "schema-nested-container";
+
+            Object.entries(target.properties || {}).forEach(([propertyName, propertySchema]) => {
+                if (!shouldRenderNestedDetails(propertySchema, spec)) {
+                    return;
+                }
+
+                const nestedBlock = document.createElement("div");
+                nestedBlock.className = "schema-nested-block";
+
+                const nestedTitle = document.createElement("h6");
+                nestedTitle.textContent = `欄位「${propertyName}」結構`;
+                nestedBlock.appendChild(nestedTitle);
+
+                nestedBlock.appendChild(renderSchemaDetails(propertySchema, spec, new Set(visited)));
+                nestedContainer.appendChild(nestedBlock);
+            });
+
+            if (nestedContainer.childElementCount > 0) {
+                const note = document.createElement("p");
+                note.className = "schema-nested-note";
+                note.textContent = "巢狀欄位詳細說明：";
+                block.appendChild(note);
+                block.appendChild(nestedContainer);
+            }
         } else if (target.type === "array" && target.items) {
             const paragraph = document.createElement("p");
             paragraph.textContent = `陣列項目型別：${describeSchemaType(target.items, spec)}`;
@@ -764,6 +818,70 @@
             return { target, refName };
         }
         return { target: schema, refName: null };
+    }
+
+    /**
+     * 判斷欄位是否具備巢狀結構，若為複雜物件或陣列則需額外顯示詳細資訊。
+     */
+    function shouldRenderNestedDetails(schema, spec, refVisited = new Set()) {
+        if (!schema) {
+            return false;
+        }
+
+        if (schema.$ref) {
+            const refName = extractRefName(schema.$ref);
+            if (refVisited.has(refName)) {
+                return false;
+            }
+            refVisited.add(refName);
+            const resolved = resolveSchema(schema, spec);
+            if (!resolved || !resolved.target) {
+                return false;
+            }
+            const target = resolved.target;
+            if (hasObjectLikeDefinition(target)) {
+                return true;
+            }
+            if (target.type === "array" || target.items) {
+                return shouldRenderNestedDetails(target.items || schema.items, spec, new Set(refVisited));
+            }
+            return false;
+        }
+
+        if (hasObjectLikeDefinition(schema)) {
+            return true;
+        }
+
+        if (schema.type === "array" || schema.items) {
+            const itemsSchema = schema.items;
+            if (!itemsSchema) {
+                return false;
+            }
+            if (itemsSchema.$ref) {
+                return true;
+            }
+            return shouldRenderNestedDetails(itemsSchema, spec, refVisited);
+        }
+
+        const compositions = ["allOf", "anyOf", "oneOf"];
+        return compositions.some(key => Array.isArray(schema[key]) && schema[key].length);
+    }
+
+    /**
+     * 判斷 schema 是否定義為物件或具備可展開的屬性集合。
+     */
+    function hasObjectLikeDefinition(schema) {
+        if (!schema) {
+            return false;
+        }
+        if (schema.properties && Object.keys(schema.properties).length) {
+            return true;
+        }
+        if (schema.type === "object") {
+            return true;
+        }
+        const compositions = ["allOf", "anyOf", "oneOf"];
+        return compositions.some(key => Array.isArray(schema[key]) && schema[key].length);
     }
 
     /**
