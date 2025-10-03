@@ -92,69 +92,57 @@ public class QuotationsController : ControllerBase
         """
         {
           "store": {
-            "technicianUid": "Tc_4F5562E1-6C71-4A3A-9E0B-0A3A3F62C9C8",
+            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
             "source": "官方網站",
-            "reservationDate": "2024-03-15T10:00:00",
-            "repairDate": "2024-03-20T09:00:00"
+            "reservationDate": "2024-10-15T10:00:00",
+            "repairDate": "2024-10-25T09:00:00"
           },
           "car": {
-            "carUid": "Ca_805E328B-A461-4D62-B6F7-B7E8D0414842"
+            "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
           },
           "customer": {
-            "customerUid": "Cu_C40A5D87-FD06-48E9-9DB3-1C9677303992"
+            "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
-          "serviceCategories": {
-            "dent": {
-              "overall": {
-                "paintCondition": "原廠烤漆",
-                "toolEvaluation": "需特殊拉拔工具",
-                "needStay": true,
-                "remark": "建議留車一天",
-                "estimatedRepairTime": "1 天",
-                "estimatedRestorationLevel": "9 成新",
-                "isRepairable": true
-              },
-              "damages": {
-                "圖片": [
-                  {
-                    "photoUid": "PH_01",
-                    "description": "右前門受損特寫",
-                    "isPrimary": true
-                  }
-                ],
-                "位置": "右前門",
-                "凹痕狀況": "中度凹陷",
-                "說明": "需板金搭配烤漆",
-                "預估金額": 4500
-              },
-              "amount": {
-                "damageSubtotal": 4500,
-                "additionalFee": 500,
-                "discountPercentage": 10,
-                "discountReason": "春季活動"
-              }
+          "damages": [
+            {
+              "圖片": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+              "位置": "保桿",
+              "凹痕狀況": "大面積",
+              "說明": "需板金搭配烤漆",
+              "預估金額": 4500
             }
-          },
-          "categoryTotal": {
-            "categorySubtotals": {
-              "dent": 5000
-            },
-            "roundingDiscount": 0
-          },
+          ],
           "carBodyConfirmation": {
-            "annotatedPhotoUid": "PH_02",
-            "signaturePhotoUid": "PH_03"
+            "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
+            "damageMarkers": [
+              {
+                "x": 0.42,
+                "y": 0.63,
+                "hasDent": true,
+                "hasScratch": false,
+                "hasPaintPeel": false,
+                "remark": "主要凹痕"
+              }
+            ]
           },
           "maintenance": {
-            "fixTypeUid": "Fx_A1B2C3D4E5",
-            "fixTypeName": "外觀鈑金",
+            "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
             "hasRepainted": false,
-            "needToolEvaluation": true
-          },
-          "remark": "請於修復後通知客戶取車"
+            "needToolEvaluation": true,
+            "otherFee": 800,
+            "roundingDiscount": 200,
+            "percentageDiscount": 10,
+            "discountReason": "回饋老客戶",
+            "estimatedRepairDays": 1,
+            "estimatedRepairHours": 6,
+            "estimatedRestorationPercentage": 90,
+            "suggestedPaintReason": null,
+            "unrepairableReason": null,
+            "remark": "請於修復後通知客戶取車"
+          }
         }
         """)]
     [ProducesResponseType(typeof(CreateQuotationResponse), StatusCodes.Status201Created)]

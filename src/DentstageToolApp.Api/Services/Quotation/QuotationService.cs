@@ -270,14 +270,22 @@ public class QuotationService : IQuotationService
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
         var fixTypeUid = NormalizeRequiredText(maintenanceInfo.FixTypeUid, "維修類型");
         var fixTypeEntity = await GetFixTypeEntityAsync(fixTypeUid, cancellationToken);
-        var fixTypeName = NormalizeOptionalText(maintenanceInfo.FixTypeName)
-            ?? NormalizeOptionalText(fixTypeEntity?.FixTypeName)
-            ?? fixTypeUid;
+        var fixTypeName = NormalizeOptionalText(fixTypeEntity?.FixTypeName) ?? fixTypeUid;
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
         var repaintFlag = ConvertBooleanToFlag(maintenanceInfo.HasRepainted);
         var toolFlag = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
+        var maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark);
+        var otherFee = maintenanceInfo.OtherFee;
+        var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
+        var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
+        var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+        var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
+        var roundingDiscount = maintenanceInfo.RoundingDiscount;
+        var percentageDiscount = maintenanceInfo.PercentageDiscount;
+        var discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
 
         // ---------- 預約與維修日期處理 ----------
         // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
@@ -316,7 +324,7 @@ public class QuotationService : IQuotationService
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
 
-        var plainRemark = NormalizeOptionalText(request.Remark);
+        var normalizedDamages = ExtractDamageList(request);
 
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = DateTime.UtcNow;
@@ -332,13 +340,21 @@ public class QuotationService : IQuotationService
 
         var extraData = new QuotationExtraData
         {
-            ServiceCategories = request.ServiceCategories,
-            CategoryTotal = request.CategoryTotal,
-            CarBodyConfirmation = request.CarBodyConfirmation
+            CarBodyConfirmation = request.CarBodyConfirmation,
+            Damages = normalizedDamages.Count > 0 ? normalizedDamages : null,
+            OtherFee = otherFee,
+            RoundingDiscount = roundingDiscount,
+            PercentageDiscount = percentageDiscount,
+            DiscountReason = discountReason,
+            EstimatedRepairDays = estimatedRepairDays,
+            EstimatedRepairHours = estimatedRepairHours,
+            EstimatedRestorationPercentage = estimatedRestorationPercentage,
+            SuggestedPaintReason = suggestedPaintReason,
+            UnrepairableReason = unrepairableReason
         };
 
-        var remarkPayload = SerializeRemark(plainRemark, extraData);
-        var valuation = CalculateTotalAmount(request.CategoryTotal, request.ServiceCategories);
+        var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
+        var valuation = CalculateTotalAmount(normalizedDamages, otherFee, roundingDiscount, percentageDiscount);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -386,6 +402,9 @@ public class QuotationService : IQuotationService
             CustomerType = customerSource,
             ConnectRemark = customerRemark,
             Remark = remarkPayload,
+            Discount = roundingDiscount,
+            DiscountPercent = percentageDiscount,
+            DiscountReason = discountReason,
             Valuation = valuation
         };
 
@@ -424,7 +443,7 @@ public class QuotationService : IQuotationService
             .Include(q => q.ModelNavigation)
             .Include(q => q.FixTypeNavigation);
 
-        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
+        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, FixTypeEntity?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
@@ -452,6 +471,28 @@ public class QuotationService : IQuotationService
                 estimatorName = accountDisplayName;
             }
         }
+
+        var damages = extraData?.Damages;
+        if ((damages is null || damages.Count == 0) && extraData?.ServiceCategories is not null)
+        {
+            var legacyDamages = FlattenCategoryDamages(extraData.ServiceCategories);
+            if (legacyDamages.Count > 0)
+            {
+                damages = legacyDamages;
+            }
+        }
+
+        var normalizedDamages = damages ?? new List<QuotationDamageItem>();
+        var maintenanceRemark = plainRemark;
+        var otherFee = extraData?.OtherFee;
+        var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
+        var percentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
+        var discountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
+        var estimatedRepairDays = extraData?.EstimatedRepairDays;
+        var estimatedRepairHours = extraData?.EstimatedRepairHours;
+        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
+        var suggestedPaintReason = NormalizeOptionalText(extraData?.SuggestedPaintReason);
+        var unrepairableReason = NormalizeOptionalText(extraData?.UnrepairableReason);
 
         return new QuotationDetailResponse
         {
@@ -491,20 +532,26 @@ public class QuotationService : IQuotationService
                 Source = quotation.CustomerType,
                 Remark = quotation.ConnectRemark
             },
-            Remark = plainRemark,
-            ServiceCategories = extraData?.ServiceCategories,
-            CategoryTotal = extraData?.CategoryTotal,
+            Damages = normalizedDamages,
             CarBodyConfirmation = extraData?.CarBodyConfirmation,
             Maintenance = new QuotationMaintenanceInfo
             {
                 FixTypeUid = quotation.FixTypeUid,
-                FixTypeName = NormalizeOptionalText(quotation.FixTypeNavigation?.FixTypeName)
-                    ?? NormalizeOptionalText(quotation.FixType),
                 ReserveCar = ParseBooleanFlag(quotation.CarReserved),
                 ApplyCoating = ParseBooleanFlag(quotation.Coat),
                 ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
                 HasRepainted = ParseBooleanFlag(quotation.Paint),
-                NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest)
+                NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest),
+                Remark = maintenanceRemark,
+                OtherFee = otherFee,
+                RoundingDiscount = roundingDiscount,
+                PercentageDiscount = percentageDiscount,
+                DiscountReason = discountReason,
+                EstimatedRepairDays = estimatedRepairDays,
+                EstimatedRepairHours = estimatedRepairHours,
+                EstimatedRestorationPercentage = estimatedRestorationPercentage,
+                SuggestedPaintReason = suggestedPaintReason,
+                UnrepairableReason = unrepairableReason
             }
         };
     }
@@ -850,47 +897,60 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
     /// </summary>
-    private static decimal? CalculateTotalAmount(QuotationCategoryTotal? total, QuotationServiceCategoryCollection? categories)
+    private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee, decimal? roundingDiscount, decimal? percentageDiscount)
     {
-        var hasValue = false;
-        decimal amount = 0m;
+        var hasBaseAmount = false;
+        decimal subtotal = 0m;
 
-        if (total?.CategorySubtotals is { Count: > 0 })
+        if (damages is { Count: > 0 })
         {
-            foreach (var value in total.CategorySubtotals.Values)
+            foreach (var damage in damages)
             {
-                if (value.HasValue)
+                if (damage?.DisplayEstimatedAmount is not { } estimate)
                 {
-                    amount += value.Value;
-                    hasValue = true;
-                }
-            }
-
-            if (total.RoundingDiscount.HasValue)
-            {
-                amount -= total.RoundingDiscount.Value;
-                hasValue = true;
-            }
-        }
-        else if (categories is not null)
-        {
-            foreach (var block in EnumerateCategoryBlocks(categories))
-            {
-                if (block.Amount.DamageSubtotal.HasValue)
-                {
-                    amount += block.Amount.DamageSubtotal.Value;
-                    hasValue = true;
+                    continue;
                 }
 
-                if (block.Amount.AdditionalFee.HasValue)
-                {
-                    amount += block.Amount.AdditionalFee.Value;
-                    hasValue = true;
-                }
+                subtotal += estimate;
+                hasBaseAmount = true;
             }
         }
 
-        return hasValue ? amount : null;
+        if (otherFee.HasValue)
+        {
+            subtotal += otherFee.Value;
+            hasBaseAmount = true;
+        }
+
+        var result = subtotal;
+        var hasDiscount = false;
+
+        if (percentageDiscount.HasValue && percentageDiscount.Value != 0)
+        {
+            // 先計算折扣金額，再自總額扣除，保留原始小計供後續折扣使用。
+            var discountRate = percentageDiscount.Value / 100m;
+            result -= subtotal * discountRate;
+            hasDiscount = true;
+        }
+
+        if (roundingDiscount.HasValue && roundingDiscount.Value != 0)
+        {
+            // 零頭折扣直接以金額扣除，可用來調整至整數金額。
+            result -= roundingDiscount.Value;
+            hasDiscount = true;
+        }
+
+        if (!hasBaseAmount && !hasDiscount)
+        {
+            return null;
+        }
+
+        if (result < 0)
+        {
+            result = 0;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -910,62 +970,84 @@ public class QuotationService : IQuotationService
             buffer.Add(value.Trim());
         }
 
-        if (request.ServiceCategories is { } categories)
+        var damages = ExtractDamageList(request);
+        if (damages.Count > 0)
         {
-            foreach (var block in EnumerateCategoryBlocks(categories))
+            foreach (var damage in damages)
             {
-                foreach (var damage in block.Damages)
+                if (damage is null)
                 {
-                    TryAdd(uniqueUids, damage.Photo);
+                    continue;
+                }
 
-                    if (damage.Photos is { Count: > 0 })
+                TryAdd(uniqueUids, damage.Photo);
+
+                if (damage.Photos is not { Count: > 0 })
+                {
+                    continue;
+                }
+
+                foreach (var photo in damage.Photos)
+                {
+                    if (photo is null)
                     {
-                        foreach (var photo in damage.Photos)
-                        {
-                            if (photo is null)
-                            {
-                                continue;
-                            }
-
-                            TryAdd(uniqueUids, photo.PhotoUid);
-                            TryAdd(uniqueUids, photo.File);
-                        }
+                        continue;
                     }
+
+                    TryAdd(uniqueUids, photo.PhotoUid);
+                    TryAdd(uniqueUids, photo.File);
                 }
             }
         }
 
         if (request.CarBodyConfirmation is { } body)
         {
-            TryAdd(uniqueUids, body.AnnotatedPhotoUid);
+            // 車體確認單僅需綁定簽名圖片，舊欄位仍保留以相容歷史資料。
             TryAdd(uniqueUids, body.AnnotatedImage);
             TryAdd(uniqueUids, body.SignaturePhotoUid);
             TryAdd(uniqueUids, body.Signature);
+        }
 
-            if (body.SignaturePhotoUids is { Count: > 0 })
+        return uniqueUids.ToList();
+    }
+
+    /// <summary>
+    /// 從建立估價單請求中取得傷痕列表，僅使用新版頂層 damages 欄位。
+    /// </summary>
+    private static List<QuotationDamageItem> ExtractDamageList(CreateQuotationRequest request)
+    {
+        if (request.Damages is { Count: > 0 })
+        {
+            return request.Damages;
+        }
+
+        return new List<QuotationDamageItem>();
+    }
+
+    /// <summary>
+    /// 將服務類別內的傷痕集合轉換為單一清單，供相容性處理使用。
+    /// </summary>
+    private static List<QuotationDamageItem> FlattenCategoryDamages(QuotationServiceCategoryCollection categories)
+    {
+        var damages = new List<QuotationDamageItem>();
+
+        foreach (var block in EnumerateCategoryBlocks(categories))
+        {
+            if (block.Damages is not { Count: > 0 })
             {
-                foreach (var signatureUid in body.SignaturePhotoUids)
-                {
-                    TryAdd(uniqueUids, signatureUid);
-                }
+                continue;
             }
 
-            if (body.Checklist is { Count: > 0 })
+            foreach (var damage in block.Damages)
             {
-                foreach (var item in body.Checklist)
+                if (damage is not null)
                 {
-                    if (item.Photos is { Count: > 0 })
-                    {
-                        foreach (var photoUid in item.Photos)
-                        {
-                            TryAdd(uniqueUids, photoUid);
-                        }
-                    }
+                    damages.Add(damage);
                 }
             }
         }
 
-        return uniqueUids.ToList();
+        return damages;
     }
 
     /// <summary>
@@ -1132,7 +1214,7 @@ public class QuotationService : IQuotationService
         /// <summary>
         /// remark 版本，預留後續擴充使用。
         /// </summary>
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 2;
 
         /// <summary>
         /// 純文字備註內容。
@@ -1146,7 +1228,7 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 估價單擴充資料，包含服務類別與車體確認單資訊。
+    /// 估價單擴充資料，包含傷痕、車體確認與維修補充資訊。
     /// </summary>
     private class QuotationExtraData
     {
@@ -1164,5 +1246,55 @@ public class QuotationService : IQuotationService
         /// 車體確認單資料。
         /// </summary>
         public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
+
+        /// <summary>
+        /// 傷痕細項列表，配合新版格式與服務類別拆分存放。
+        /// </summary>
+        public List<QuotationDamageItem>? Damages { get; set; }
+
+        /// <summary>
+        /// 其他估價費用。
+        /// </summary>
+        public decimal? OtherFee { get; set; }
+
+        /// <summary>
+        /// 零頭折扣金額，搭配折扣百分比調整估價總額。
+        /// </summary>
+        public decimal? RoundingDiscount { get; set; }
+
+        /// <summary>
+        /// 折扣百分比，單位為百分比數值（例如 10 代表 10%）。
+        /// </summary>
+        public decimal? PercentageDiscount { get; set; }
+
+        /// <summary>
+        /// 折扣原因描述，紀錄折扣依據或客戶身份。
+        /// </summary>
+        public string? DiscountReason { get; set; }
+
+        /// <summary>
+        /// 預估施工所需天數。
+        /// </summary>
+        public int? EstimatedRepairDays { get; set; }
+
+        /// <summary>
+        /// 預估施工所需時數。
+        /// </summary>
+        public int? EstimatedRepairHours { get; set; }
+
+        /// <summary>
+        /// 預估修復完成度（百分比）。
+        /// </summary>
+        public decimal? EstimatedRestorationPercentage { get; set; }
+
+        /// <summary>
+        /// 建議改採鈑烤的原因。
+        /// </summary>
+        public string? SuggestedPaintReason { get; set; }
+
+        /// <summary>
+        /// 無法修復時的原因。
+        /// </summary>
+        public string? UnrepairableReason { get; set; }
     }
 }

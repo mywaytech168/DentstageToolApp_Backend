@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace DentstageToolApp.Api.Quotations;
@@ -27,14 +28,9 @@ public class CreateQuotationRequest
     public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
-    /// 服務類別的明細資訊。
+    /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
     /// </summary>
-    public QuotationServiceCategoryCollection? ServiceCategories { get; set; }
-
-    /// <summary>
-    /// 各類別金額總覽。
-    /// </summary>
-    public QuotationCategoryTotal? CategoryTotal { get; set; }
+    public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
     /// 車體確認單資料。
@@ -45,11 +41,6 @@ public class CreateQuotationRequest
     /// 維修需求設定，包含維修類型與常見的處理選項。
     /// </summary>
     public CreateQuotationMaintenanceInfo Maintenance { get; set; } = new();
-
-    /// <summary>
-    /// 估價單整體備註，會以 JSON 包裝儲存在資料庫中。
-    /// </summary>
-    public string? Remark { get; set; }
 }
 
 /// <summary>
@@ -88,16 +79,11 @@ public class CreateQuotationStoreInfo
 public class CreateQuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型識別碼（UID），用於對應維修類型主檔。
+    /// 維修類型識別碼（UID），用於對應維修類型主檔並由後端帶出名稱。
     /// </summary>
     [Required(ErrorMessage = "請選擇維修類型。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
     public string? FixTypeUid { get; set; }
-
-    /// <summary>
-    /// 維修類型名稱，若前端已取得可一併傳入，後端仍會以主檔名稱為準。
-    /// </summary>
-    public string? FixTypeName { get; set; }
 
     /// <summary>
     /// 是否需留車，True 代表需要留車。
@@ -123,6 +109,56 @@ public class CreateQuotationMaintenanceInfo
     /// 是否需要工具評估。
     /// </summary>
     public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 其他估價費用，包含耗材或外包等額外支出。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 預估施工花費的天數，提供前端呈現整體工期。
+    /// </summary>
+    public int? EstimatedRepairDays { get; set; }
+
+    /// <summary>
+    /// 預估施工花費的時數，可對應半天內完工等情境。
+    /// </summary>
+    public int? EstimatedRepairHours { get; set; }
+
+    /// <summary>
+    /// 預估修復完成度（百分比），協助溝通修復後狀態。
+    /// </summary>
+    public decimal? EstimatedRestorationPercentage { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因描述。
+    /// </summary>
+    public string? SuggestedPaintReason { get; set; }
+
+    /// <summary>
+    /// 無法修復時的原因說明，供前端與客戶溝通使用。
+    /// </summary>
+    public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 零頭折扣金額，協助估價單呈現整數金額。
+    /// </summary>
+    public decimal? RoundingDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比，允許輸入整數或小數（例如 10 代表 10%）。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣原因說明，利於與客戶或內部人員溝通折扣依據。
+    /// </summary>
+    public string? DiscountReason { get; set; }
+
+    /// <summary>
+    /// 維修設定備註，取代舊版放置於頂層的 remark 欄位。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 
 /// <summary>
@@ -182,14 +218,9 @@ public class QuotationStoreInfo
 public class QuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型識別碼。
+    /// 維修類型識別碼，前端僅需儲存 UID 即可由後端還原完整資訊。
     /// </summary>
     public string? FixTypeUid { get; set; }
-
-    /// <summary>
-    /// 維修類型名稱，優先使用主檔資料。
-    /// </summary>
-    public string? FixTypeName { get; set; }
 
     /// <summary>
     /// 是否需留車。
@@ -215,6 +246,56 @@ public class QuotationMaintenanceInfo
     /// 是否需要工具評估。
     /// </summary>
     public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 其他估價費用。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 預估花費天數。
+    /// </summary>
+    public int? EstimatedRepairDays { get; set; }
+
+    /// <summary>
+    /// 預估花費時數。
+    /// </summary>
+    public int? EstimatedRepairHours { get; set; }
+
+    /// <summary>
+    /// 預估修復程度（百分比）。
+    /// </summary>
+    public decimal? EstimatedRestorationPercentage { get; set; }
+
+    /// <summary>
+    /// 建議改採鈑烤處理的原因。
+    /// </summary>
+    public string? SuggestedPaintReason { get; set; }
+
+    /// <summary>
+    /// 無法修復時的原因。
+    /// </summary>
+    public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 零頭折扣金額。
+    /// </summary>
+    public decimal? RoundingDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣原因。
+    /// </summary>
+    public string? DiscountReason { get; set; }
+
+    /// <summary>
+    /// 維修相關備註。
+    /// </summary>
+    public string? Remark { get; set; }
 }
 
 /// <summary>
