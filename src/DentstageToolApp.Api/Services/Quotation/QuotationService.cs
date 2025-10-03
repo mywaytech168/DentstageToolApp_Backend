@@ -443,7 +443,7 @@ public class QuotationService : IQuotationService
             .Include(q => q.ModelNavigation)
             .Include(q => q.FixTypeNavigation);
 
-        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, Model?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
+        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, FixTypeEntity?>)ApplyQuotationFilter(query, request.QuotationUid, request.QuotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
