@@ -146,6 +146,21 @@ public class CreateQuotationMaintenanceInfo
     public string? UnrepairableReason { get; set; }
 
     /// <summary>
+    /// 零頭折扣金額，協助估價單呈現整數金額。
+    /// </summary>
+    public decimal? RoundingDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比，允許輸入整數或小數（例如 10 代表 10%）。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣原因說明，利於與客戶或內部人員溝通折扣依據。
+    /// </summary>
+    public string? DiscountReason { get; set; }
+
+    /// <summary>
     /// 維修設定備註，取代舊版放置於頂層的 remark 欄位。
     /// </summary>
     public string? Remark { get; set; }
@@ -271,6 +286,21 @@ public class QuotationMaintenanceInfo
     /// 無法修復時的原因。
     /// </summary>
     public string? UnrepairableReason { get; set; }
+
+    /// <summary>
+    /// 零頭折扣金額。
+    /// </summary>
+    public decimal? RoundingDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 折扣原因。
+    /// </summary>
+    public string? DiscountReason { get; set; }
 
     /// <summary>
     /// 維修相關備註。
