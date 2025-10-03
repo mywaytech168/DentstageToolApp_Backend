@@ -14,7 +14,7 @@ public class QuotationListQuery
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 指定估價單狀態碼，對應資料表欄位 Status。 ALL->(null) 110估價中(編輯中) 180估價完成 190已預約 191預約取消(估價轉入) 195轉維修(待維修 )
+    /// 指定估價單狀態碼，對應資料表欄位 Status。 ALL->(null) 110估價中(編輯中) 180估價完成 190已預約 191轉維修(待維修) 195估價或預約取消。
     /// </summary>
     public string? Status { get; set; }
 
