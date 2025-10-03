@@ -299,7 +299,8 @@ public class QuotationsController : ControllerBase
         return new QuotationOperatorContext
         {
             OperatorName = GetCurrentOperatorName(),
-            UserUid = GetCurrentUserUid()
+            UserUid = GetCurrentUserUid(),
+            StoreUid = GetCurrentStoreUid()
         };
     }
 
@@ -349,6 +350,25 @@ public class QuotationsController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
+    }
+
+    /// <summary>
+    /// 從 JWT 權杖中取出門市識別碼，支援多種常見的 Claim Key 寫法。
+    /// </summary>
+    private string? GetCurrentStoreUid()
+    {
+        // 依序檢查常見欄位名稱，確保不同登入來源皆可正確回傳門市 UID。
+        var claimKeys = new[] { "storeUid", "StoreUid", "storeUID", "StoreUID", "storeId", "StoreId" };
+        foreach (var key in claimKeys)
+        {
+            var value = User.FindFirstValue(key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     // ---------- 生命週期 ----------

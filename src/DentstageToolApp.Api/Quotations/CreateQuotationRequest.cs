@@ -134,6 +134,26 @@ public class CreateQuotationMaintenanceInfo
     public decimal? EstimatedRestorationPercentage { get; set; }
 
     /// <summary>
+    /// 修復作業預估工時（小時），對應資料表 FixTimeHour 欄位。
+    /// </summary>
+    public int? FixTimeHour { get; set; }
+
+    /// <summary>
+    /// 修復作業預估工時（分鐘），對應資料表 FixTimeMin 欄位。
+    /// </summary>
+    public int? FixTimeMin { get; set; }
+
+    /// <summary>
+    /// 預估施工完成天數，對應資料表 FixExpectDay 欄位。
+    /// </summary>
+    public int? FixExpectDay { get; set; }
+
+    /// <summary>
+    /// 預估施工完成小時數，對應資料表 FixExpectHour 欄位。
+    /// </summary>
+    public int? FixExpectHour { get; set; }
+
+    /// <summary>
     /// 建議改採鈑烤處理的原因描述。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
@@ -276,6 +296,26 @@ public class QuotationMaintenanceInfo
     public decimal? EstimatedRestorationPercentage { get; set; }
 
     /// <summary>
+    /// 修復作業預估工時（小時）。
+    /// </summary>
+    public int? FixTimeHour { get; set; }
+
+    /// <summary>
+    /// 修復作業預估工時（分鐘）。
+    /// </summary>
+    public int? FixTimeMin { get; set; }
+
+    /// <summary>
+    /// 預估完工天數。
+    /// </summary>
+    public int? FixExpectDay { get; set; }
+
+    /// <summary>
+    /// 預估完工小時數。
+    /// </summary>
+    public int? FixExpectHour { get; set; }
+
+    /// <summary>
     /// 建議改採鈑烤處理的原因。
     /// </summary>
     public string? SuggestedPaintReason { get; set; }
@@ -316,6 +356,16 @@ public class CreateQuotationCarInfo
     /// </summary>
     [Required(ErrorMessage = "請選擇車輛資料。")]
     public string? CarUid { get; set; }
+
+    /// <summary>
+    /// 車輛品牌識別碼（選填），若提供將同步寫入估價單的 BrandUID 欄位。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼（選填），若提供將同步寫入估價單的 ModelUID 欄位。
+    /// </summary>
+    public string? ModelUid { get; set; }
 }
 
 /// <summary>
@@ -339,9 +389,19 @@ public class QuotationCarInfo
     public string? Brand { get; set; }
 
     /// <summary>
+    /// 車輛品牌識別碼。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
     /// 車型名稱。
     /// </summary>
     public string? Model { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼。
+    /// </summary>
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車色。

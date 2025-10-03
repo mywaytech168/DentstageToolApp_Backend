@@ -28,6 +28,7 @@ public class QuotationService : IQuotationService
 {
     private const int DefaultPageSize = 20;
     private const int MaxPageSize = 200;
+    private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -256,11 +257,29 @@ public class QuotationService : IQuotationService
         }
 
         // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊。
-        var storeEntity = await GetStoreEntityAsync(technicianEntity, cancellationToken);
-        var storeName = NormalizeRequiredText(storeEntity?.StoreName, "店鋪名稱");
-        var storeUid = NormalizeRequiredText(ResolveStoreUid(technicianEntity, storeEntity), "門市識別碼");
+        var operatorStoreUid = NormalizeOptionalText(operatorContext.StoreUid);
+        var storeEntity = await GetStoreEntityAsync(operatorStoreUid, technicianEntity, cancellationToken);
+        var storeUid = NormalizeRequiredText(
+            operatorStoreUid
+            ?? NormalizeOptionalText(storeEntity?.StoreUid)
+            ?? NormalizeOptionalText(technicianEntity?.StoreUid),
+            "門市識別碼");
+        var storeName = NormalizeRequiredText(
+            storeEntity?.StoreName
+            ?? technicianEntity?.Store?.StoreName,
+            "店鋪名稱");
+
+        if (operatorStoreUid is not null && technicianEntity?.StoreUid is not null &&
+            !string.Equals(operatorStoreUid, technicianEntity.StoreUid, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "登入門市 {OperatorStoreUid} 與技師所屬門市 {TechnicianStoreUid} 不一致，將以登入門市為主。",
+                operatorStoreUid,
+                technicianEntity.StoreUid);
+        }
+
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
-        var operatorUid = NormalizeOptionalText(operatorContext.UserUid);
+        var estimatorUid = NormalizeRequiredText(technicianEntity.TechnicianUid, "估價技師識別碼");
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
@@ -281,6 +300,10 @@ public class QuotationService : IQuotationService
         var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
         var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+        var fixTimeHour = maintenanceInfo.FixTimeHour;
+        var fixTimeMin = maintenanceInfo.FixTimeMin;
+        var fixExpectDay = maintenanceInfo.FixExpectDay;
+        var fixExpectHour = maintenanceInfo.FixExpectHour;
         var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
         var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
         var roundingDiscount = maintenanceInfo.RoundingDiscount;
@@ -300,13 +323,46 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
         }
 
-        // 透過車輛主檔補齊車牌、品牌等欄位，並確保車牌為統一的大寫格式。
+        // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
         var carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
-        var licensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼").ToUpperInvariant();
+        var originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
+        var licensePlate = NormalizeLicensePlate(originalLicensePlate);
         var brand = NormalizeOptionalText(carEntity.Brand);
         var model = NormalizeOptionalText(carEntity.Model);
         var color = NormalizeOptionalText(carEntity.Color);
         var carRemark = NormalizeOptionalText(carEntity.CarRemark);
+
+        // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
+        var brandUid = NormalizeOptionalText(carInfo.BrandUid);
+        if (brandUid is null && brand is not null)
+        {
+            var matchedBrandUid = await _context.Brands
+                .AsNoTracking()
+                .Where(entity => entity.BrandName == brand)
+                .Select(entity => entity.BrandUid)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            brandUid = NormalizeOptionalText(matchedBrandUid);
+        }
+
+        var modelUid = NormalizeOptionalText(carInfo.ModelUid);
+        if (modelUid is null && model is not null)
+        {
+            var modelQuery = _context.Models
+                .AsNoTracking()
+                .Where(entity => entity.ModelName == model);
+
+            if (brandUid is not null)
+            {
+                modelQuery = modelQuery.Where(entity => entity.BrandUid == brandUid);
+            }
+
+            var matchedModelUid = await modelQuery
+                .Select(entity => entity.ModelUid)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            modelUid = NormalizeOptionalText(matchedModelUid);
+        }
 
         // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
         var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
@@ -327,14 +383,14 @@ public class QuotationService : IQuotationService
         var normalizedDamages = ExtractDamageList(request);
 
         // 建立日期改由系統產生，減少前端填寫欄位。
-        var createdAt = DateTime.UtcNow;
+        var createdAt = GetTaipeiNow();
         var quotationDate = DateOnly.FromDateTime(createdAt);
         var phoneQuery = NormalizePhoneQuery(customerPhone);
 
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- 系統資料計算區 ----------
-        var serialNumber = await GenerateNextSerialNumberAsync(cancellationToken);
+        var serialNumber = await GenerateNextSerialNumberAsync(createdAt, cancellationToken);
         var quotationUid = BuildQuotationUid();
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
 
@@ -368,12 +424,16 @@ public class QuotationService : IQuotationService
             CreatedBy = creatorName,
             ModificationTimestamp = createdAt,
             ModifiedBy = operatorLabel,
-            UserUid = operatorUid,
+            UserUid = estimatorUid,
             Date = quotationDate,
             StoreUid = storeUid,
-            TechnicianUid = technicianEntity?.TechnicianUid,
+            TechnicianUid = estimatorUid,
+            Status = "110",
+            Status110Timestamp = createdAt,
+            Status110User = storeName,
+            CurrentStatusDate = createdAt,
             CurrentStatusUser = storeName,
-            UserName = estimatorName ?? operatorLabel,
+            UserName = estimatorName,
             BookDate = reservationDate,
             FixDate = repairDate,
             Source = source,
@@ -390,6 +450,8 @@ public class QuotationService : IQuotationService
             CarNoInputGlobal = licensePlate,
             Brand = brand,
             Model = model,
+            BrandUid = brandUid,
+            ModelUid = modelUid,
             BrandModel = BuildBrandModel(brand, model),
             Color = color,
             CarRemark = carRemark,
@@ -405,7 +467,11 @@ public class QuotationService : IQuotationService
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
             DiscountReason = discountReason,
-            Valuation = valuation
+            Valuation = valuation,
+            FixTimeHour = fixTimeHour,
+            FixTimeMin = fixTimeMin,
+            FixExpectDay = fixExpectDay,
+            FixExpectHour = fixExpectHour
         };
 
         await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
@@ -522,6 +588,8 @@ public class QuotationService : IQuotationService
                 LicensePlate = quotation.CarNo,
                 Brand = quotation.BrandNavigation?.BrandName ?? quotation.Brand,
                 Model = quotation.ModelNavigation?.ModelName ?? quotation.Model,
+                BrandUid = quotation.BrandUid,
+                ModelUid = quotation.ModelUid,
                 Color = quotation.Color,
                 Remark = quotation.CarRemark
             },
@@ -552,6 +620,10 @@ public class QuotationService : IQuotationService
                 EstimatedRepairDays = estimatedRepairDays,
                 EstimatedRepairHours = estimatedRepairHours,
                 EstimatedRestorationPercentage = estimatedRestorationPercentage,
+                FixTimeHour = quotation.FixTimeHour,
+                FixTimeMin = quotation.FixTimeMin,
+                FixExpectDay = quotation.FixExpectDay,
+                FixExpectHour = quotation.FixExpectHour,
                 SuggestedPaintReason = suggestedPaintReason,
                 UnrepairableReason = unrepairableReason
             }
@@ -583,6 +655,8 @@ public class QuotationService : IQuotationService
         quotation.CarNoInputGlobal = quotation.CarNo;
         quotation.Brand = NormalizeOptionalText(carInfo.Brand);
         quotation.Model = NormalizeOptionalText(carInfo.Model);
+        quotation.BrandUid = NormalizeOptionalText(carInfo.BrandUid);
+        quotation.ModelUid = NormalizeOptionalText(carInfo.ModelUid);
         quotation.BrandModel = BuildBrandModel(quotation.Brand, quotation.Model);
         quotation.Color = NormalizeOptionalText(carInfo.Color);
         quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
@@ -689,31 +763,51 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 產生下一個估價單序號，使用目前資料庫最大值加一。
     /// </summary>
-    private async Task<int> GenerateNextSerialNumberAsync(CancellationToken cancellationToken)
+    private async Task<int> GenerateNextSerialNumberAsync(DateTime timestamp, CancellationToken cancellationToken)
     {
+        // 依照當前年月建立序號前綴，確保每月重新由 0001 開始遞增。
+        var prefix = $"Q{timestamp:yyMM}";
+
         var maxSerial = await _context.Quatations
             .AsNoTracking()
+            .Where(q => q.QuotationNo != null && q.QuotationNo.StartsWith(prefix))
             .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+
+        if (!maxSerial.HasValue)
+        {
+            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+
+            maxSerial = await _context.Quatations
+                .AsNoTracking()
+                .Where(q => q.CreationTimestamp >= monthStart && q.CreationTimestamp < monthEnd)
+                .MaxAsync(q => (int?)q.SerialNum, cancellationToken);
+        }
 
         return (maxSerial ?? 0) + 1;
     }
 
     /// <summary>
-    /// 嘗試依據技師或門市主檔解析出門市識別碼。
+    /// 依據登入門市或技師所屬門市載入門市主檔資料。
     /// </summary>
-    private static string? ResolveStoreUid(TechnicianEntity? technician, StoreEntity? storeEntity)
+    private async Task<StoreEntity?> GetStoreEntityAsync(string? storeUid, TechnicianEntity? technician, CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(technician?.StoreUid))
+        var normalizedStoreUid = NormalizeOptionalText(storeUid);
+        if (normalizedStoreUid is not null)
         {
-            return NormalizeOptionalText(technician!.StoreUid);
+            var store = await _context.Stores
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedStoreUid, cancellationToken);
+
+            if (store is null)
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的門市資料，請重新選擇門市。");
+            }
+
+            return store;
         }
 
-        if (!string.IsNullOrWhiteSpace(storeEntity?.StoreUid))
-        {
-            return NormalizeOptionalText(storeEntity!.StoreUid);
-        }
-
-        return null;
+        return await GetStoreEntityAsync(technician, cancellationToken);
     }
 
     /// <summary>
@@ -741,7 +835,7 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 根據技師或門市識別碼取得門市主檔資料，確保後續可自動帶入店鋪名稱。
+    /// 根據技師所屬門市取得門市主檔資料，提供登入門市缺漏時的備援。
     /// </summary>
     private async Task<StoreEntity?> GetStoreEntityAsync(TechnicianEntity? technician, CancellationToken cancellationToken)
     {
@@ -1146,6 +1240,20 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
+    /// 轉換車牌為僅保留數字與字母的大寫格式，移除中間的連字號或特殊符號。
+    /// </summary>
+    private static string NormalizeLicensePlate(string plate)
+    {
+        var filtered = new string(plate.Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(filtered))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "車牌號碼格式不正確，請重新輸入。");
+        }
+
+        return filtered;
+    }
+
+    /// <summary>
     /// 將電話轉換為僅包含數字的查詢字串。
     /// </summary>
     private static string? NormalizePhoneQuery(string? phone)
@@ -1162,14 +1270,10 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將布林旗標轉換為資料庫慣用的 Y / N 字元。
     /// </summary>
-    private static string? ConvertBooleanToFlag(bool? value)
+    private static string ConvertBooleanToFlag(bool? value)
     {
-        if (!value.HasValue)
-        {
-            return null;
-        }
-
-        return value.Value ? "Y" : "N";
+        // 將布林轉為舊系統慣用的「1 / 空白」格式，方便沿用既有報表邏輯。
+        return value.HasValue && value.Value ? "1" : string.Empty;
     }
 
     /// <summary>
@@ -1179,7 +1283,7 @@ public class QuotationService : IQuotationService
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            return null;
+            return false;
         }
 
         var normalized = value.Trim().ToLowerInvariant();
@@ -1203,6 +1307,33 @@ public class QuotationService : IQuotationService
 
         // 僅保留日期部分，確保與資料庫 DateOnly 欄位一致。
         return DateOnly.FromDateTime(value.Value.Date);
+    }
+
+    /// <summary>
+    /// 取得台北當地時間，並在系統缺少時區資訊時退回 +8 小時補正。
+    /// </summary>
+    private static DateTime GetTaipeiNow()
+    {
+        var utcNow = DateTime.UtcNow;
+
+        foreach (var zoneId in TaipeiTimeZoneIds)
+        {
+            try
+            {
+                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(zoneId);
+                return TimeZoneInfo.ConvertTimeFromUtc(utcNow, timeZone);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                // 若伺服器不支援該時區 ID，繼續嘗試下一組。
+            }
+            catch (InvalidTimeZoneException)
+            {
+                // 若時區設定異常，同樣嘗試下一組 ID。
+            }
+        }
+
+        return utcNow.AddHours(8);
     }
 
     // ---------- 生命週期 ----------
