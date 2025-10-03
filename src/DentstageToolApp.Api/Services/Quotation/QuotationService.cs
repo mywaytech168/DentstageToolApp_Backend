@@ -593,6 +593,10 @@ public class QuotationService : IQuotationService
             normalizedDamages,
             extraData?.CarBodyConfirmation?.SignaturePhotoUid,
             cancellationToken);
+        // 依前端需求重新整理傷痕資料，只保留核心欄位並挑選主要照片。
+        var simplifiedDamages = BuildDamageSummaries(normalizedDamages);
+        // 移除多餘欄位的車體確認單內容，僅保留必要資訊。
+        var simplifiedCarBody = SimplifyCarBodyConfirmation(extraData?.CarBodyConfirmation);
         var maintenanceRemark = plainRemark;
         var otherFee = extraData?.OtherFee;
         var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
@@ -655,8 +659,8 @@ public class QuotationService : IQuotationService
                 Source = quotation.Source,
                 Remark = quotation.ConnectRemark
             },
-            Damages = normalizedDamages,
-            CarBodyConfirmation = extraData?.CarBodyConfirmation,
+            Damages = simplifiedDamages,
+            CarBodyConfirmation = simplifiedCarBody,
             Maintenance = new QuotationMaintenanceInfo
             {
                 FixTypeUid = quotation.FixTypeUid,
@@ -673,10 +677,6 @@ public class QuotationService : IQuotationService
                 EstimatedRepairDays = estimatedRepairDays,
                 EstimatedRepairHours = estimatedRepairHours,
                 EstimatedRestorationPercentage = estimatedRestorationPercentage,
-                FixTimeHour = quotation.FixTimeHour,
-                FixTimeMin = quotation.FixTimeMin,
-                FixExpectDay = quotation.FixExpectDay,
-                FixExpectHour = quotation.FixExpectHour,
                 SuggestedPaintReason = suggestedPaintReason,
                 UnrepairableReason = unrepairableReason
             }
@@ -1894,6 +1894,97 @@ public class QuotationService : IQuotationService
                 yield return uid;
             }
         }
+    }
+
+    /// <summary>
+    /// 將完整傷痕資料轉換為精簡輸出，僅保留前端需要的欄位。
+    /// </summary>
+    private static List<QuotationDamageSummary> BuildDamageSummaries(IEnumerable<QuotationDamageItem> damages)
+    {
+        var summaries = new List<QuotationDamageSummary>();
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            var primaryPhotoUid = NormalizeOptionalText(ExtractPrimaryPhotoUid(damage));
+            summaries.Add(new QuotationDamageSummary
+            {
+                Photos = primaryPhotoUid,
+                Position = NormalizeOptionalText(damage.Position),
+                DentStatus = NormalizeOptionalText(damage.DentStatus),
+                Description = NormalizeOptionalText(damage.Description),
+                EstimatedAmount = damage.EstimatedAmount
+            });
+        }
+
+        return summaries;
+    }
+
+    /// <summary>
+    /// 依主要照片標記決定輸出照片識別碼，若無標記則使用第一筆資料。
+    /// </summary>
+    private static string? ExtractPrimaryPhotoUid(QuotationDamageItem damage)
+    {
+        if (damage.Photos is { Count: > 0 })
+        {
+            var primary = damage.Photos
+                .FirstOrDefault(photo => photo?.IsPrimary == true && !string.IsNullOrWhiteSpace(photo.PhotoUid));
+            if (primary?.PhotoUid is { } primaryUid && !string.IsNullOrWhiteSpace(primaryUid))
+            {
+                return primaryUid;
+            }
+
+            var fallback = damage.Photos
+                .FirstOrDefault(photo => !string.IsNullOrWhiteSpace(photo?.PhotoUid));
+            if (fallback?.PhotoUid is { } fallbackUid && !string.IsNullOrWhiteSpace(fallbackUid))
+            {
+                return fallbackUid;
+            }
+
+            var legacy = damage.Photos
+                .FirstOrDefault(photo => !string.IsNullOrWhiteSpace(photo?.File));
+            if (legacy?.File is { } legacyFile && !string.IsNullOrWhiteSpace(legacyFile))
+            {
+                return legacyFile;
+            }
+        }
+
+        return damage.Photo;
+    }
+
+    /// <summary>
+    /// 精簡車體確認單資料，移除標註圖片與簽名字串欄位。
+    /// </summary>
+    private static QuotationCarBodyConfirmation? SimplifyCarBodyConfirmation(QuotationCarBodyConfirmation? source)
+    {
+        if (source is null)
+        {
+            return null;
+        }
+
+        var markers = source.DamageMarkers is { Count: > 0 }
+            ? source.DamageMarkers
+                .Select(marker => new QuotationCarBodyDamageMarker
+                {
+                    X = marker.X,
+                    Y = marker.Y,
+                    HasDent = marker.HasDent,
+                    HasScratch = marker.HasScratch,
+                    HasPaintPeel = marker.HasPaintPeel,
+                    Remark = marker.Remark
+                })
+                .ToList()
+            : new List<QuotationCarBodyDamageMarker>();
+
+        return new QuotationCarBodyConfirmation
+        {
+            DamageMarkers = markers,
+            SignaturePhotoUid = NormalizeOptionalText(source.SignaturePhotoUid)
+        };
     }
 
     /// <summary>
