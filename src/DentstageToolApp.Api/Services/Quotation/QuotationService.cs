@@ -539,14 +539,16 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單編號。");
         }
 
-        var query = _context.Quatations
+        // 以 IQueryable 宣告以保留 Include 結果的延伸查詢，同時方便套用後續條件。
+        IQueryable<Quatation> query = _context.Quatations
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
             .Include(q => q.BrandNavigation)
             .Include(q => q.ModelNavigation)
             .Include(q => q.FixTypeNavigation);
 
-        query = (Microsoft.EntityFrameworkCore.Query.IIncludableQueryable<Quatation, FixTypeEntity?>)ApplyQuotationFilter(query, null, quotationNo);
+        // 估價單編號過濾邏輯與 Include 不衝突，因此直接回寫 IQueryable 以避免轉型例外。
+        query = ApplyQuotationFilter(query, null, quotationNo);
 
         var quotation = await query.FirstOrDefaultAsync(cancellationToken);
         if (quotation is null)
