@@ -509,6 +509,8 @@ public class QuotationService : IQuotationService
                 // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
                 EstimatorName = estimatorName,
                 CreatorName = quotation.CreatedBy,
+                // 估價技師識別碼需與建立估價單時相同，方便前端直接帶入技師選項。
+                TechnicianUid = NormalizeOptionalText(quotation.TechnicianUid),
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
                 Source = quotation.Source,

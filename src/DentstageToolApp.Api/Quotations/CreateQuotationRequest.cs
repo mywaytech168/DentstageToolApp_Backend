@@ -195,6 +195,11 @@ public class QuotationStoreInfo
     public string? CreatorName { get; set; }
 
     /// <summary>
+    /// 估價技師識別碼，回傳時需與建立估價單格式一致，方便前端直接回填。
+    /// </summary>
+    public string? TechnicianUid { get; set; }
+
+    /// <summary>
     /// 建立日期。
     /// </summary>
     public DateTime? CreatedDate { get; set; }
