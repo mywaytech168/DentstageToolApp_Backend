@@ -285,6 +285,9 @@ public class QuotationService : IQuotationService
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
         var suggestedPaintReason = NormalizeOptionalText(maintenanceInfo.SuggestedPaintReason);
         var unrepairableReason = NormalizeOptionalText(maintenanceInfo.UnrepairableReason);
+        var roundingDiscount = maintenanceInfo.RoundingDiscount;
+        var percentageDiscount = maintenanceInfo.PercentageDiscount;
+        var discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
 
         // ---------- 預約與維修日期處理 ----------
         // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
@@ -342,6 +345,9 @@ public class QuotationService : IQuotationService
             CarBodyConfirmation = request.CarBodyConfirmation,
             Damages = normalizedDamages.Count > 0 ? normalizedDamages : null,
             OtherFee = otherFee,
+            RoundingDiscount = roundingDiscount,
+            PercentageDiscount = percentageDiscount,
+            DiscountReason = discountReason,
             EstimatedRepairDays = estimatedRepairDays,
             EstimatedRepairHours = estimatedRepairHours,
             EstimatedRestorationPercentage = estimatedRestorationPercentage,
@@ -350,7 +356,7 @@ public class QuotationService : IQuotationService
         };
 
         var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
-        var valuation = CalculateTotalAmount(normalizedDamages, otherFee);
+        var valuation = CalculateTotalAmount(normalizedDamages, otherFee, roundingDiscount, percentageDiscount);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -398,6 +404,9 @@ public class QuotationService : IQuotationService
             CustomerType = customerSource,
             ConnectRemark = customerRemark,
             Remark = remarkPayload,
+            Discount = roundingDiscount,
+            DiscountPercent = percentageDiscount,
+            DiscountReason = discountReason,
             Valuation = valuation
         };
 
@@ -478,6 +487,9 @@ public class QuotationService : IQuotationService
         var normalizedDamages = damages ?? new List<QuotationDamageItem>();
         var maintenanceRemark = plainRemark;
         var otherFee = extraData?.OtherFee;
+        var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
+        var percentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
+        var discountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
         var estimatedRepairDays = extraData?.EstimatedRepairDays;
         var estimatedRepairHours = extraData?.EstimatedRepairHours;
         var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
@@ -536,6 +548,9 @@ public class QuotationService : IQuotationService
                 NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest),
                 Remark = maintenanceRemark,
                 OtherFee = otherFee,
+                RoundingDiscount = roundingDiscount,
+                PercentageDiscount = percentageDiscount,
+                DiscountReason = discountReason,
                 EstimatedRepairDays = estimatedRepairDays,
                 EstimatedRepairHours = estimatedRepairHours,
                 EstimatedRestorationPercentage = estimatedRestorationPercentage,
@@ -886,10 +901,10 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
     /// </summary>
-    private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee)
+    private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee, decimal? roundingDiscount, decimal? percentageDiscount)
     {
-        var hasValue = false;
-        decimal amount = 0m;
+        var hasBaseAmount = false;
+        decimal subtotal = 0m;
 
         if (damages is { Count: > 0 })
         {
@@ -900,18 +915,46 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                amount += estimate;
-                hasValue = true;
+                subtotal += estimate;
+                hasBaseAmount = true;
             }
         }
 
         if (otherFee.HasValue)
         {
-            amount += otherFee.Value;
-            hasValue = true;
+            subtotal += otherFee.Value;
+            hasBaseAmount = true;
         }
 
-        return hasValue ? amount : null;
+        var result = subtotal;
+        var hasDiscount = false;
+
+        if (percentageDiscount.HasValue && percentageDiscount.Value != 0)
+        {
+            // 先計算折扣金額，再自總額扣除，保留原始小計供後續折扣使用。
+            var discountRate = percentageDiscount.Value / 100m;
+            result -= subtotal * discountRate;
+            hasDiscount = true;
+        }
+
+        if (roundingDiscount.HasValue && roundingDiscount.Value != 0)
+        {
+            // 零頭折扣直接以金額扣除，可用來調整至整數金額。
+            result -= roundingDiscount.Value;
+            hasDiscount = true;
+        }
+
+        if (!hasBaseAmount && !hasDiscount)
+        {
+            return null;
+        }
+
+        if (result < 0)
+        {
+            result = 0;
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -1217,6 +1260,21 @@ public class QuotationService : IQuotationService
         /// 其他估價費用。
         /// </summary>
         public decimal? OtherFee { get; set; }
+
+        /// <summary>
+        /// 零頭折扣金額，搭配折扣百分比調整估價總額。
+        /// </summary>
+        public decimal? RoundingDiscount { get; set; }
+
+        /// <summary>
+        /// 折扣百分比，單位為百分比數值（例如 10 代表 10%）。
+        /// </summary>
+        public decimal? PercentageDiscount { get; set; }
+
+        /// <summary>
+        /// 折扣原因描述，紀錄折扣依據或客戶身份。
+        /// </summary>
+        public string? DiscountReason { get; set; }
 
         /// <summary>
         /// 預估施工所需天數。
