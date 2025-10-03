@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text.Encodings.Web;
@@ -302,6 +303,8 @@ public class QuotationService : IQuotationService
         var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
         var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
+        // FixExpect 欄位原以字串儲存修復完成度，需將百分比轉換後寫入以維持舊系統行為。
+        var fixExpectText = FormatEstimatedRestorationPercentage(estimatedRestorationPercentage);
         var fixTimeHour = maintenanceInfo.FixTimeHour;
         var fixTimeMin = maintenanceInfo.FixTimeMin;
         // FixExpect_Day/Hour 需沿用前端填寫的預估工期，若舊欄位仍有資料則保留相容性。
@@ -474,6 +477,7 @@ public class QuotationService : IQuotationService
             Valuation = valuation,
             FixTimeHour = fixTimeHour,
             FixTimeMin = fixTimeMin,
+            FixExpect = fixExpectText,
             FixExpectDay = fixExpectDay,
             FixExpectHour = fixExpectHour,
             // 拒絕欄位以布林記錄，資料庫會自動轉換為 tinyint(1)。
@@ -567,7 +571,9 @@ public class QuotationService : IQuotationService
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
-        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage;
+        // 修復完成度若尚未寫入 remark JSON，需從 FixExpect 字串回推數值供前端使用。
+        var estimatedRestorationPercentage = extraData?.EstimatedRestorationPercentage
+            ?? ParseEstimatedRestorationPercentage(quotation.FixExpect);
         var suggestedPaintReason = NormalizeOptionalText(quotation.PanelBeatReason)
             ?? NormalizeOptionalText(extraData?.SuggestedPaintReason);
         var unrepairableReason = NormalizeOptionalText(quotation.RejectReason)
@@ -891,6 +897,52 @@ public class QuotationService : IQuotationService
         }
 
         return int.TryParse(digits, out var serialNumber) ? serialNumber : null;
+    }
+
+    /// <summary>
+    /// 將修復完成度百分比轉為資料表 FixExpect 欄位使用的字串格式。
+    /// </summary>
+    private static string? FormatEstimatedRestorationPercentage(decimal? percentage)
+    {
+        if (!percentage.HasValue)
+        {
+            return null;
+        }
+
+        // 固定使用不帶百分號的字串並採用 InvariantCulture，避免不同語系造成小數點格式差異。
+        return percentage.Value.ToString("0.##", CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 將 FixExpect 字串解析為修復完成度百分比數值，支援舊資料保留的百分號格式。
+    /// </summary>
+    private static decimal? ParseEstimatedRestorationPercentage(string? fixExpect)
+    {
+        if (string.IsNullOrWhiteSpace(fixExpect))
+        {
+            return null;
+        }
+
+        var trimmed = fixExpect.Trim();
+
+        if (trimmed.EndsWith("%", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[..^1];
+        }
+
+        // 先以 InvariantCulture 嘗試解析，確保與格式化時行為一致。
+        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantValue))
+        {
+            return invariantValue;
+        }
+
+        // 若資料源於舊系統語系設定，也允許使用目前文化格式解析。
+        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.CurrentCulture, out var currentValue))
+        {
+            return currentValue;
+        }
+
+        return null;
     }
 
     /// <summary>
