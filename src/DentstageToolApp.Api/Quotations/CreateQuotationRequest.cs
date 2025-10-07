@@ -11,19 +11,19 @@ namespace DentstageToolApp.Api.Quotations;
 public class CreateQuotationRequest
 {
     /// <summary>
-    /// 店家相關資訊。
+    /// 店家相關資訊，包含估價技師 UID、來源與預約排程設定，對應 <see cref="CreateQuotationStoreInfo"/> 結構。
     /// </summary>
     [Required]
     public CreateQuotationStoreInfo Store { get; set; } = new();
 
     /// <summary>
-    /// 車輛相關資訊。
+    /// 車輛相關資訊，對應 <see cref="CreateQuotationCarInfo"/>，僅需提供車輛 UID 及可選擇覆寫品牌與車型。
     /// </summary>
     [Required]
     public CreateQuotationCarInfo Car { get; set; } = new();
 
     /// <summary>
-    /// 客戶相關資訊。
+    /// 客戶相關資訊，對應 <see cref="CreateQuotationCustomerInfo"/>，主要傳遞客戶 UID 以便後端載入姓名與聯絡資料。
     /// </summary>
     [Required]
     public CreateQuotationCustomerInfo Customer { get; set; } = new();
@@ -36,12 +36,12 @@ public class CreateQuotationRequest
     public List<QuotationDamageItem> Damages { get; set; } = new();
 
     /// <summary>
-    /// 車體確認單資料。
+    /// 車體確認單資料，對應 <see cref="QuotationCarBodyConfirmation"/>，可選擇帶入受損標記、簽名影像等延伸欄位。
     /// </summary>
     public QuotationCarBodyConfirmation? CarBodyConfirmation { get; set; }
 
     /// <summary>
-    /// 維修需求設定，包含維修類型與常見的處理選項。
+    /// 維修需求設定，對應 <see cref="CreateQuotationMaintenanceInfo"/>，整合維修類型、估工、折扣與備註等資訊。
     /// </summary>
     public CreateQuotationMaintenanceInfo Maintenance { get; set; } = new();
 }
