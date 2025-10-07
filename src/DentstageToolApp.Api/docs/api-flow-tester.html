@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dentstage Tool App API 流程測試工具</title>
+  <!-- 使用 Element Plus 的預設樣式，確保排版一致 -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <style>
+    body {
+      background-color: #f5f7fa;
+      margin: 0;
+      padding: 16px;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    pre {
+      background-color: #1e1e1e;
+      color: #e1e1e1;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .card-spacer {
+      margin-bottom: 16px;
+    }
+    .request-url-preview {
+      font-size: 12px;
+      color: #909399;
+    }
+    .log-card {
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="module">
+    import { createApp, ref, reactive, watch, onMounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+    import ElementPlus from 'https://unpkg.com/element-plus/dist/index.full.mjs';
+    import zhTw from 'https://unpkg.com/element-plus/dist/locale/zh-tw.mjs';
+
+    // ---------- 常數區 ----------
+    const STORAGE_KEY = 'dentstage-flow-tester-settings';
+
+    const App = {
+      // ---------- 模板區 ----------
+      template: `
+        <el-config-provider namespace="el">
+          <div>
+            <el-page-header content="Dentstage Tool App API 流程測試工具" icon=""></el-page-header>
+
+            <div class="card-spacer">
+              <el-card>
+                <template #header>
+                  <span>環境設定</span>
+                </template>
+                <el-form label-width="120px" label-position="left">
+                  <el-form-item label="API 基底網址">
+                    <el-input v-model="baseUrl" placeholder="例如：https://localhost:7249/api" />
+                  </el-form-item>
+                  <el-form-item label="裝置機碼">
+                    <el-input v-model="authState.deviceKey" placeholder="請輸入登入使用的裝置機碼" />
+                  </el-form-item>
+                  <el-form-item label="Access Token">
+                    <el-input v-model="authState.accessToken" type="textarea" :rows="2" placeholder="登入成功後會自動帶入" />
+                  </el-form-item>
+                  <el-form-item label="Refresh Token">
+                    <el-input v-model="authState.refreshToken" type="textarea" :rows="2" placeholder="登入成功後會自動帶入" />
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="login" :loading="loginLoading">登入取得權杖</el-button>
+                    <el-button type="success" @click="refreshToken" :loading="refreshLoading">刷新 Access Token</el-button>
+                    <el-button type="info" @click="fetchUserInfo" :loading="infoLoading">取得登入者資訊</el-button>
+                    <el-button type="warning" @click="clearTokens">清除權杖</el-button>
+                  </el-form-item>
+                </el-form>
+              </el-card>
+            </div>
+
+            <div class="card-spacer">
+              <el-card>
+                <template #header>
+                  <span>常用操作快速帶入</span>
+                </template>
+                <el-collapse v-model="activeOperationGroups">
+                  <el-collapse-item
+                    v-for="group in operationGroups"
+                    :key="group.name"
+                    :title="group.name"
+                    :name="group.name"
+                  >
+                    <el-descriptions :column="1" border>
+                      <el-descriptions-item
+                        v-for="operation in group.operations"
+                        :key="operation.name"
+                      >
+                        <template #label>
+                          <div>
+                            <strong>{{ operation.name }}</strong>
+                            <div class="request-url-preview">{{ operation.description }}</div>
+                          </div>
+                        </template>
+                        <div class="operation-body">
+                          <div class="request-url-preview">{{ operation.method }} {{ composeUrl(operation.path) }}</div>
+                          <el-button type="primary" size="small" @click="prefillOperation(operation)">帶入到自訂請求</el-button>
+                        </div>
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </el-collapse-item>
+                </el-collapse>
+              </el-card>
+            </div>
+
+            <div class="card-spacer">
+              <el-card>
+                <template #header>
+                  <span>自訂 JSON 請求</span>
+                </template>
+                <el-form label-width="120px" label-position="left">
+                  <el-form-item label="HTTP 方法">
+                    <el-select v-model="requestForm.method">
+                      <el-option label="GET" value="GET" />
+                      <el-option label="POST" value="POST" />
+                      <el-option label="PUT" value="PUT" />
+                      <el-option label="PATCH" value="PATCH" />
+                      <el-option label="DELETE" value="DELETE" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="路徑">
+                    <el-input v-model="requestForm.path" placeholder="例如：/customers" />
+                    <div class="request-url-preview">完整網址：{{ composeUrl(requestForm.path) }}</div>
+                  </el-form-item>
+                  <el-form-item label="攜帶權杖">
+                    <el-switch v-model="requestForm.useAuth" />
+                  </el-form-item>
+                  <el-form-item label="JSON Body" v-if="requestForm.method !== 'GET'">
+                    <el-input
+                      v-model="requestForm.body"
+                      type="textarea"
+                      :rows="12"
+                      placeholder="請輸入 JSON 內容，若無需 Body 可留空"
+                    />
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="sendCustomRequest" :loading="requestLoading">送出請求</el-button>
+                  </el-form-item>
+                </el-form>
+              </el-card>
+            </div>
+
+            <div class="card-spacer">
+              <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-card>
+                    <template #header>
+                      <span>車牌辨識測試</span>
+                    </template>
+                    <el-form label-width="120px" label-position="left">
+                      <el-form-item label="上傳照片">
+                        <el-upload
+                          action=""
+                          :auto-upload="false"
+                          :file-list="carPlateForm.fileList"
+                          :on-change="handleCarPlateFileChange"
+                          :on-remove="handleCarPlateFileRemove"
+                          accept="image/*"
+                          list-type="text"
+                        >
+                          <el-button type="primary">選擇圖片</el-button>
+                        </el-upload>
+                      </el-form-item>
+                      <el-form-item label="或貼上 Base64">
+                        <el-input
+                          v-model="carPlateForm.imageBase64"
+                          type="textarea"
+                          :rows="6"
+                          placeholder="貼上 data:image/...;base64,xxx 格式的字串"
+                        />
+                      </el-form-item>
+                      <el-form-item>
+                        <el-button type="primary" @click="sendCarPlateRecognition" :loading="carPlateForm.loading">送出辨識</el-button>
+                      </el-form-item>
+                    </el-form>
+                    <div v-if="carPlateForm.result">
+                      <h4>辨識結果</h4>
+                      <pre>{{ formatJson(carPlateForm.result) }}</pre>
+                    </div>
+                  </el-card>
+                </el-col>
+                <el-col :span="12">
+                  <el-card>
+                    <template #header>
+                      <span>車牌維修紀錄查詢</span>
+                    </template>
+                    <el-form label-width="120px" label-position="left">
+                      <el-form-item label="車牌號碼">
+                        <el-input v-model="carPlateSearchForm.carPlateNumber" placeholder="例如：AAA-1234" />
+                      </el-form-item>
+                      <el-form-item>
+                        <el-button type="primary" @click="searchCarPlateHistory" :loading="carPlateSearchForm.loading">查詢紀錄</el-button>
+                      </el-form-item>
+                    </el-form>
+                    <div v-if="carPlateSearchForm.result">
+                      <h4>查詢結果</h4>
+                      <pre>{{ formatJson(carPlateSearchForm.result) }}</pre>
+                    </div>
+                  </el-card>
+                </el-col>
+              </el-row>
+            </div>
+
+            <div class="card-spacer">
+              <el-card>
+                <template #header>
+                  <span>圖片上傳測試</span>
+                </template>
+                <el-form label-width="120px" label-position="left">
+                  <el-form-item label="選擇圖片">
+                    <el-upload
+                      action=""
+                      :auto-upload="false"
+                      :file-list="photoUploadForm.fileList"
+                      :on-change="handlePhotoFileChange"
+                      :on-remove="handlePhotoFileRemove"
+                      accept="image/*"
+                      list-type="text"
+                    >
+                      <el-button type="primary">選擇圖片</el-button>
+                    </el-upload>
+                  </el-form-item>
+                  <el-form-item>
+                    <el-button type="primary" @click="uploadPhoto" :loading="photoUploadForm.loading">上傳圖片</el-button>
+                  </el-form-item>
+                </el-form>
+                <div v-if="photoUploadForm.result">
+                  <h4>上傳回應</h4>
+                  <pre>{{ formatJson(photoUploadForm.result) }}</pre>
+                </div>
+              </el-card>
+            </div>
+
+            <div class="card-spacer">
+              <el-card>
+                <template #header>
+                  <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span>呼叫紀錄</span>
+                    <el-button type="danger" size="small" @click="clearLogs">清除紀錄</el-button>
+                  </div>
+                </template>
+                <div v-if="logs.length === 0" style="color:#909399;">尚未有任何呼叫紀錄。</div>
+                <div v-else>
+                  <el-timeline>
+                    <el-timeline-item
+                      v-for="log in logs"
+                      :key="log.id"
+                      :timestamp="formatTimestamp(log.timestamp)"
+                      :color="log.isError ? '#F56C6C' : '#67C23A'"
+                    >
+                      <el-card class="log-card" shadow="hover">
+                        <h4>{{ log.title }}</h4>
+                        <p style="font-size:12px;color:#909399;">{{ log.request.method }} {{ log.request.url }}</p>
+                        <div>
+                          <strong>請求標頭：</strong>
+                          <pre>{{ formatJson(log.request.headers) }}</pre>
+                        </div>
+                        <div v-if="log.request.body">
+                          <strong>請求內容：</strong>
+                          <pre>{{ formatJson(log.request.body) }}</pre>
+                        </div>
+                        <div>
+                          <strong>回應狀態：</strong> {{ log.response.status }}
+                        </div>
+                        <div>
+                          <strong>回應標頭：</strong>
+                          <pre>{{ formatJson(log.response.headers) }}</pre>
+                        </div>
+                        <div>
+                          <strong>回應內容：</strong>
+                          <pre>{{ formatJson(log.response.body) }}</pre>
+                        </div>
+                      </el-card>
+                    </el-timeline-item>
+                  </el-timeline>
+                </div>
+              </el-card>
+            </div>
+          </div>
+        </el-config-provider>
+      `,
+
+      // ---------- 邏輯區 ----------
+      setup() {
+        const baseUrl = ref('https://localhost:7249/api');
+        const authState = reactive({
+          deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C',
+          accessToken: '',
+          refreshToken: ''
+        });
+        const loginLoading = ref(false);
+        const refreshLoading = ref(false);
+        const infoLoading = ref(false);
+
+        const requestForm = reactive({
+          method: 'GET',
+          path: '/healthcheck',
+          body: '',
+          useAuth: false
+        });
+        const requestLoading = ref(false);
+
+        const carPlateForm = reactive({
+          fileList: [],
+          imageBase64: '',
+          loading: false,
+          result: null
+        });
+
+        const carPlateSearchForm = reactive({
+          carPlateNumber: '',
+          loading: false,
+          result: null
+        });
+
+        const photoUploadForm = reactive({
+          fileList: [],
+          loading: false,
+          result: null
+        });
+
+        const logs = ref([]);
+        const activeOperationGroups = ref(['驗證流程']);
+
+        const composeUrl = (path) => {
+          const normalizedBase = baseUrl.value.replace(/\/$/, '');
+          const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+          return `${normalizedBase}${normalizedPath}`;
+        };
+
+        const formatJson = (value) => {
+          if (value === null || value === undefined) {
+            return '';
+          }
+          if (typeof value === 'string') {
+            return value;
+          }
+          try {
+            return JSON.stringify(value, null, 2);
+          } catch (error) {
+            return String(value);
+          }
+        };
+
+        const appendLog = (entry) => {
+          logs.value.unshift({
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            timestamp: new Date(),
+            ...entry
+          });
+        };
+
+        const performRequest = async ({ method, path, body, includeAuth = true, contentType = 'application/json', formData, description }) => {
+          const url = composeUrl(path);
+          const headers = new Headers();
+
+          if (includeAuth && authState.accessToken) {
+            headers.set('Authorization', `Bearer ${authState.accessToken}`);
+          }
+
+          let requestBody;
+          let requestSummary;
+
+          if (contentType === 'application/json') {
+            headers.set('Content-Type', 'application/json');
+            if (body && method.toUpperCase() !== 'GET' && method.toUpperCase() !== 'HEAD') {
+              if (typeof body === 'string') {
+                requestBody = body;
+              } else {
+                requestBody = JSON.stringify(body);
+              }
+            }
+            requestSummary = requestBody;
+          } else if (contentType === 'multipart/form-data') {
+            requestBody = formData;
+            if (formData) {
+              requestSummary = Array.from(formData.entries()).reduce((acc, [key, value]) => {
+                const displayValue = value instanceof File ? `檔案：${value.name}` : value;
+                acc[key] = displayValue;
+                return acc;
+              }, {});
+            }
+          }
+
+          let response;
+          let responseText = '';
+          let responseData = null;
+          let isJson = false;
+
+          try {
+            response = await fetch(url, {
+              method,
+              headers,
+              body: requestBody
+            });
+
+            responseText = await response.text();
+            if (responseText) {
+              try {
+                responseData = JSON.parse(responseText);
+                isJson = true;
+              } catch (error) {
+                responseData = responseText;
+              }
+            }
+
+            appendLog({
+              title: description ?? '自訂請求',
+              request: {
+                url,
+                method,
+                headers: Object.fromEntries(headers.entries()),
+                body: requestSummary ?? null
+              },
+              response: {
+                status: `${response.status} ${response.statusText}`,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: responseData
+              }
+            });
+
+            if (!response.ok) {
+              const errorMessage = isJson && responseData?.detail
+                ? responseData.detail
+                : `請求失敗，狀態碼：${response.status}`;
+              throw new Error(errorMessage);
+            }
+
+            return responseData;
+          } catch (error) {
+            appendLog({
+              title: description ?? '自訂請求',
+              request: {
+                url,
+                method,
+                headers: Object.fromEntries(headers.entries()),
+                body: requestSummary ?? null
+              },
+              response: {
+                status: response ? `${response.status} ${response.statusText}` : '未送達',
+                headers: response ? Object.fromEntries(response.headers.entries()) : {},
+                body: responseText || error.message
+              },
+              isError: true
+            });
+            throw error;
+          }
+        };
+
+        const showError = (message) => {
+          ElementPlus.ElMessage.error(message);
+        };
+
+        const showSuccess = (message) => {
+          ElementPlus.ElMessage.success(message);
+        };
+
+        const prefillOperation = (operation) => {
+          requestForm.method = operation.method;
+          requestForm.path = operation.path;
+          requestForm.useAuth = operation.requiresAuth ?? true;
+          if (operation.method === 'GET') {
+            requestForm.body = '';
+          } else {
+            requestForm.body = operation.template ? JSON.stringify(operation.template, null, 2) : '';
+          }
+        };
+
+        const sendCustomRequest = async () => {
+          requestLoading.value = true;
+          try {
+            const body = requestForm.body && requestForm.method !== 'GET'
+              ? requestForm.body
+              : undefined;
+            await performRequest({
+              method: requestForm.method,
+              path: requestForm.path,
+              body,
+              includeAuth: requestForm.useAuth,
+              contentType: 'application/json',
+              description: '自訂請求'
+            });
+            showSuccess('請求已送出並完成。');
+          } catch (error) {
+            showError(error.message || '請求失敗，請稍後再試。');
+          } finally {
+            requestLoading.value = false;
+          }
+        };
+
+        const login = async () => {
+          loginLoading.value = true;
+          try {
+            const payload = { deviceKey: authState.deviceKey };
+            const response = await performRequest({
+              method: 'POST',
+              path: '/auth/login',
+              body: JSON.stringify(payload),
+              includeAuth: false,
+              description: '登入取得權杖'
+            });
+            if (response) {
+              authState.accessToken = response.accessToken ?? '';
+              authState.refreshToken = response.refreshToken ?? '';
+              showSuccess('登入成功，權杖已更新。');
+            }
+          } catch (error) {
+            showError(error.message || '登入失敗，請確認裝置機碼。');
+          } finally {
+            loginLoading.value = false;
+          }
+        };
+
+        const refreshToken = async () => {
+          if (!authState.refreshToken) {
+            showError('請先登入以取得 Refresh Token。');
+            return;
+          }
+          refreshLoading.value = true;
+          try {
+            const payload = {
+              refreshToken: authState.refreshToken,
+              deviceKey: authState.deviceKey
+            };
+            const response = await performRequest({
+              method: 'POST',
+              path: '/auth/token/refresh',
+              body: JSON.stringify(payload),
+              includeAuth: false,
+              description: '刷新權杖'
+            });
+            if (response) {
+              authState.accessToken = response.accessToken ?? '';
+              authState.refreshToken = response.refreshToken ?? authState.refreshToken;
+              showSuccess('已重新取得 Access Token。');
+            }
+          } catch (error) {
+            showError(error.message || '刷新權杖失敗，請重新登入。');
+          } finally {
+            refreshLoading.value = false;
+          }
+        };
+
+        const fetchUserInfo = async () => {
+          if (!authState.accessToken) {
+            showError('請先登入以取得 Access Token。');
+            return;
+          }
+          infoLoading.value = true;
+          try {
+            const response = await performRequest({
+              method: 'GET',
+              path: '/auth/info',
+              includeAuth: true,
+              description: '取得登入者資訊'
+            });
+            if (response) {
+              ElementPlus.ElMessageBox.alert(formatJson(response), '登入者資訊', {
+                confirmButtonText: '了解'
+              });
+            }
+          } catch (error) {
+            showError(error.message || '查詢登入資訊失敗。');
+          } finally {
+            infoLoading.value = false;
+          }
+        };
+
+        const sendCarPlateRecognition = async () => {
+          if (!authState.accessToken) {
+            showError('請先登入以取得 Access Token。');
+            return;
+          }
+
+          if (!carPlateForm.imageBase64 && carPlateForm.fileList.length === 0) {
+            showError('請提供車牌照片或 Base64 影像字串。');
+            return;
+          }
+
+          carPlateForm.loading = true;
+          try {
+            const formData = new FormData();
+            if (carPlateForm.fileList.length > 0 && carPlateForm.fileList[0].raw) {
+              formData.append('image', carPlateForm.fileList[0].raw);
+            }
+            if (carPlateForm.imageBase64.trim().length > 0) {
+              formData.append('imageBase64', carPlateForm.imageBase64.trim());
+            }
+
+            const response = await performRequest({
+              method: 'POST',
+              path: '/car-plates/recognitions',
+              includeAuth: true,
+              contentType: 'multipart/form-data',
+              formData,
+              description: '車牌辨識'
+            });
+            carPlateForm.result = response;
+            showSuccess('車牌辨識請求完成。');
+          } catch (error) {
+            showError(error.message || '車牌辨識失敗，請稍後再試。');
+          } finally {
+            carPlateForm.loading = false;
+          }
+        };
+
+        const searchCarPlateHistory = async () => {
+          if (!authState.accessToken) {
+            showError('請先登入以取得 Access Token。');
+            return;
+          }
+
+          if (!carPlateSearchForm.carPlateNumber) {
+            showError('請輸入欲查詢的車牌號碼。');
+            return;
+          }
+
+          carPlateSearchForm.loading = true;
+          try {
+            const payload = {
+              carPlateNumber: carPlateSearchForm.carPlateNumber
+            };
+            const response = await performRequest({
+              method: 'POST',
+              path: '/car-plates/search',
+              body: JSON.stringify(payload),
+              includeAuth: true,
+              description: '車牌維修紀錄查詢'
+            });
+            carPlateSearchForm.result = response;
+            showSuccess('查詢成功。');
+          } catch (error) {
+            showError(error.message || '查無維修紀錄或查詢失敗。');
+          } finally {
+            carPlateSearchForm.loading = false;
+          }
+        };
+
+        const uploadPhoto = async () => {
+          if (!authState.accessToken) {
+            showError('請先登入以取得 Access Token。');
+            return;
+          }
+
+          if (photoUploadForm.fileList.length === 0 || !photoUploadForm.fileList[0].raw) {
+            showError('請選擇欲上傳的圖片。');
+            return;
+          }
+
+          photoUploadForm.loading = true;
+          try {
+            const formData = new FormData();
+            formData.append('file', photoUploadForm.fileList[0].raw);
+            const response = await performRequest({
+              method: 'POST',
+              path: '/photos',
+              includeAuth: true,
+              contentType: 'multipart/form-data',
+              formData,
+              description: '圖片上傳'
+            });
+            photoUploadForm.result = response;
+            showSuccess('圖片上傳完成。');
+          } catch (error) {
+            showError(error.message || '圖片上傳失敗。');
+          } finally {
+            photoUploadForm.loading = false;
+          }
+        };
+
+        const clearTokens = () => {
+          authState.accessToken = '';
+          authState.refreshToken = '';
+          showSuccess('已清除權杖。');
+        };
+
+        const clearLogs = () => {
+          logs.value = [];
+          showSuccess('已清除呼叫紀錄。');
+        };
+
+        const handleCarPlateFileChange = (uploadFile, uploadFiles) => {
+          carPlateForm.fileList = uploadFiles.slice(-1);
+        };
+
+        const handleCarPlateFileRemove = () => {
+          carPlateForm.fileList = [];
+        };
+
+        const handlePhotoFileChange = (uploadFile, uploadFiles) => {
+          photoUploadForm.fileList = uploadFiles.slice(-1);
+        };
+
+        const handlePhotoFileRemove = () => {
+          photoUploadForm.fileList = [];
+        };
+
+        const formatTimestamp = (timestamp) => {
+          return new Intl.DateTimeFormat('zh-TW', {
+            hour12: false,
+            dateStyle: 'short',
+            timeStyle: 'medium'
+          }).format(timestamp);
+        };
+
+        const operationGroups = [
+          {
+            name: '驗證流程',
+            operations: [
+              {
+                name: '登入取得權杖',
+                method: 'POST',
+                path: '/auth/login',
+                template: { deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C' },
+                requiresAuth: false,
+                description: '使用裝置機碼取得 Access Token 與 Refresh Token。'
+              },
+              {
+                name: '刷新 Access Token',
+                method: 'POST',
+                path: '/auth/token/refresh',
+                template: {
+                  refreshToken: '<請填入現有 Refresh Token>',
+                  deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C'
+                },
+                requiresAuth: false,
+                description: '以 Refresh Token 換取新的 Access Token。'
+              },
+              {
+                name: '取得登入者資訊',
+                method: 'GET',
+                path: '/auth/info',
+                requiresAuth: true,
+                description: '檢視目前登入者的顯示名稱與角色。'
+              }
+            ]
+          },
+          {
+            name: '車牌流程',
+            operations: [
+              {
+                name: '車牌維修紀錄查詢',
+                method: 'POST',
+                path: '/car-plates/search',
+                template: {
+                  carPlateNumber: 'AAA-1234'
+                },
+                requiresAuth: true,
+                description: '依車牌取得維修紀錄摘要。'
+              }
+            ]
+          },
+          {
+            name: '客戶與車輛',
+            operations: [
+              {
+                name: '新增客戶',
+                method: 'POST',
+                path: '/customers',
+                template: {
+                  customerName: '林小華',
+                  phone: '0988123456',
+                  category: '一般客戶',
+                  gender: 'Male',
+                  county: '高雄市',
+                  township: '左營區',
+                  email: 'demo@dentstage.com',
+                  source: 'Facebook',
+                  reason: '想了解凹痕修復方案',
+                  remark: '首次到店，請協助安排體驗'
+                },
+                requiresAuth: true,
+                description: '建立客戶基本資料。'
+              },
+              {
+                name: '編輯客戶',
+                method: 'POST',
+                path: '/customers/edit',
+                template: {
+                  customerUid: 'Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A',
+                  customerName: '林小華',
+                  phone: '0988123456',
+                  category: '一般客戶',
+                  gender: 'Male',
+                  county: '高雄市',
+                  township: '左營區',
+                  email: 'demo@dentstage.com',
+                  source: 'Facebook',
+                  reason: '想了解凹痕修復方案',
+                  remark: '首次到店，請協助安排體驗'
+                },
+                requiresAuth: true,
+                description: '更新既有客戶資料。'
+              },
+              {
+                name: '電話搜尋客戶',
+                method: 'POST',
+                path: '/customers/phone-search',
+                template: {
+                  phone: '0988123456'
+                },
+                requiresAuth: true,
+                description: '依電話關鍵字查詢客戶與維修紀錄統計。'
+              },
+              {
+                name: '新增車輛',
+                method: 'POST',
+                path: '/cars',
+                template: {
+                  carPlateNumber: 'AAA-1234',
+                  brandUid: 'B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF',
+                  modelUid: 'M_E706D04B-9F5A-11F0-A812-000C2990DEAF',
+                  color: '白',
+                  remark: '測試建立車輛資料'
+                },
+                requiresAuth: true,
+                description: '建立車輛資料並綁定車牌。'
+              },
+              {
+                name: '編輯車輛',
+                method: 'POST',
+                path: '/cars/edit',
+                template: {
+                  carUid: 'Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D',
+                  carPlateNumber: 'AAA-5678',
+                  brandUid: 'B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF',
+                  modelUid: 'M_E706D04B-9F5A-11F0-A812-000C2990DEAF',
+                  color: '黑',
+                  remark: '客戶更換為黑色烤漆'
+                },
+                requiresAuth: true,
+                description: '更新既有車輛資料。'
+              }
+            ]
+          },
+          {
+            name: '估價與維修',
+            operations: [
+              {
+                name: '查詢估價單列表 (POST)',
+                method: 'POST',
+                path: '/quotations',
+                template: {
+                  fixType: 'DentRepair',
+                  status: '110',
+                  startDate: '2024-03-01T00:00:00',
+                  endDate: '2024-03-31T23:59:59',
+                  customerKeyword: '林',
+                  carPlateKeyword: 'AAA',
+                  page: 1,
+                  pageSize: 20
+                },
+                requiresAuth: true,
+                description: '依條件取得估價單列表。'
+              },
+              {
+                name: '新增估價單',
+                method: 'POST',
+                path: '/quotations/create',
+                template: {
+                  store: {
+                    technicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    source: '官方網站',
+                    reservationDate: '2024-10-15T10:00:00',
+                    repairDate: '2024-10-25T09:00:00'
+                  },
+                  car: {
+                    carUid: 'Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D'
+                  },
+                  customer: {
+                    customerUid: 'Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A'
+                  },
+                  damages: [
+                    {
+                      photos: 'Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B',
+                      position: '保桿',
+                      dentStatus: '大面積',
+                      description: '需板金搭配烤漆',
+                      estimatedAmount: 4500
+                    }
+                  ],
+                  carBodyConfirmation: {
+                    signaturePhotoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
+                    damageMarkers: [
+                      {
+                        x: 0.42,
+                        y: 0.63,
+                        hasDent: true,
+                        hasScratch: false,
+                        hasPaintPeel: false,
+                        remark: '主要凹痕'
+                      }
+                    ]
+                  },
+                  maintenance: {
+                    fixTypeUid: 'F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF',
+                    reserveCar: true,
+                    applyCoating: false,
+                    applyWrapping: false,
+                    hasRepainted: false,
+                    needToolEvaluation: true,
+                    otherFee: 800,
+                    roundingDiscount: 200,
+                    percentageDiscount: 10,
+                    discountReason: '回饋老客戶',
+                    estimatedRepairDays: 1,
+                    estimatedRepairHours: 6,
+                    estimatedRestorationPercentage: 90,
+                    suggestedPaintReason: null,
+                    unrepairableReason: null,
+                    remark: '請於修復後通知客戶取車'
+                  }
+                },
+                requiresAuth: true,
+                description: '建立估價單，需先準備車輛、客戶與圖片資料。'
+              },
+              {
+                name: '估價單詳情',
+                method: 'POST',
+                path: '/quotations/detail',
+                template: {
+                  quotationNo: 'Q25100001'
+                },
+                requiresAuth: true,
+                description: '依估價單編號取得詳情。'
+              },
+              {
+                name: '維修單列表 (POST)',
+                method: 'POST',
+                path: '/maintenance-orders',
+                template: {
+                  page: 1,
+                  pageSize: 20,
+                  status: '200'
+                },
+                requiresAuth: true,
+                description: '以 POST 方式取得維修單列表。'
+              },
+              {
+                name: '維修單詳情',
+                method: 'POST',
+                path: '/maintenance-orders/detail',
+                template: {
+                  maintenanceOrderUid: 'MO_1234567890'
+                },
+                requiresAuth: true,
+                description: '查詢單一維修單的詳細資料。'
+              },
+              {
+                name: '維修單回溯',
+                method: 'POST',
+                path: '/maintenance-orders/revert',
+                template: {
+                  maintenanceOrderUid: 'MO_1234567890',
+                  revertReason: '測試回溯原因'
+                },
+                requiresAuth: true,
+                description: '將維修單狀態回復上一個節點。'
+              },
+              {
+                name: '確認維修開始',
+                method: 'POST',
+                path: '/maintenance-orders/confirm',
+                template: {
+                  maintenanceOrderUid: 'MO_1234567890',
+                  confirmRemark: '現場確認開始維修'
+                },
+                requiresAuth: true,
+                description: '更新維修單狀態為維修中。'
+              }
+            ]
+          },
+          {
+            name: '資源查詢',
+            operations: [
+              {
+                name: '健康檢查',
+                method: 'GET',
+                path: '/healthcheck',
+                requiresAuth: false,
+                description: '確認服務是否運作中。'
+              },
+              {
+                name: '品牌與型號清單',
+                method: 'GET',
+                path: '/brands-models',
+                requiresAuth: true,
+                description: '取得車輛品牌與型號下拉選單資料。'
+              },
+              {
+                name: '技師名單',
+                method: 'GET',
+                path: '/technicians',
+                requiresAuth: true,
+                description: '取得登入者所屬門市的技師列表。'
+              }
+            ]
+          },
+          {
+            name: '系統維運',
+            operations: [
+              {
+                name: '建立後台帳號與裝置',
+                method: 'POST',
+                path: '/admin/accounts',
+                template: {
+                  displayName: '陳大明',
+                  role: 'StoreManager',
+                  deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C',
+                  deviceName: '高雄總店平板',
+                  operatorName: 'SystemAdmin'
+                },
+                requiresAuth: true,
+                description: '建立管理者帳號並綁定裝置。'
+              }
+            ]
+          }
+        ];
+
+        onMounted(() => {
+          try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.baseUrl) {
+                baseUrl.value = parsed.baseUrl;
+              }
+              if (parsed.deviceKey) {
+                authState.deviceKey = parsed.deviceKey;
+              }
+              if (parsed.accessToken) {
+                authState.accessToken = parsed.accessToken;
+              }
+              if (parsed.refreshToken) {
+                authState.refreshToken = parsed.refreshToken;
+              }
+            }
+          } catch (error) {
+            console.warn('載入設定失敗：', error);
+          }
+        });
+
+        watch(
+          () => ({
+            baseUrl: baseUrl.value,
+            deviceKey: authState.deviceKey,
+            accessToken: authState.accessToken,
+            refreshToken: authState.refreshToken
+          }),
+          (value) => {
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+            } catch (error) {
+              console.warn('儲存設定失敗：', error);
+            }
+          },
+          { deep: true }
+        );
+
+        return {
+          baseUrl,
+          authState,
+          loginLoading,
+          refreshLoading,
+          infoLoading,
+          requestForm,
+          requestLoading,
+          carPlateForm,
+          carPlateSearchForm,
+          photoUploadForm,
+          logs,
+          operationGroups,
+          activeOperationGroups,
+          formatJson,
+          formatTimestamp,
+          composeUrl,
+          prefillOperation,
+          sendCustomRequest,
+          login,
+          refreshToken,
+          fetchUserInfo,
+          sendCarPlateRecognition,
+          searchCarPlateHistory,
+          uploadPhoto,
+          clearTokens,
+          clearLogs,
+          handleCarPlateFileChange,
+          handleCarPlateFileRemove,
+          handlePhotoFileChange,
+          handlePhotoFileRemove
+        };
+      }
+    };
+
+    createApp(App).use(ElementPlus, { locale: zhTw }).mount('#app');
+  </script>
+</body>
+</html>
