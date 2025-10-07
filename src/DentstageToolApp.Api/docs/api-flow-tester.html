@@ -6,6 +6,12 @@
   <title>Dentstage Tool App API 流程測試工具</title>
   <!-- 使用 Element Plus 的預設樣式，確保排版一致 -->
   <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <!-- 內嵌 SVG favicon，避免瀏覽器預設要求 favicon.ico 造成 404 -->
+  <link
+    rel="icon"
+    type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='4' ry='4' fill='%2320a0ff'/%3E%3Ctext x='12' y='16' font-size='12' text-anchor='middle' fill='white' font-family='Arial, sans-serif'%3EDT%3C/text%3E%3C/svg%3E"
+  />
   <style>
     body {
       background-color: #f5f7fa;
@@ -37,10 +43,26 @@
 <body>
   <div id="app"></div>
 
-  <script type="module">
-    import { createApp, ref, reactive, watch, onMounted } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
-    import ElementPlus from 'https://unpkg.com/element-plus/dist/index.full.mjs';
-    import zhTw from 'https://unpkg.com/element-plus/dist/locale/zh-tw.mjs';
+  <!-- 採用全域腳本引入，避免瀏覽器無法解析裸模組名稱造成空白頁面 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/locale/zh-tw.min.js"></script>
+
+  <script>
+    // 透過全域 Vue 物件取得 Composition API，確保純靜態頁面也能順利運行
+    const { createApp, ref, reactive, watch, onMounted } = Vue;
+    const elementPlus = window.ElementPlus;
+    const zhTwLocale = window.ElementPlusLocaleZhTw?.default ?? window.ElementPlusLocaleZhTw;
+
+    if (!elementPlus) {
+      // 若 Element Plus 未成功載入，提前拋出錯誤提醒開發者檢查網路或 CDN 狀態
+      throw new Error('Element Plus 載入失敗，請確認 CDN 狀態。');
+    }
+
+    if (!zhTwLocale) {
+      // 若語系檔未載入成功，僅提示警告並繼續使用預設英文語系
+      console.warn('Element Plus 繁體中文語系載入失敗，將使用預設語系。');
+    }
 
     // ---------- 常數區 ----------
     const STORAGE_KEY = 'dentstage-flow-tester-settings';
@@ -459,11 +481,13 @@
         };
 
         const showError = (message) => {
-          ElementPlus.ElMessage.error(message);
+          // 使用全域 Element Plus 訊息元件呈現錯誤，讓使用者快速了解狀況
+          elementPlus.ElMessage.error(message);
         };
 
         const showSuccess = (message) => {
-          ElementPlus.ElMessage.success(message);
+          // 使用全域 Element Plus 訊息元件呈現成功提示，增進操作體驗
+          elementPlus.ElMessage.success(message);
         };
 
         const prefillOperation = (operation) => {
@@ -566,7 +590,7 @@
               description: '取得登入者資訊'
             });
             if (response) {
-              ElementPlus.ElMessageBox.alert(formatJson(response), '登入者資訊', {
+              elementPlus.ElMessageBox.alert(formatJson(response), '登入者資訊', {
                 confirmButtonText: '了解'
               });
             }
@@ -1103,7 +1127,10 @@
       }
     };
 
-    createApp(App).use(ElementPlus, { locale: zhTw }).mount('#app');
+    // 安裝 Element Plus 元件庫並套用繁體中文語系，若語系載入失敗則退回預設
+    createApp(App)
+      .use(elementPlus, { locale: zhTwLocale ?? undefined })
+      .mount('#app');
   </script>
 </body>
 </html>
