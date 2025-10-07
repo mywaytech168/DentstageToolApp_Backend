@@ -94,11 +94,6 @@ var swaggerEnabled = true;
 var swaggerRoutePrefix = swaggerSection.GetValue<string?>("RoutePrefix") ?? "swagger";
 var swaggerEndpointName = swaggerSection.GetValue<string?>("EndpointName") ?? "Dentstage Tool App API v1";
 var swaggerDocumentTitle = swaggerSection.GetValue<string?>("DocumentTitle") ?? "Dentstage Tool App 後端 API 文件";
-if (swaggerSection.GetValue<bool?>("Enabled") is bool enabledSetting)
-{
-    // 依照組態覆寫是否啟用 Swagger UI，避免正式環境暴露 API 互動頁面。
-    swaggerEnabled = enabledSetting;
-}
 
 // 設定資料庫內容類別，改用 MySQL 連線並確保連線字串存在
 var connectionString = builder.Configuration.GetConnectionString("DentstageToolAppDatabase");
