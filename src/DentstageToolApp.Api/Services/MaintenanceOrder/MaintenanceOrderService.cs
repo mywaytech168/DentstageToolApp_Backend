@@ -368,21 +368,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單與估價單編號不一致，請確認送出的資料。");
         }
 
-        // ---------- 建立估價單更新請求 ----------
-        var quotationUpdateRequest = new UpdateQuotationRequest
-        {
-            QuotationNo = quotationNo,
-            Car = request.Car ?? new QuotationCarInfo(),
-            Customer = request.Customer ?? new QuotationCustomerInfo(),
-            CategoryRemarks = request.CategoryRemarks ?? new Dictionary<string, string?>(),
-            Remark = request.Remark,
-            Damages = request.Damages ?? new List<QuotationDamageItem>(),
-            CarBodyConfirmation = request.CarBodyConfirmation,
-            Maintenance = request.Maintenance
-        };
+        // 將估價單編號同步寫回請求物件，沿用估價編輯結構以利 Swagger 呈現一致欄位。
+        request.QuotationNo = quotationNo;
 
         // 呼叫估價單服務沿用原邏輯，避免雙端處理流程不一致。
-        await _quotationService.UpdateQuotationAsync(quotationUpdateRequest, operatorName, cancellationToken);
+        await _quotationService.UpdateQuotationAsync(request, operatorName, cancellationToken);
 
         // 重新載入估價單資訊，確保取得最新欄位。
         await _dbContext.Entry(order.Quatation).ReloadAsync(cancellationToken);
@@ -471,6 +461,16 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var plainRemark = ExtractPlainRemark(quotation.Remark);
         var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
 
+        // ---------- 原維修單狀態更新 ----------
+        sourceOrder.Status = "295";
+        sourceOrder.Status295Timestamp = now;
+        sourceOrder.Status295User = operatorLabel;
+        sourceOrder.CurrentStatusDate = now;
+        sourceOrder.CurrentStatusUser = operatorLabel;
+        sourceOrder.ModificationTimestamp = now;
+        sourceOrder.ModifiedBy = operatorLabel;
+        sourceOrder.StopReason = "續修轉單";
+
         // ---------- 建立新的維修單實體 ----------
         var newOrder = new Order
         {
@@ -531,10 +531,25 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         };
 
         await _dbContext.Orders.AddAsync(newOrder, cancellationToken);
+
+        // ---------- 圖片重新綁定 ----------
+        var photos = await _dbContext.PhotoData
+            .Where(photo => photo.QuotationUid == quotation.QuotationUid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var photo in photos)
+        {
+            if (string.IsNullOrWhiteSpace(photo.RelatedUid)
+                || string.Equals(photo.RelatedUid, sourceOrder.OrderUid, StringComparison.OrdinalIgnoreCase))
+            {
+                photo.RelatedUid = orderUid;
+            }
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder}。",
+            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder} 並取消原單。",
             operatorLabel,
             sourceOrder.OrderNo,
             newOrder.OrderNo);
@@ -547,7 +562,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             QuotationNo = quotation.QuotationNo,
             CreatedAt = newOrder.CreationTimestamp ?? now,
             Status = newOrder.Status ?? "210",
-            Message = "已建立新的續修維修單。"
+            Message = "已建立新的續修維修單並取消原維修單。"
         };
     }
 

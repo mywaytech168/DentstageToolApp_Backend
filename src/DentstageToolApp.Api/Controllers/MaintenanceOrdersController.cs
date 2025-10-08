@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.MaintenanceOrders;
 using DentstageToolApp.Api.Services.MaintenanceOrder;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -163,6 +164,39 @@ public class MaintenanceOrdersController : ControllerBase
     /// 編輯維修單資料，沿用估價單編輯的結構提交更新。
     /// </summary>
     [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001",
+          "quotationNo": "Q25100001",
+          "car": {
+            "carUid": "Ca_12345678-ABCD-4ABC-8123-000000000001",
+            "licensePlate": "ABC-1234",
+            "color": "珍珠白"
+          },
+          "customer": {
+            "customerUid": "Cu_12345678-ABCD-4ABC-8123-000000000001",
+            "phone": "0912345678",
+            "email": "customer@example.com"
+          },
+          "categoryRemarks": {
+            "dent": "凹痕區塊追加備註",
+            "paint": "烤漆需等待 2 日"
+          },
+          "damages": [
+            {
+              "damageUid": "D_12345678-ABCD-4ABC-8123-000000000001",
+              "remark": "調整估工金額",
+              "estimatedAmount": 3200
+            }
+          ],
+          "maintenance": {
+            "fixTypeUid": "F_12345678-ABCD-4ABC-8123-000000000001",
+            "reserveCar": true,
+            "estimatedRepairDays": 2
+          }
+        }
+        """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
