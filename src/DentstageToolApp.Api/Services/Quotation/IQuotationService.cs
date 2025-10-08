@@ -77,4 +77,11 @@ public interface IQuotationService
     /// 估價單轉維修，建立維修工單並回傳工單編號。
     /// </summary>
     Task<QuotationMaintenanceConversionResponse> ConvertToMaintenanceAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 產生隨機的估價單建立測試資料，協助前端快速帶入範例內容。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>包含測試草稿與摘要資訊的結構。</returns>
+    Task<CreateQuotationTestPageResponse> GenerateRandomQuotationTestPageAsync(CancellationToken cancellationToken);
 }

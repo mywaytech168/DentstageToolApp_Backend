@@ -7,6 +7,7 @@ using CustomerEntity = DentstageToolApp.Infrastructure.Entities.Customer;
 using FixTypeEntity = DentstageToolApp.Infrastructure.Entities.FixType;
 using StoreEntity = DentstageToolApp.Infrastructure.Entities.Store;
 using TechnicianEntity = DentstageToolApp.Infrastructure.Entities.Technician;
+using PhotoEntity = DentstageToolApp.Infrastructure.Entities.PhotoDatum;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
@@ -32,6 +33,16 @@ public class QuotationService : IQuotationService
     private const int MaxPageSize = 200;
     // 序號計算時僅需少量資料即可取得最大值，限制撈取數量降低資料庫負擔。
     private const int SerialCandidateFetchCount = 50;
+    // 產生測試資料時單次擷取的隨機樣本數，避免撈取過多資料造成效能負擔。
+    private const int RandomCandidateFetchCount = 30;
+    // 產生測試資料時使用的車體損傷位置範例。
+    private static readonly string[] TestDamagePositions = { "前保桿", "後保桿", "左前門", "右後門", "引擎蓋", "車頂" };
+    // 產生測試資料時使用的凹痕狀態範例。
+    private static readonly string[] TestDamageStatuses = { "輕微凹痕", "中度凹痕", "需烤漆", "待確認" };
+    // 產生測試資料時使用的敘述範例。
+    private static readonly string[] TestDamageDescriptions = { "停車擦撞造成凹陷", "需板金搭配烤漆", "建議同時處理刮痕", "需另行評估內部結構" };
+    // 產生測試資料時使用的來源說明範例。
+    private static readonly string[] TestSourceSamples = { "官方網站", "老客戶轉介", "保險公司轉介", "粉絲團私訊" };
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -54,6 +65,96 @@ public class QuotationService : IQuotationService
         _context = context;
         _photoService = photoService;
         _logger = logger;
+    }
+
+    /// <inheritdoc />
+    public async Task<CreateQuotationTestPageResponse> GenerateRandomQuotationTestPageAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 取樣資料庫樣本 ----------
+        // 為避免大量撈取資料造成效能負擔，每個實體僅擷取固定數量的樣本後再於記憶體中挑選。
+        var technicianSamples = await _context.Technicians
+            .AsNoTracking()
+            .Include(t => t.Store)
+            .Take(RandomCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+        var customerSamples = await _context.Customers
+            .AsNoTracking()
+            .Take(RandomCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+        var carSamples = await _context.Cars
+            .AsNoTracking()
+            .Take(RandomCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+        var fixTypeSamples = await _context.FixTypes
+            .AsNoTracking()
+            .Take(RandomCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+        var photoSamples = await _context.PhotoData
+            .AsNoTracking()
+            .Take(RandomCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+
+        // ---------- 組裝隨機測試資料 ----------
+        var random = Random.Shared;
+        var technician = PickRandomOrDefault(technicianSamples, random);
+        var customer = PickRandomOrDefault(customerSamples, random);
+        var car = PickRandomOrDefault(carSamples, random);
+        var fixType = PickRandomOrDefault(fixTypeSamples, random);
+
+        var reservationDate = DateTime.Now.Date
+            .AddDays(random.Next(1, 8))
+            .AddHours(10 + random.Next(0, 3))
+            .AddMinutes(random.Next(0, 4) * 15);
+        var repairDate = reservationDate
+            .AddDays(random.Next(1, 5))
+            .AddHours(random.Next(1, 4));
+
+        var draft = new CreateQuotationRequest
+        {
+            Store = new CreateQuotationStoreInfo
+            {
+                TechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
+                Source = BuildSourceText(customer, technician, random),
+                ReservationDate = reservationDate,
+                RepairDate = repairDate
+            },
+            Car = new CreateQuotationCarInfo
+            {
+                CarUid = car?.CarUid ?? BuildFallbackUid("Ca"),
+                BrandUid = null,
+                ModelUid = null
+            },
+            Customer = new CreateQuotationCustomerInfo
+            {
+                CustomerUid = customer?.CustomerUid ?? BuildFallbackUid("Cu")
+            },
+            Damages = BuildRandomDamages(photoSamples, random),
+            CarBodyConfirmation = BuildRandomCarBodyConfirmation(photoSamples, random),
+            Maintenance = BuildRandomMaintenance(fixType, random)
+        };
+
+        var usedExistingData = technician is not null
+            || customer is not null
+            || car is not null
+            || fixType is not null
+            || photoSamples.Count > 0;
+
+        var response = new CreateQuotationTestPageResponse
+        {
+            Draft = draft,
+            Technician = technician is null ? null : CreateTechnicianSummary(technician),
+            Store = technician?.Store is null ? null : CreateStoreSummary(technician.Store),
+            Customer = customer is null ? null : CreateCustomerSummary(customer),
+            Car = car is null ? null : CreateCarSummary(car),
+            FixType = fixType is null ? null : CreateFixTypeSummary(fixType),
+            UsedExistingData = usedExistingData,
+            GeneratedAt = DateTimeOffset.Now,
+            Notes = BuildTestNotes(draft, usedExistingData)
+        };
+
+        return response;
     }
 
     /// <inheritdoc />
@@ -2661,6 +2762,313 @@ public class QuotationService : IQuotationService
             "other" or "其他" => "other",
             _ => null
         };
+    }
+
+    /// <summary>
+    /// 從樣本清單中隨機挑選一筆資料，若清單為空則回傳 null。
+    /// </summary>
+    private static T? PickRandomOrDefault<T>(IReadOnlyList<T> source, Random random)
+    {
+        if (source is null || source.Count == 0)
+        {
+            return default;
+        }
+
+        return source[random.Next(source.Count)];
+    }
+
+    /// <summary>
+    /// 建立估價單時，以客戶來源或門市資訊決定測試資料的來源描述。
+    /// </summary>
+    private static string BuildSourceText(CustomerEntity? customer, TechnicianEntity? technician, Random random)
+    {
+        var customerSource = NormalizeOptionalText(customer?.Source);
+        if (customerSource is not null)
+        {
+            return customerSource;
+        }
+
+        var storeName = NormalizeOptionalText(technician?.Store?.StoreName);
+        if (storeName is not null)
+        {
+            return $"{storeName} 來電";
+        }
+
+        return TestSourceSamples[random.Next(TestSourceSamples.Length)];
+    }
+
+    /// <summary>
+    /// 建立隨機傷痕資料，並盡量帶入既有照片作為測試素材。
+    /// </summary>
+    private static List<QuotationDamageItem> BuildRandomDamages(IReadOnlyList<PhotoEntity> photoSamples, Random random)
+    {
+        var damageCount = random.Next(1, 4);
+        var damages = new List<QuotationDamageItem>();
+
+        for (var i = 0; i < damageCount; i++)
+        {
+            var damage = new QuotationDamageItem
+            {
+                DisplayPosition = TestDamagePositions[random.Next(TestDamagePositions.Length)],
+                DisplayDentStatus = TestDamageStatuses[random.Next(TestDamageStatuses.Length)],
+                DisplayDescription = TestDamageDescriptions[random.Next(TestDamageDescriptions.Length)],
+                DisplayEstimatedAmount = Math.Round(1500m + (decimal)random.NextDouble() * 4000m, 0)
+            };
+
+            var photoUid = PickRandomPhotoUid(photoSamples, random);
+            if (photoUid is not null)
+            {
+                damage.DisplayPhotos = new List<QuotationDamagePhoto>
+                {
+                    new()
+                    {
+                        PhotoUid = photoUid,
+                        Description = "測試傷痕照片",
+                        IsPrimary = true
+                    }
+                };
+            }
+
+            damages.Add(damage);
+        }
+
+        return damages;
+    }
+
+    /// <summary>
+    /// 建立隨機車體確認單資料，產生示意座標與簽名圖片。
+    /// </summary>
+    private static QuotationCarBodyConfirmation BuildRandomCarBodyConfirmation(IReadOnlyList<PhotoEntity> photoSamples, Random random)
+    {
+        var markerCount = random.Next(1, 3);
+        var markers = new List<QuotationCarBodyDamageMarker>();
+
+        for (var i = 0; i < markerCount; i++)
+        {
+            markers.Add(new QuotationCarBodyDamageMarker
+            {
+                X = Math.Round(random.NextDouble(), 2),
+                Y = Math.Round(random.NextDouble(), 2),
+                HasDent = true,
+                HasScratch = random.Next(2) == 0,
+                HasPaintPeel = random.Next(2) == 0,
+                Remark = $"測試標記 {i + 1}"
+            });
+        }
+
+        return new QuotationCarBodyConfirmation
+        {
+            SignaturePhotoUid = PickRandomPhotoUid(photoSamples, random) ?? BuildFallbackUid("Ph"),
+            DamageMarkers = markers
+        };
+    }
+
+    /// <summary>
+    /// 建立隨機維修設定資料，模擬一般估價流程會填入的欄位內容。
+    /// </summary>
+    private static CreateQuotationMaintenanceInfo BuildRandomMaintenance(FixTypeEntity? fixType, Random random)
+    {
+        var percentageDiscount = random.Next(0, 2) == 0
+            ? (decimal?)null
+            : Math.Round((decimal)random.NextDouble() * 15m, 1);
+
+        return new CreateQuotationMaintenanceInfo
+        {
+            FixTypeUid = fixType?.FixTypeUid ?? BuildFallbackUid("F"),
+            ReserveCar = random.Next(2) == 0,
+            ApplyCoating = random.Next(2) == 0,
+            ApplyWrapping = random.Next(2) == 0,
+            HasRepainted = random.Next(2) == 0,
+            NeedToolEvaluation = random.Next(2) == 0,
+            OtherFee = Math.Round((decimal)random.NextDouble() * 1200m, 0),
+            RoundingDiscount = Math.Round((decimal)random.NextDouble() * 300m, 0),
+            PercentageDiscount = percentageDiscount,
+            DiscountReason = percentageDiscount.HasValue && percentageDiscount.Value > 0
+                ? "測試折扣：系統隨機產生"
+                : null,
+            EstimatedRepairDays = random.Next(0, 3),
+            EstimatedRepairHours = random.Next(1, 8),
+            EstimatedRestorationPercentage = Math.Round(80m + (decimal)random.NextDouble() * 20m, 0),
+            FixTimeHour = random.Next(1, 6),
+            FixTimeMin = random.Next(0, 4) * 15,
+            FixExpectDay = random.Next(0, 3),
+            FixExpectHour = random.Next(0, 24),
+            Remark = "此為隨機測試資料，正式使用前請再次確認。"
+        };
+    }
+
+    /// <summary>
+    /// 建立技師摘要資訊，方便前端顯示測試資料對應人員。
+    /// </summary>
+    private static CreateQuotationTestEntitySummary CreateTechnicianSummary(TechnicianEntity technician)
+    {
+        var name = NormalizeOptionalText(technician.TechnicianName) ?? "測試技師";
+        var storeName = NormalizeOptionalText(technician.Store?.StoreName);
+
+        return new CreateQuotationTestEntitySummary
+        {
+            Uid = technician.TechnicianUid,
+            Name = name,
+            Description = storeName is null ? null : $"所屬門市：{storeName}"
+        };
+    }
+
+    /// <summary>
+    /// 建立門市摘要資訊。
+    /// </summary>
+    private static CreateQuotationTestEntitySummary CreateStoreSummary(StoreEntity store)
+    {
+        var name = NormalizeOptionalText(store.StoreName) ?? "測試門市";
+        return new CreateQuotationTestEntitySummary
+        {
+            Uid = store.StoreUid,
+            Name = name,
+            Description = "估價單將以此門市建立"
+        };
+    }
+
+    /// <summary>
+    /// 建立客戶摘要資訊，整合電話與地區資訊。
+    /// </summary>
+    private static CreateQuotationTestEntitySummary CreateCustomerSummary(CustomerEntity customer)
+    {
+        var name = NormalizeOptionalText(customer.Name) ?? "測試客戶";
+        var descriptionParts = new List<string>();
+
+        var phone = NormalizeOptionalText(customer.Phone);
+        if (phone is not null)
+        {
+            descriptionParts.Add($"電話：{phone}");
+        }
+
+        var county = NormalizeOptionalText(customer.County);
+        var township = NormalizeOptionalText(customer.Township);
+        var region = string.Concat(county ?? string.Empty, township ?? string.Empty);
+        if (!string.IsNullOrWhiteSpace(region))
+        {
+            descriptionParts.Add($"地區：{region}");
+        }
+
+        var source = NormalizeOptionalText(customer.Source);
+        if (source is not null)
+        {
+            descriptionParts.Add($"來源：{source}");
+        }
+
+        return new CreateQuotationTestEntitySummary
+        {
+            Uid = customer.CustomerUid,
+            Name = name,
+            Description = descriptionParts.Count > 0 ? string.Join("，", descriptionParts) : null
+        };
+    }
+
+    /// <summary>
+    /// 建立車輛摘要資訊，包含車牌、品牌與顏色描述。
+    /// </summary>
+    private static CreateQuotationTestEntitySummary CreateCarSummary(CarEntity car)
+    {
+        var plate = NormalizeOptionalText(car.CarNo) ?? "測試車牌";
+        var descriptionParts = new List<string>();
+
+        var brand = NormalizeOptionalText(car.Brand);
+        var model = NormalizeOptionalText(car.Model);
+        var brandModelParts = new List<string>();
+        if (brand is not null)
+        {
+            brandModelParts.Add(brand);
+        }
+
+        if (model is not null)
+        {
+            brandModelParts.Add(model);
+        }
+
+        if (brandModelParts.Count > 0)
+        {
+            descriptionParts.Add($"車型：{string.Join(" ", brandModelParts)}");
+        }
+
+        var color = NormalizeOptionalText(car.Color);
+        if (color is not null)
+        {
+            descriptionParts.Add($"車色：{color}");
+        }
+
+        return new CreateQuotationTestEntitySummary
+        {
+            Uid = car.CarUid,
+            Name = plate,
+            Description = descriptionParts.Count > 0 ? string.Join("，", descriptionParts) : null
+        };
+    }
+
+    /// <summary>
+    /// 建立維修類型摘要資訊。
+    /// </summary>
+    private static CreateQuotationTestEntitySummary CreateFixTypeSummary(FixTypeEntity fixType)
+    {
+        var name = NormalizeOptionalText(fixType.FixTypeName) ?? "測試維修類型";
+        return new CreateQuotationTestEntitySummary
+        {
+            Uid = fixType.FixTypeUid,
+            Name = name,
+            Description = "測試資料用維修類型"
+        };
+    }
+
+    /// <summary>
+    /// 建立測試頁面提示訊息，提供前端顯示於 UI。
+    /// </summary>
+    private static List<string> BuildTestNotes(CreateQuotationRequest draft, bool usedExistingData)
+    {
+        var notes = new List<string>
+        {
+            "本回傳資料由系統隨機產生，僅供測試新增估價單頁面使用。"
+        };
+
+        notes.Add(usedExistingData
+            ? "部分欄位取用資料庫既有資料，請於送出前確認是否符合測試情境。"
+            : "目前資料庫缺少樣本，所有欄位皆由系統隨機填入。");
+
+        if (draft.Store?.Source is not null)
+        {
+            notes.Add($"來源：{draft.Store.Source}");
+        }
+
+        if (draft.Store?.ReservationDate is not null)
+        {
+            notes.Add($"預約日期：{draft.Store.ReservationDate:yyyy/MM/dd HH:mm}");
+        }
+
+        if (draft.Maintenance?.FixTypeUid is not null)
+        {
+            notes.Add($"維修類型 UID：{draft.Maintenance.FixTypeUid}");
+        }
+
+        return notes;
+    }
+
+    /// <summary>
+    /// 從照片樣本中挑選可用的 PhotoUID。
+    /// </summary>
+    private static string? PickRandomPhotoUid(IReadOnlyList<PhotoEntity> photoSamples, Random random)
+    {
+        if (photoSamples is null || photoSamples.Count == 0)
+        {
+            return null;
+        }
+
+        var candidate = photoSamples[random.Next(photoSamples.Count)];
+        return NormalizeOptionalText(candidate.PhotoUid);
+    }
+
+    /// <summary>
+    /// 為測試資料建立具有辨識性的臨時 UID。
+    /// </summary>
+    private static string BuildFallbackUid(string prefix)
+    {
+        return $"{prefix}_{Guid.NewGuid():D}".ToUpperInvariant();
     }
 
     /// <summary>
