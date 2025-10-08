@@ -715,6 +715,9 @@ public class QuotationService : IQuotationService
         var unrepairableReason = NormalizeOptionalText(quotation.RejectReason)
             ?? NormalizeOptionalText(extraData?.UnrepairableReason);
 
+        // 透過現有估價金額與折扣計算應付金額，避免直接存取缺少對應欄位的實體屬性。
+        var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+
         return new QuotationDetailResponse
         {
             QuotationUid = quotation.QuotationUid,
@@ -728,7 +731,8 @@ public class QuotationService : IQuotationService
                 Valuation = quotation.Valuation,
                 Discount = quotation.Discount,
                 DiscountPercent = quotation.DiscountPercent,
-                Amount = quotation.Amount
+                // Quatation 實體未直接提供 Amount 欄位，因此統一由服務層計算後回傳。
+                Amount = amount
             },
             Store = new QuotationStoreInfo
             {
