@@ -1359,6 +1359,15 @@ public class QuotationService : IQuotationService
 
         _context.Orders.Add(order);
 
+        var relatedPhotos = await _context.PhotoData
+            .Where(photo => photo.QuotationUid == quotation.QuotationUid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var photo in relatedPhotos)
+        {
+            photo.RelatedUid = orderUid;
+        }
+
         ApplyStatusAudit(quotation, "191", operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
