@@ -117,6 +117,8 @@ Content-Type: application/json
 | POST | `/api/quotations/revert` | 將估價單狀態回溯。 | JSON 對應 `QuotationRevertStatusRequest`。 |
 | POST | `/api/quotations/maintenance` | 估價單轉維修並產生維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
 
+> 估價單詳情提供 `amounts` 物件，包含估價金額、折扣與應付金額欄位，維修單詳情亦沿用相同結構。 【F:src/DentstageToolApp.Api/Quotations/QuotationDetailResponse.cs†L9-L96】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L720-L748】
+
 **列表查詢常用欄位**
 - `fixType`：維修類型代碼。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L11-L18】
 - `status`：估價單狀態碼（110/180/190/191/195）。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L16-L19】
@@ -151,6 +153,7 @@ Content-Type: application/json
 - `quotationNo`：所有狀態操作必帶欄位。 【F:src/DentstageToolApp.Api/Quotations/QuotationActionRequestBase.cs†L5-L27】
 - `reservationDate`：轉預約／更新預約時必填。 【F:src/DentstageToolApp.Api/Quotations/QuotationReservationRequest.cs†L9-L15】
 - `reason`、`clearReservation`：取消預約時可提供原因與是否清除日期。 【F:src/DentstageToolApp.Api/Quotations/QuotationCancelRequest.cs†L5-L19】
+- 估價單回溯：狀態依序 195→191→190→180→110 逐步回退，最低回到 110。 【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1913-L1960】
 
 ---
 

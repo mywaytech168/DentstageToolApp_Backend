@@ -9,6 +9,14 @@ namespace DentstageToolApp.Api.MaintenanceOrders;
 public class MaintenanceOrderDetailResponse : QuotationDetailResponse
 {
     /// <summary>
+    /// 金額資訊沿用基底類別的 <see cref="QuotationDetailResponse.Amounts"/>，確保估價與維修畫面一致。
+    /// </summary>
+    /// <remarks>
+    /// 這裡以註解提醒開發者不要重新宣告 Amounts 屬性，以免造成序列化欄位重複。
+    /// </remarks>
+    // 注意：若需擴充金額欄位請調整 QuotationAmountInfo，維修單會自動跟進。
+
+    /// <summary>
     /// 維修單唯一識別碼。
     /// </summary>
     public string OrderUid { get; set; } = string.Empty;
@@ -19,11 +27,6 @@ public class MaintenanceOrderDetailResponse : QuotationDetailResponse
     public string? OrderNo { get; set; }
 
     /// <summary>
-    /// 維修單金額資訊，保留估價金額、折扣與實際金額供前端呈現。
-    /// </summary>
-    public MaintenanceOrderAmountInfo Amounts { get; set; } = new();
-
-    /// <summary>
     /// 維修狀態歷程，提供各狀態時間與操作人。
     /// </summary>
     public MaintenanceOrderStatusHistory StatusHistory { get; set; } = new();
@@ -32,32 +35,6 @@ public class MaintenanceOrderDetailResponse : QuotationDetailResponse
     /// 目前狀態異動人名稱，保留頂層欄位以維持舊有相容性。
     /// </summary>
     public string? CurrentStatusUser { get; set; }
-}
-
-/// <summary>
-/// 維修單金額資訊，補齊估價金額、折扣與應付金額。
-/// </summary>
-public class MaintenanceOrderAmountInfo
-{
-    /// <summary>
-    /// 估價金額。
-    /// </summary>
-    public decimal? Valuation { get; set; }
-
-    /// <summary>
-    /// 折扣金額。
-    /// </summary>
-    public decimal? Discount { get; set; }
-
-    /// <summary>
-    /// 折扣百分比。
-    /// </summary>
-    public decimal? DiscountPercent { get; set; }
-
-    /// <summary>
-    /// 實際應付金額。
-    /// </summary>
-    public decimal? Amount { get; set; }
 }
 
 /// <summary>

@@ -971,11 +971,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 建立維修單金額資訊，保留估價、折扣與應付欄位。
+    /// 建立維修單金額資訊，保留估價、折扣與應付欄位，並沿用估價單的資料結構。
     /// </summary>
-    private static MaintenanceOrderAmountInfo BuildAmountInfo(Order order)
+    private static QuotationAmountInfo BuildAmountInfo(Order order)
     {
-        return new MaintenanceOrderAmountInfo
+        return new QuotationAmountInfo
         {
             Valuation = order.Valuation,
             Discount = order.Discount,

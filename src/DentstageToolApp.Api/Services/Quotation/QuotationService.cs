@@ -722,6 +722,14 @@ public class QuotationService : IQuotationService
             Status = quotation.Status,
             CreatedAt = quotation.CreationTimestamp,
             UpdatedAt = quotation.ModificationTimestamp,
+            Amounts = new QuotationAmountInfo
+            {
+                // 金額欄位需同步維修單顯示，避免前端計算不一致。
+                Valuation = quotation.Valuation,
+                Discount = quotation.Discount,
+                DiscountPercent = quotation.DiscountPercent,
+                Amount = quotation.Amount
+            },
             Store = new QuotationStoreInfo
             {
                 StoreUid = quotation.StoreUid,
