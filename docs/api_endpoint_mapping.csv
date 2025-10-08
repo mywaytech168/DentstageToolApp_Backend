@@ -1,0 +1,44 @@
+功能,HTTP Method,API-EN,額外文檔
+登入,POST,/api/auth/login,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_AUTH_LOGIN
+顯示使用者帳號,GET,/api/auth/info,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_AUTH_INFO
+上傳圖片,POST,/api/photos,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得圖片,GET,/api/photos/{photoUid},https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得估價單列表,GET,/api/quotations,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+搜尋估價單列表,POST,/api/quotations,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+車牌辨識,POST,/api/car-plates/recognitions,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+車牌搜尋,POST,/api/car-plates/search,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得品牌型號,GET,/api/brands-models,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+新增車輛資料,POST,/api/cars,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+電話搜尋,POST,/api/customers/phone-search,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+新增客戶資料,POST,/api/customers,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+技師名單,GET,/api/technicians,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+新增估價單,POST,/api/quotations/create,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得估價單,POST,/api/quotations/detail,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+編輯車輛資料,POST,/api/cars/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+編輯客戶資料,POST,/api/customers/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+編輯估價單,POST,/api/quotations/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+估價完成,POST,/api/quotations/evaluate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+自動過期,OTHER,（系統自動排程，無需呼叫 API）,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取消,POST,/api/quotations/cancel,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+轉預約,POST,/api/quotations/reserve,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+自動過期,OTHER,（系統自動排程，無需呼叫 API）,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取消預約,POST,/api/quotations/reserve/cancel,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+更改預約,POST,/api/quotations/reserve/update,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+轉維修,POST,/api/quotations/maintenance,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得維修單列表,GET,/api/maintenance-orders,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+搜尋維修單列表,POST,/api/maintenance-orders,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得維修單,POST,/api/maintenance-orders/detail,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+確認維修,POST,/api/maintenance-orders/confirm,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得維修單,POST,/api/maintenance-orders/detail,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+編輯維修單,POST,（尚未提供對應 API）,
+續修,POST,（尚未提供對應 API）,
+維修完成,POST,（尚未提供對應 API）,
+終止維修,POST,（尚未提供對應 API）,
+誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+取得維修單,POST,/api/maintenance-orders/detail,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
+誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html
