@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8" />
+    <title>文檔目錄</title>
+    <style>
+        body {
+            font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+            line-height: 1.7;
+            margin: 40px;
+            color: #333333;
+        }
+        h1, h2 {
+            color: #1f4f82;
+        }
+        blockquote {
+            margin: 16px 0;
+            padding: 12px 18px;
+            border-left: 4px solid #1f4f82;
+            background-color: #f3f7fb;
+            color: #2d2d2d;
+        }
+        ul {
+            margin: 12px 0 24px 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .checklist {
+            list-style: none;
+            padding-left: 0;
+        }
+        .checklist li::before {
+            content: "□ ";
+            color: #1f4f82;
+            font-weight: bold;
+        }
+        code {
+            background-color: #f5f5f5;
+            padding: 0 4px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 說明：此頁面提供開發與維運人員定位專案文件的入口與檢核重點 -->
+    <h1>文檔目錄</h1>
+    <blockquote>
+        <p>本文件統整專案現有文件資源，協助團隊快速尋找開發、資料庫與 API 相關資訊，並提供後續維護指引。</p>
+    </blockquote>
+
+    <h2>1. 檔案結構與修改重點</h2>
+    <ul>
+        <li><a href="../../../README.md">README.md</a>：介紹專案定位、資料夾結構、開發環境建議與後續作業提醒。</li>
+        <li><code>../../../global.json</code>：鎖定 .NET SDK 版本，確保跨環境一致性。</li>
+        <li><code>../../../DentstageToolApp_Backend.sln</code>：Visual Studio / Rider 可直接載入的方案檔，整合所有後端專案。</li>
+    </ul>
+
+    <h2>2. API 文件與測試資源</h2>
+    <ul>
+        <li><code>../../../docs/swagger/dentstage-tool-app-api-v1.json</code>：目前匯出的 Swagger 規格，可離線匯入 Swagger UI 或 Postman。</li>
+        <li><code>src/DentstageToolApp.Api/docs/api/index.html</code>：API 操作說明首頁，整理各端點用途與測試流程。</li>
+        <li><code>src/DentstageToolApp.Api/docs/api-flow-tester.html</code>：互動式 API 流程測試頁面，支援逐步驗證主要流程。</li>
+        <li><code>src/DentstageToolApp.Api/docs/quotation-create-guide.html</code>、<code>quotation-edit-guide.html</code>：估價單新增與編輯流程圖解。</li>
+    </ul>
+
+    <h2>3. 資料庫相關文件</h2>
+    <ul>
+        <li><code>../../../db_docs/</code>：既有資料庫文件，可對照資料表欄位與規格。</li>
+        <li><code>src/DentstageToolApp.Infrastructure/Data/DentstageToolAppContext.cs</code>：DbContext，維護資料表對應與設定。</li>
+        <li><code>src/DentstageToolApp.Infrastructure/Entities/</code>：資料庫實體類別，對應各資料表結構。</li>
+    </ul>
+
+    <h2>4. 開發與部署指令</h2>
+    <ul>
+        <li><code>dotnet restore</code>：還原方案所需套件，首次下載或更新套件版本。</li>
+        <li><code>dotnet run --project src/DentstageToolApp.Api</code>：啟動 API 專案，供本地測試或 Swagger 預覽。</li>
+        <li><code>dotnet tool install --global dotnet-ef</code>：安裝資料庫反向工程所需的 <code>dotnet-ef</code> 工具。</li>
+        <li><code>dotnet ef dbcontext scaffold &lt;連線字串&gt; Microsoft.EntityFrameworkCore.SqlServer --context DentstageToolAppContext --context-dir Data --context-namespace DentstageToolApp.Infrastructure.Data --output-dir Entities --namespace DentstageToolApp.Infrastructure.Entities --use-database-names --no-onconfiguring --force</code>：同步資料庫結構至專案實體。</li>
+    </ul>
+
+    <h2>5. 日常維運建議</h2>
+    <ul>
+        <li>調整 <code>appsettings*.json</code> 連線字串或服務設定時，請保留中文註解，標示修改目的。</li>
+        <li>更新 Swagger 規格後，記得同步 <code>docs/swagger</code> 內檔案，以免前後端文件不一致。</li>
+        <li>若擴充模組，建議於 <code>src/</code> 下依領域建立資料夾，例如 <code>Modules/Orders</code> 以利維護。</li>
+    </ul>
+
+    <h2>6. 驗收清單</h2>
+    <ul class="checklist">
+        <li>團隊成員可透過本文件迅速定位到 API、資料庫與設定檔案。</li>
+        <li>Swagger 及 HTML 指南檔案皆能在最新版本中找到對應功能說明。</li>
+        <li>開發人員能依據指令區內容完成還原套件與啟動專案。</li>
+        <li>更新資料庫結構時，有對應實體與 DbContext 檔案可供覆寫或調整。</li>
+    </ul>
+
+    <blockquote>
+        <p>後續若新增文件，請同步更新本目錄，維持資訊一致性與可追溯性。</p>
+    </blockquote>
+</body>
+</html>
