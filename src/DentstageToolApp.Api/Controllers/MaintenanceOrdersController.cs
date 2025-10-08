@@ -264,7 +264,7 @@ public class MaintenanceOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 續修維修單，複製估價單與相關圖片並建立新的維修工單。
+    /// 續修維修單，複製估價單與相關圖片並將原維修單標記為取消。
     /// </summary>
     [HttpPost("continue")]
     [ProducesResponseType(typeof(MaintenanceOrderContinuationResponse), StatusCodes.Status200OK)]

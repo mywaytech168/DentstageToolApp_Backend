@@ -180,7 +180,7 @@ Content-Type: application/json
 **單筆操作欄位**
 - `orderNo`：維修單編號，為詳細／回溯／確認／編輯／續修／完成／終止的必填欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailRequest.cs†L5-L15】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderRevertRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderConfirmRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderContinueRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderCompleteRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderTerminateRequest.cs†L10-L14】
 - 維修單回溯：狀態依序 295→290→220→210 逐步回退，最低回到 210。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L187-L244】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L952-L1038】
-- 續修維修單會先將原工單標記為 295 並重新綁定估價圖片到新工單。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L468-L560】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
+- 續修維修單會先將原工單標記為 295，並複製估價單與圖片供後續續修作業。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L458-L546】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
 - `quotationNo`：編輯維修單時可帶入以驗證估價單關聯，沿用估價單編輯欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L39】
 
 ---

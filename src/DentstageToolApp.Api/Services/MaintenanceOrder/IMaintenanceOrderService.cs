@@ -35,7 +35,7 @@ public interface IMaintenanceOrderService
     Task UpdateOrderAsync(UpdateMaintenanceOrderRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
-    /// 續修維修單，複製估價內容建立新的維修單紀錄。
+    /// 續修維修單，複製估價與圖片並將原維修單標記為取消維修。
     /// </summary>
     Task<MaintenanceOrderContinuationResponse> ContinueOrderAsync(MaintenanceOrderContinueRequest request, string operatorName, CancellationToken cancellationToken);
 
