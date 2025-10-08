@@ -521,7 +521,7 @@ public class QuotationsController : ControllerBase
     /// <summary>
     /// 將估價單狀態回朔至上一個有效狀態。
     /// </summary>
-    [HttpPost("reserve/revert")]
+    [HttpPost("revert")]
     [SwaggerMockRequestExample(
         """
         {
