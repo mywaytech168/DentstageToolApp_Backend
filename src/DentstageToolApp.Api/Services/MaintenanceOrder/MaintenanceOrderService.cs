@@ -214,14 +214,22 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少關聯估價單，無法回溯。");
         }
 
-        if (string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+        // ---------- 決定可回復的上一個維修狀態 ----------
+        var currentStatus = NormalizeOptionalText(order.Status);
+        if (currentStatus is null)
         {
-            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單已標記為取消，無需再次回溯。");
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少狀態資訊，無法回溯。");
+        }
+
+        var previousOrderStatus = ResolvePreviousOrderStatus(order, currentStatus);
+        if (previousOrderStatus is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單已位於最早狀態，無法再回溯。");
         }
 
         // ---------- 回溯估價單狀態 ----------
-        var previousStatus = ResolvePreviousStatus(order.Quatation);
-        if (previousStatus is null)
+        var previousQuotationStatus = ResolvePreviousQuotationStatus(order.Quatation);
+        if (previousQuotationStatus is null)
         {
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "估價單缺少可回溯的上一個狀態。");
         }
@@ -231,32 +239,29 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ClearCancellationAudit(order.Quatation);
         }
 
-        ApplyQuotationStatus(order.Quatation, previousStatus, operatorLabel, now);
+        ApplyQuotationStatus(order.Quatation, previousQuotationStatus, operatorLabel, now);
 
-        // ---------- 更新維修單狀態為取消 ----------
-        order.Status = "295";
-        order.Status295Timestamp = now;
-        order.Status295User = operatorLabel;
-        order.CurrentStatusDate = now;
-        order.CurrentStatusUser = operatorLabel;
-        order.ModificationTimestamp = now;
-        order.ModifiedBy = operatorLabel;
+        // ---------- 更新維修單狀態 ----------
+        ApplyOrderStatusReversion(order, previousOrderStatus, operatorLabel, now);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var statusTimestamp = GetOrderStatusTimestamp(order, previousOrderStatus) ?? order.CurrentStatusDate;
+
         _logger.LogInformation(
-            "操作人員 {Operator} 將維修單 {OrderNo} 回溯至估價狀態 {Status}，並將維修單標記為取消。",
+            "操作人員 {Operator} 將維修單 {OrderNo} 回溯至狀態 {Status}，並同步回復估價單狀態 {QuotationStatus}。",
             operatorLabel,
             order.OrderNo,
-            previousStatus);
+            previousOrderStatus,
+            previousQuotationStatus);
 
         return new MaintenanceOrderStatusChangeResponse
         {
             OrderUid = order.OrderUid,
             OrderNo = order.OrderNo,
-            Status = order.Status,
-            StatusTime = order.Status295Timestamp,
-            Message = "已回溯至估價階段並取消維修單。"
+            Status = previousOrderStatus,
+            StatusTime = statusTimestamp,
+            Message = $"維修單已回復至狀態 {previousOrderStatus}。"
         };
     }
 
@@ -355,6 +360,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (string.IsNullOrWhiteSpace(quotationNo))
         {
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "估價單編號缺失，無法同步維修資料。");
+        }
+
+        var requestQuotationNo = NormalizeOptionalText(request.QuotationNo);
+        if (requestQuotationNo is not null && !string.Equals(requestQuotationNo, quotationNo, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單與估價單編號不一致，請確認送出的資料。");
         }
 
         // ---------- 建立估價單更新請求 ----------
@@ -709,9 +720,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             QuotationUid = quotationDetail?.QuotationUid ?? quotation?.QuotationUid,
             QuotationNo = quotationDetail?.QuotationNo ?? quotation?.QuotationNo,
             Status = NormalizeOptionalText(order.Status) ?? quotationDetail?.Status,
-            FixType = NormalizeOptionalText(order.FixType)
-                ?? NormalizeOptionalText(quotation?.FixType)
-                ?? quotationDetail?.Maintenance?.FixTypeUid,
             CreatedAt = order.CreationTimestamp ?? quotationDetail?.CreatedAt,
             UpdatedAt = order.ModificationTimestamp ?? quotationDetail?.UpdatedAt ?? order.CreationTimestamp,
             Store = storeInfo,
@@ -989,6 +997,110 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
+    /// 由維修單現行狀態往回尋找上一個有效的狀態碼。
+    /// </summary>
+    private static string? ResolvePreviousOrderStatus(Order order, string currentStatus)
+    {
+        var history = new List<(string Code, DateTime? Timestamp)>
+        {
+            ("210", order.Status210Date),
+            ("220", order.Status220Date),
+            ("290", order.Status290Date),
+            ("295", order.Status295Timestamp)
+        };
+
+        var currentIndex = history.FindIndex(item => string.Equals(item.Code, currentStatus, StringComparison.OrdinalIgnoreCase));
+        if (currentIndex <= 0)
+        {
+            return null;
+        }
+
+        for (var i = currentIndex - 1; i >= 0; i--)
+        {
+            var (code, timestamp) = history[i];
+            if (timestamp.HasValue || string.Equals(code, "210", StringComparison.OrdinalIgnoreCase))
+            {
+                return code;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 將維修單狀態回復至指定代碼並清除較晚的狀態紀錄。
+    /// </summary>
+    private static void ApplyOrderStatusReversion(Order order, string targetStatus, string operatorLabel, DateTime timestamp)
+    {
+        order.Status = targetStatus;
+        order.ModificationTimestamp = timestamp;
+        order.ModifiedBy = operatorLabel;
+        order.CurrentStatusDate = timestamp;
+        order.CurrentStatusUser = operatorLabel;
+
+        switch (targetStatus)
+        {
+            case "210":
+                order.Status210Date ??= timestamp;
+                order.Status210User ??= operatorLabel;
+                break;
+            case "220":
+                order.Status220Date ??= timestamp;
+                order.Status220User ??= operatorLabel;
+                break;
+            case "290":
+                order.Status290Date ??= timestamp;
+                order.Status290User ??= operatorLabel;
+                break;
+        }
+
+        var statusOrder = new List<string> { "210", "220", "290", "295" };
+        var targetIndex = statusOrder.FindIndex(code => string.Equals(code, targetStatus, StringComparison.OrdinalIgnoreCase));
+
+        for (var i = targetIndex + 1; i < statusOrder.Count; i++)
+        {
+            ClearOrderStatusRecord(order, statusOrder[i]);
+        }
+    }
+
+    /// <summary>
+    /// 將指定狀態的時間與操作人清空，避免保留已回溯的紀錄。
+    /// </summary>
+    private static void ClearOrderStatusRecord(Order order, string statusCode)
+    {
+        switch (statusCode)
+        {
+            case "220":
+                order.Status220Date = null;
+                order.Status220User = null;
+                break;
+            case "290":
+                order.Status290Date = null;
+                order.Status290User = null;
+                break;
+            case "295":
+                order.Status295Timestamp = null;
+                order.Status295User = null;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 依狀態碼回傳對應的時間戳記，供回傳訊息使用。
+    /// </summary>
+    private static DateTime? GetOrderStatusTimestamp(Order order, string statusCode)
+    {
+        return statusCode switch
+        {
+            "210" => order.Status210Date,
+            "220" => order.Status220Date,
+            "290" => order.Status290Date,
+            "295" => order.Status295Timestamp,
+            _ => order.CurrentStatusDate
+        };
+    }
+
+    /// <summary>
     /// 嘗試將文字日期轉換為 DateTime，若格式不符則回傳 null。
     /// </summary>
     private static DateTime? ParseOptionalDate(string? value)
@@ -1056,9 +1168,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 由歷史狀態時間判斷上一個狀態碼。
+    /// 由估價單歷史狀態時間判斷上一個狀態碼。
     /// </summary>
-    private static string? ResolvePreviousStatus(Quatation quotation)
+    private static string? ResolvePreviousQuotationStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
         var history = new List<(string Code, DateTime? Timestamp)>
