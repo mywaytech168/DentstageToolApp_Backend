@@ -163,10 +163,12 @@ Content-Type: application/json
 | POST | `/api/maintenance-orders/detail` | 取得維修單詳細。 | JSON 對應 `MaintenanceOrderDetailRequest`。 |
 | POST | `/api/maintenance-orders/revert` | 維修單狀態回溯。 | JSON 對應 `MaintenanceOrderRevertRequest`。 |
 | POST | `/api/maintenance-orders/confirm` | 確認維修開始。 | JSON 對應 `MaintenanceOrderConfirmRequest`。 |
-| POST | `/api/maintenance-orders/edit` | 編輯維修單。 | JSON 對應 `UpdateMaintenanceOrderRequest`。 |
+| POST | `/api/maintenance-orders/edit` | 編輯維修單。 | JSON 對應 `UpdateMaintenanceOrderRequest`，欄位與估價單編輯共用。 |
 | POST | `/api/maintenance-orders/continue` | 續修維修單。 | JSON 對應 `MaintenanceOrderContinueRequest`。 |
 | POST | `/api/maintenance-orders/complete` | 維修完成。 | JSON 對應 `MaintenanceOrderCompleteRequest`。 |
 | POST | `/api/maintenance-orders/terminate` | 終止維修。 | JSON 對應 `MaintenanceOrderTerminateRequest`。 |
+
+> 維修單詳情回應沿用 `QuotationDetailResponse` 欄位，並額外提供維修單編號、金額資訊與狀態歷程。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailResponse.cs†L9-L42】
 
 **查詢欄位重點**
 - `fixType`、`status`、`startDate`、`endDate`：對應篩選條件。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderListQuery.cs†L11-L29】
@@ -174,6 +176,8 @@ Content-Type: application/json
 
 **單筆操作欄位**
 - `orderNo`：維修單編號，為詳細／回溯／確認／編輯／續修／完成／終止的必填欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailRequest.cs†L5-L15】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderRevertRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderConfirmRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderContinueRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderCompleteRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderTerminateRequest.cs†L10-L14】
+- 維修單回溯：狀態依序 295→290→220→210 逐步回退，最低回到 210。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L187-L244】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L952-L1038】
+- `quotationNo`：編輯維修單時可帶入以驗證估價單關聯，沿用估價單編輯欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L39】
 
 ---
 

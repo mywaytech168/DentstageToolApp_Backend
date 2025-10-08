@@ -1497,7 +1497,7 @@
                   orderNo: 'O25100001'
                 },
                 requiresAuth: true,
-                description: '誤按狀態時回復上一階段。'
+                description: '誤按狀態時回復上一階段（依序 295 → 290 → 220 → 210）。'
               },
               {
                 name: '確認維修開始',
@@ -1514,6 +1514,7 @@
                 method: 'POST',
                 path: '/maintenance-orders/edit',
                 template: {
+                  quotationNo: 'Q25100001',
                   orderNo: 'O25100001',
                   car: {
                     carUid: 'Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D',
