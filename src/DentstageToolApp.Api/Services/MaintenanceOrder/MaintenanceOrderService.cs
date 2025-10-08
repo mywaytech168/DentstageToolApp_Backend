@@ -134,7 +134,53 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無符合條件的維修單。");
         }
 
-        return MapToDetail(orderEntity);
+        // ---------- 同步估價單詳情 ----------
+        // 先嘗試取得估價單詳情，成功時可沿用估價單的完整巢狀結構，失敗時則回退至維修單原始欄位。
+        var quotationDetail = await TryGetQuotationDetailAsync(orderEntity, cancellationToken);
+
+        return MapToDetail(orderEntity, quotationDetail);
+    }
+
+    /// <summary>
+    /// 嘗試以維修單關聯的估價單編號取得估價詳情，若失敗則記錄警告並回傳 null。
+    /// </summary>
+    private async Task<QuotationDetailResponse?> TryGetQuotationDetailAsync(Order order, CancellationToken cancellationToken)
+    {
+        if (order is null)
+        {
+            return null;
+        }
+
+        var quotationNo = NormalizeOptionalText(order.Quatation?.QuotationNo);
+        if (quotationNo is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var request = new GetQuotationRequest { QuotationNo = quotationNo };
+            return await _quotationService.GetQuotationAsync(request, cancellationToken);
+        }
+        catch (QuotationManagementException ex)
+        {
+            // 若估價單已被移除或資料不完整，保留警告紀錄並沿用維修單既有資料。
+            _logger.LogWarning(
+                ex,
+                "維修單 {OrderNo} 取得估價單詳情失敗：{Message}",
+                order.OrderNo,
+                ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // 非預期錯誤同樣記錄，避免影響後續維修單資料輸出。
+            _logger.LogError(
+                ex,
+                "維修單 {OrderNo} 取得估價單詳情時發生未預期錯誤。",
+                order.OrderNo);
+        }
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -642,46 +688,334 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 將維修單實體轉為詳細資料回應。
+    /// 將維修單實體與估價詳情整併成統一輸出格式。
     /// </summary>
-    private static MaintenanceOrderDetailResponse MapToDetail(Order order)
+    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail)
     {
         var quotation = order.Quatation;
-        var storeName = quotation?.StoreNavigation?.StoreName;
-        var estimatorName = quotation?.TechnicianNavigation?.TechnicianName
-            ?? NormalizeOptionalText(quotation?.UserName)
-            ?? quotation?.CurrentStatusUser;
+        var storeInfo = BuildStoreInfo(order, quotationDetail?.Store);
+        var carInfo = BuildCarInfo(order, quotationDetail?.Car);
+        var customerInfo = BuildCustomerInfo(order, quotationDetail?.Customer);
+        var damages = CloneDamageSummaries(quotationDetail?.Damages);
+        var carBody = CloneCarBodyConfirmation(quotationDetail?.CarBodyConfirmation);
+        var maintenance = BuildMaintenanceDetail(order, quotationDetail?.Maintenance);
+        var amountInfo = BuildAmountInfo(order);
+        var statusHistory = BuildStatusHistory(order);
 
         return new MaintenanceOrderDetailResponse
         {
             OrderUid = order.OrderUid,
             OrderNo = order.OrderNo,
-            QuotationUid = quotation?.QuotationUid,
-            QuotationNo = quotation?.QuotationNo,
-            Status = order.Status,
-            FixType = order.FixType,
-            CreatedAt = order.CreationTimestamp,
-            UpdatedAt = order.ModificationTimestamp,
-            CreatorName = NormalizeOptionalText(order.UserName),
-            StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
-            EstimatorName = NormalizeOptionalText(estimatorName),
-            CustomerName = order.Name,
-            CustomerPhone = order.Phone,
-            CarPlate = order.CarNo,
-            CarBrand = order.Brand,
-            CarModel = order.Model,
-            CarColor = order.Color,
-            BookDate = order.BookDate,
-            WorkDate = order.WorkDate,
-            Remark = order.Remark,
+            QuotationUid = quotationDetail?.QuotationUid ?? quotation?.QuotationUid,
+            QuotationNo = quotationDetail?.QuotationNo ?? quotation?.QuotationNo,
+            Status = NormalizeOptionalText(order.Status) ?? quotationDetail?.Status,
+            FixType = NormalizeOptionalText(order.FixType)
+                ?? NormalizeOptionalText(quotation?.FixType)
+                ?? quotationDetail?.Maintenance?.FixTypeUid,
+            CreatedAt = order.CreationTimestamp ?? quotationDetail?.CreatedAt,
+            UpdatedAt = order.ModificationTimestamp ?? quotationDetail?.UpdatedAt ?? order.CreationTimestamp,
+            Store = storeInfo,
+            Car = carInfo,
+            Customer = customerInfo,
+            Damages = damages,
+            CarBodyConfirmation = carBody,
+            Maintenance = maintenance,
+            Amounts = amountInfo,
+            StatusHistory = statusHistory,
+            CurrentStatusUser = statusHistory.CurrentStatusUser
+        };
+    }
+
+    /// <summary>
+    /// 組裝店鋪資訊，優先使用維修單最新資料，若缺少則回退估價單內容。
+    /// </summary>
+    private static QuotationStoreInfo BuildStoreInfo(Order order, QuotationStoreInfo? quotationStore)
+    {
+        var quotation = order.Quatation;
+        var normalizedStoreName = NormalizeOptionalText(quotation?.StoreNavigation?.StoreName)
+            ?? NormalizeOptionalText(order.StoreUid)
+            ?? quotationStore?.StoreName;
+
+        var reservationDate = ParseOptionalDate(order.BookDate)
+            ?? quotation?.BookDate?.ToDateTime(TimeOnly.MinValue)
+            ?? quotationStore?.ReservationDate;
+
+        var repairDate = ParseOptionalDate(order.WorkDate)
+            ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
+            ?? quotationStore?.RepairDate;
+
+        return new QuotationStoreInfo
+        {
+            StoreUid = NormalizeOptionalText(order.StoreUid)
+                ?? NormalizeOptionalText(quotation?.StoreUid)
+                ?? quotationStore?.StoreUid,
+            UserUid = NormalizeOptionalText(order.UserUid)
+                ?? NormalizeOptionalText(quotation?.UserUid)
+                ?? quotationStore?.UserUid,
+            StoreName = normalizedStoreName,
+            EstimatorName = NormalizeOptionalText(quotation?.TechnicianNavigation?.TechnicianName)
+                ?? NormalizeOptionalText(quotation?.UserName)
+                ?? quotationStore?.EstimatorName,
+            CreatorName = NormalizeOptionalText(order.UserName)
+                ?? NormalizeOptionalText(quotation?.CreatedBy)
+                ?? quotationStore?.CreatorName,
+            TechnicianUid = NormalizeOptionalText(quotation?.TechnicianUid) ?? quotationStore?.TechnicianUid,
+            CreatedDate = order.CreationTimestamp
+                ?? quotation?.CreationTimestamp
+                ?? quotationStore?.CreatedDate,
+            ReservationDate = reservationDate,
+            Source = NormalizeOptionalText(order.Source)
+                ?? NormalizeOptionalText(quotation?.Source)
+                ?? quotationStore?.Source,
+            RepairDate = repairDate
+        };
+    }
+
+    /// <summary>
+    /// 整理車輛資訊，保留維修單上的即時資料並補上估價單識別碼。
+    /// </summary>
+    private static QuotationCarInfo BuildCarInfo(Order order, QuotationCarInfo? quotationCar)
+    {
+        var quotation = order.Quatation;
+
+        return new QuotationCarInfo
+        {
+            CarUid = NormalizeOptionalText(order.CarUid)
+                ?? NormalizeOptionalText(quotation?.CarUid)
+                ?? quotationCar?.CarUid,
+            LicensePlate = NormalizeOptionalText(order.CarNo)
+                ?? NormalizeOptionalText(quotation?.CarNo)
+                ?? quotationCar?.LicensePlate,
+            Brand = NormalizeOptionalText(order.Brand)
+                ?? NormalizeOptionalText(quotation?.Brand)
+                ?? quotationCar?.Brand,
+            Model = NormalizeOptionalText(order.Model)
+                ?? NormalizeOptionalText(quotation?.Model)
+                ?? quotationCar?.Model,
+            BrandUid = NormalizeOptionalText(quotation?.BrandUid) ?? quotationCar?.BrandUid,
+            ModelUid = NormalizeOptionalText(quotation?.ModelUid) ?? quotationCar?.ModelUid,
+            Color = NormalizeOptionalText(order.Color)
+                ?? NormalizeOptionalText(quotation?.Color)
+                ?? quotationCar?.Color,
+            Remark = NormalizeOptionalText(order.CarRemark)
+                ?? NormalizeOptionalText(quotation?.CarRemark)
+                ?? quotationCar?.Remark
+        };
+    }
+
+    /// <summary>
+    /// 整理顧客資訊，維修單若有更新則優先採用。
+    /// </summary>
+    private static QuotationCustomerInfo BuildCustomerInfo(Order order, QuotationCustomerInfo? quotationCustomer)
+    {
+        var quotation = order.Quatation;
+
+        return new QuotationCustomerInfo
+        {
+            CustomerUid = NormalizeOptionalText(order.CustomerUid)
+                ?? NormalizeOptionalText(quotation?.CustomerUid)
+                ?? quotationCustomer?.CustomerUid,
+            Name = NormalizeOptionalText(order.Name)
+                ?? NormalizeOptionalText(quotation?.Name)
+                ?? quotationCustomer?.Name,
+            Phone = NormalizeOptionalText(order.Phone)
+                ?? NormalizeOptionalText(quotation?.Phone)
+                ?? quotationCustomer?.Phone,
+            Gender = NormalizeOptionalText(order.Gender)
+                ?? NormalizeOptionalText(quotation?.Gender)
+                ?? quotationCustomer?.Gender,
+            CustomerType = NormalizeOptionalText(order.CustomerType)
+                ?? NormalizeOptionalText(quotation?.CustomerType)
+                ?? quotationCustomer?.CustomerType,
+            County = NormalizeOptionalText(order.County)
+                ?? NormalizeOptionalText(quotation?.County)
+                ?? quotationCustomer?.County,
+            Township = NormalizeOptionalText(order.Township)
+                ?? NormalizeOptionalText(quotation?.Township)
+                ?? quotationCustomer?.Township,
+            Reason = NormalizeOptionalText(order.Reason)
+                ?? NormalizeOptionalText(quotation?.Reason)
+                ?? quotationCustomer?.Reason,
+            Source = NormalizeOptionalText(order.Source)
+                ?? NormalizeOptionalText(quotation?.Source)
+                ?? quotationCustomer?.Source,
+            Remark = NormalizeOptionalText(order.ConnectRemark)
+                ?? NormalizeOptionalText(quotation?.ConnectRemark)
+                ?? quotationCustomer?.Remark
+        };
+    }
+
+    /// <summary>
+    /// 複製估價單的傷痕摘要，確保回傳資料可安全修改。
+    /// </summary>
+    private static List<QuotationDamageSummary> CloneDamageSummaries(List<QuotationDamageSummary>? damages)
+    {
+        if (damages is null || damages.Count == 0)
+        {
+            return new List<QuotationDamageSummary>();
+        }
+
+        var clones = new List<QuotationDamageSummary>(damages.Count);
+        foreach (var damage in damages)
+        {
+            clones.Add(new QuotationDamageSummary
+            {
+                Photos = damage.Photos,
+                Position = damage.Position,
+                DentStatus = damage.DentStatus,
+                Description = damage.Description,
+                EstimatedAmount = damage.EstimatedAmount
+            });
+        }
+
+        return clones;
+    }
+
+    /// <summary>
+    /// 複製車體確認單資料，避免直接回傳內部參考。
+    /// </summary>
+    private static QuotationCarBodyConfirmationResponse? CloneCarBodyConfirmation(QuotationCarBodyConfirmationResponse? carBody)
+    {
+        if (carBody is null)
+        {
+            return null;
+        }
+
+        var markers = carBody.DamageMarkers?.Select(marker => new QuotationCarBodyDamageMarker
+        {
+            X = marker.X,
+            Y = marker.Y,
+            HasDent = marker.HasDent,
+            HasScratch = marker.HasScratch,
+            HasPaintPeel = marker.HasPaintPeel,
+            Remark = marker.Remark
+        }).ToList() ?? new List<QuotationCarBodyDamageMarker>();
+
+        return new QuotationCarBodyConfirmationResponse
+        {
+            DamageMarkers = markers
+        };
+    }
+
+    /// <summary>
+    /// 建立維修設定資訊，將維修單最新備註與折扣同步回傳。
+    /// </summary>
+    private static QuotationMaintenanceDetail BuildMaintenanceDetail(Order order, QuotationMaintenanceDetail? quotationMaintenance)
+    {
+        var maintenance = quotationMaintenance is null
+            ? new QuotationMaintenanceDetail()
+            : new QuotationMaintenanceDetail
+            {
+                FixTypeUid = quotationMaintenance.FixTypeUid,
+                ReserveCar = quotationMaintenance.ReserveCar,
+                ApplyCoating = quotationMaintenance.ApplyCoating,
+                ApplyWrapping = quotationMaintenance.ApplyWrapping,
+                HasRepainted = quotationMaintenance.HasRepainted,
+                NeedToolEvaluation = quotationMaintenance.NeedToolEvaluation,
+                OtherFee = quotationMaintenance.OtherFee,
+                EstimatedRepairDays = quotationMaintenance.EstimatedRepairDays,
+                EstimatedRepairHours = quotationMaintenance.EstimatedRepairHours,
+                EstimatedRestorationPercentage = quotationMaintenance.EstimatedRestorationPercentage,
+                SuggestedPaintReason = quotationMaintenance.SuggestedPaintReason,
+                UnrepairableReason = quotationMaintenance.UnrepairableReason,
+                RoundingDiscount = quotationMaintenance.RoundingDiscount,
+                PercentageDiscount = quotationMaintenance.PercentageDiscount,
+                DiscountReason = quotationMaintenance.DiscountReason,
+                Remark = quotationMaintenance.Remark
+            };
+
+        var reserveCar = ParseBooleanFlag(order.CarReserved);
+        if (reserveCar.HasValue)
+        {
+            maintenance.ReserveCar = reserveCar;
+        }
+
+        var remark = NormalizeOptionalText(order.Remark);
+        if (remark is not null)
+        {
+            maintenance.Remark = remark;
+        }
+
+        if (order.Discount.HasValue)
+        {
+            maintenance.RoundingDiscount = order.Discount;
+        }
+
+        if (order.DiscountPercent.HasValue)
+        {
+            maintenance.PercentageDiscount = order.DiscountPercent;
+        }
+
+        var discountReason = NormalizeOptionalText(order.DiscountReason);
+        if (discountReason is not null)
+        {
+            maintenance.DiscountReason = discountReason;
+        }
+
+        return maintenance;
+    }
+
+    /// <summary>
+    /// 建立維修單金額資訊，保留估價、折扣與應付欄位。
+    /// </summary>
+    private static MaintenanceOrderAmountInfo BuildAmountInfo(Order order)
+    {
+        return new MaintenanceOrderAmountInfo
+        {
             Valuation = order.Valuation,
             Discount = order.Discount,
-            Amount = order.Amount,
+            DiscountPercent = order.DiscountPercent,
+            Amount = order.Amount
+        };
+    }
+
+    /// <summary>
+    /// 建立維修狀態歷程資訊，統一整理操作人與時間。
+    /// </summary>
+    private static MaintenanceOrderStatusHistory BuildStatusHistory(Order order)
+    {
+        return new MaintenanceOrderStatusHistory
+        {
             Status210Date = order.Status210Date,
+            Status210User = NormalizeOptionalText(order.Status210User),
             Status220Date = order.Status220Date,
+            Status220User = NormalizeOptionalText(order.Status220User),
             Status290Date = order.Status290Date,
+            Status290User = NormalizeOptionalText(order.Status290User),
             Status295Date = order.Status295Timestamp,
-            CurrentStatusUser = order.CurrentStatusUser
+            Status295User = NormalizeOptionalText(order.Status295User),
+            CurrentStatusUser = NormalizeOptionalText(order.CurrentStatusUser)
+        };
+    }
+
+    /// <summary>
+    /// 嘗試將文字日期轉換為 DateTime，若格式不符則回傳 null。
+    /// </summary>
+    private static DateTime? ParseOptionalDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTime.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
+    /// 將舊系統常見的文字旗標轉換為布林值。
+    /// </summary>
+    private static bool? ParseBooleanFlag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "y" or "yes" or "true" or "1" or "是" or "有" => true,
+            "n" or "no" or "false" or "0" or "否" or "無" => false,
+            _ => null
         };
     }
 
