@@ -938,7 +938,14 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             maintenance.ReserveCar = reserveCar;
         }
 
-        var remark = NormalizeOptionalText(order.Remark);
+        // 優先取出維修單儲存的純文字備註，確保回傳資料直接對應 plainRemark。
+        var remark = NormalizeOptionalText(order.Content);
+        if (remark is null)
+        {
+            // 若缺少 Content 資料則回退解析原始 Remark，確保仍可取得純文字內容。
+            remark = NormalizeOptionalText(ExtractPlainRemark(order.Remark));
+        }
+
         if (remark is not null)
         {
             maintenance.Remark = remark;
