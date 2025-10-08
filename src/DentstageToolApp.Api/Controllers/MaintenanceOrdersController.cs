@@ -161,17 +161,19 @@ public class MaintenanceOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 編輯維修單資料，沿用估價單編輯的結構提交更新。
+    /// 編輯維修單資料，沿用估價單編輯的完整結構提交更新。
     /// </summary>
     [HttpPost("edit")]
     [SwaggerMockRequestExample(
         """
         {
-          "orderNo": "O25100001",
           "quotationNo": "Q25100001",
+          "orderNo": "O25100001",
           "car": {
             "carUid": "Ca_12345678-ABCD-4ABC-8123-000000000001",
             "licensePlate": "ABC-1234",
+            "brandUid": "Br_01234567-89AB-4CDE-8123-000000000001",
+            "modelUid": "Mo_01234567-89AB-4CDE-8123-000000000001",
             "color": "珍珠白"
           },
           "customer": {
@@ -179,21 +181,57 @@ public class MaintenanceOrdersController : ControllerBase
             "phone": "0912345678",
             "email": "customer@example.com"
           },
+          "remark": "同步更新維修備註",
           "categoryRemarks": {
             "dent": "凹痕區塊追加備註",
-            "paint": "烤漆需等待 2 日"
+            "paint": "烤漆需等待 2 日",
+            "other": ""
           },
           "damages": [
             {
               "damageUid": "D_12345678-ABCD-4ABC-8123-000000000001",
+              "photos": [
+                {
+                  "photoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
+                  "description": "主要傷痕"
+                }
+              ],
+              "position": "左前葉子板",
+              "dentStatus": "凹痕",
               "remark": "調整估工金額",
               "estimatedAmount": 3200
             }
           ],
+          "carBodyConfirmation": {
+            "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
+            "damageMarkers": [
+              {
+                "x": 0.42,
+                "y": 0.63,
+                "hasDent": true,
+                "hasScratch": false,
+                "hasPaintPeel": false,
+                "remark": "主要凹痕"
+              }
+            ]
+          },
           "maintenance": {
             "fixTypeUid": "F_12345678-ABCD-4ABC-8123-000000000001",
             "reserveCar": true,
-            "estimatedRepairDays": 2
+            "applyCoating": false,
+            "applyWrapping": false,
+            "hasRepainted": false,
+            "needToolEvaluation": true,
+            "otherFee": 800,
+            "roundingDiscount": 200,
+            "percentageDiscount": 10,
+            "discountReason": "回饋老客戶",
+            "estimatedRepairDays": 2,
+            "estimatedRepairHours": 6,
+            "estimatedRestorationPercentage": 90,
+            "suggestedPaintReason": null,
+            "unrepairableReason": null,
+            "remark": "維修單更新後須重派技師"
           }
         }
         """)]
@@ -226,7 +264,7 @@ public class MaintenanceOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 續修維修單，複製估價內容建立新的維修工單。
+    /// 續修維修單，複製估價單與相關圖片並建立新的維修工單。
     /// </summary>
     [HttpPost("continue")]
     [ProducesResponseType(typeof(MaintenanceOrderContinuationResponse), StatusCodes.Status200OK)]
