@@ -1518,10 +1518,14 @@
                   orderNo: 'O25100001',
                   car: {
                     carUid: 'Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D',
+                    licensePlate: 'ABC-1234',
+                    brandUid: 'Br_5F3D2A77-3F6E-4F9C-9B5A-001122334455',
+                    modelUid: 'Mo_5F3D2A77-3F6E-4F9C-9B5A-001122334455',
                     color: '珍珠白'
                   },
                   customer: {
                     customerUid: 'Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A',
+                    phone: '0912345678',
                     email: 'customer@example.com'
                   },
                   remark: '同步更新維修備註',
@@ -1533,22 +1537,52 @@
                   damages: [
                     {
                       damageUid: 'D_E4D5F648-55B3-43D8-AB25-82446E6FD5A2',
+                      photos: [
+                        {
+                          photoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
+                          description: '主要傷痕'
+                        }
+                      ],
+                      position: '左前葉子板',
+                      dentStatus: '凹痕',
                       estimatedAmount: 3200,
                       remark: '更新估工金額'
                     }
                   ],
+                  carBodyConfirmation: {
+                    signaturePhotoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
+                    damageMarkers: [
+                      {
+                        x: 0.42,
+                        y: 0.63,
+                        hasDent: true,
+                        hasScratch: false,
+                        hasPaintPeel: false,
+                        remark: '主要凹痕'
+                      }
+                    ]
+                  },
                   maintenance: {
                     fixTypeUid: 'F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF',
                     reserveCar: true,
+                    applyCoating: false,
+                    applyWrapping: false,
+                    hasRepainted: false,
+                    needToolEvaluation: true,
+                    otherFee: 800,
                     estimatedRepairDays: 2,
                     estimatedRepairHours: 10,
-                    discount: 200,
-                    discountPercent: 0,
+                    estimatedRestorationPercentage: 90,
+                    roundingDiscount: 200,
+                    percentageDiscount: 10,
+                    discountReason: '回饋老客戶',
+                    suggestedPaintReason: null,
+                    unrepairableReason: null,
                     remark: '維修單更新後須重派技師'
                   }
                 },
                 requiresAuth: true,
-                description: '沿用估價單編輯格式同步車輛、客戶、傷痕與維修設定。'
+                description: '沿用估價單編輯完整結構同步車輛、客戶、傷痕、車體確認與維修設定。'
               },
               {
                 name: '續修維修單',
@@ -1558,7 +1592,7 @@
                   orderNo: 'O25100001'
                 },
                 requiresAuth: true,
-                description: '複製估價內容建立新的維修單並取消原單，相關圖片會重新綁定到新工單。'
+                description: '複製估價單與相關圖片建立新的維修單，並將原維修單標記為取消維修。'
               },
               {
                 name: '維修完成',

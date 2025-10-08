@@ -1,17 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
 using DentstageToolApp.Api.MaintenanceOrders;
+using DentstageToolApp.Api.Options;
 using DentstageToolApp.Api.Quotations;
 using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace DentstageToolApp.Api.Services.MaintenanceOrder;
 
@@ -26,6 +29,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<MaintenanceOrderService> _logger;
     private readonly IQuotationService _quotationService;
+    private readonly PhotoStorageOptions _photoStorageOptions;
 
     /// <summary>
     /// 建構子，注入資料庫內容物件與記錄器。
@@ -33,11 +37,13 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     public MaintenanceOrderService(
         DentstageToolAppContext dbContext,
         ILogger<MaintenanceOrderService> logger,
-        IQuotationService quotationService)
+        IQuotationService quotationService,
+        IOptions<PhotoStorageOptions> photoStorageOptions)
     {
         _dbContext = dbContext;
         _logger = logger;
         _quotationService = quotationService;
+        _photoStorageOptions = photoStorageOptions?.Value ?? new PhotoStorageOptions();
     }
 
     // ---------- API 呼叫區 ----------
@@ -455,11 +461,22 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         var quotation = sourceOrder.Quatation;
+        var quotationSerial = await GenerateNextQuotationSerialAsync(now, cancellationToken);
+        var quotationUidNew = BuildQuotationUid();
+        var quotationNoNew = BuildQuotationNo(quotationSerial, now);
+        var newQuotation = CloneQuotationForContinuation(
+            quotation,
+            quotationUidNew,
+            quotationNoNew,
+            quotationSerial,
+            operatorLabel,
+            now);
+
         var orderSerial = await GenerateNextOrderSerialAsync(now, cancellationToken);
         var orderUid = BuildOrderUid();
         var orderNoNew = BuildOrderNo(orderSerial, now);
-        var plainRemark = ExtractPlainRemark(quotation.Remark);
-        var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+        var amount = CalculateOrderAmount(newQuotation.Valuation, newQuotation.Discount);
+        var initialPlainRemark = ExtractPlainRemark(newQuotation.Remark);
 
         // ---------- 原維修單狀態更新 ----------
         sourceOrder.Status = "295";
@@ -469,7 +486,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         sourceOrder.CurrentStatusUser = operatorLabel;
         sourceOrder.ModificationTimestamp = now;
         sourceOrder.ModifiedBy = operatorLabel;
-        sourceOrder.StopReason = "續修轉單";
+        sourceOrder.StopReason = "續修取消維修";
 
         // ---------- 建立新的維修單實體 ----------
         var newOrder = new Order
@@ -481,88 +498,89 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CreatedBy = operatorLabel,
             ModificationTimestamp = now,
             ModifiedBy = operatorLabel,
-            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.TechnicianUid ?? operatorLabel,
-            UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
-            StoreUid = quotation.StoreUid ?? sourceOrder.StoreUid,
+            UserUid = NormalizeOptionalText(newQuotation.UserUid) ?? newQuotation.TechnicianUid ?? operatorLabel,
+            UserName = NormalizeOptionalText(newQuotation.UserName) ?? operatorLabel,
+            StoreUid = newQuotation.StoreUid ?? sourceOrder.StoreUid,
             Date = DateOnly.FromDateTime(now),
             Status = "210",
             Status210Date = now,
             Status210User = operatorLabel,
             CurrentStatusDate = now,
             CurrentStatusUser = operatorLabel,
-            QuatationUid = quotation.QuotationUid,
-            CarUid = quotation.CarUid,
-            CarNoInputGlobal = quotation.CarNoInputGlobal,
-            CarNoInput = quotation.CarNoInput,
-            CarNo = quotation.CarNo,
-            Brand = quotation.Brand,
-            Model = quotation.Model,
-            Color = quotation.Color,
-            CarRemark = quotation.CarRemark,
-            BrandModel = quotation.BrandModel,
-            CustomerUid = quotation.CustomerUid,
-            CustomerType = quotation.CustomerType,
-            PhoneInputGlobal = quotation.PhoneInputGlobal,
-            PhoneInput = quotation.PhoneInput,
-            Phone = quotation.Phone,
-            Name = quotation.Name,
-            Gender = quotation.Gender,
-            Connect = quotation.Connect,
-            County = quotation.County,
-            Township = quotation.Township,
-            Source = quotation.Source,
-            Reason = quotation.Reason,
-            Email = quotation.Email,
-            ConnectRemark = quotation.ConnectRemark,
-            BookDate = quotation.BookDate?.ToString("yyyy-MM-dd"),
-            BookMethod = quotation.BookMethod,
-            WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd"),
-            FixType = quotation.FixType,
-            CarReserved = quotation.CarReserved,
-            Content = plainRemark,
-            Remark = quotation.Remark,
-            Valuation = quotation.Valuation,
-            DiscountPercent = quotation.DiscountPercent,
-            Discount = quotation.Discount,
-            DiscountReason = quotation.DiscountReason,
+            QuatationUid = newQuotation.QuotationUid,
+            CarUid = newQuotation.CarUid,
+            CarNoInputGlobal = newQuotation.CarNoInputGlobal,
+            CarNoInput = newQuotation.CarNoInput,
+            CarNo = newQuotation.CarNo,
+            Brand = newQuotation.Brand,
+            Model = newQuotation.Model,
+            Color = newQuotation.Color,
+            CarRemark = newQuotation.CarRemark,
+            BrandModel = newQuotation.BrandModel,
+            CustomerUid = newQuotation.CustomerUid,
+            CustomerType = newQuotation.CustomerType,
+            PhoneInputGlobal = newQuotation.PhoneInputGlobal,
+            PhoneInput = newQuotation.PhoneInput,
+            Phone = newQuotation.Phone,
+            Name = newQuotation.Name,
+            Gender = newQuotation.Gender,
+            Connect = newQuotation.Connect,
+            County = newQuotation.County,
+            Township = newQuotation.Township,
+            Source = newQuotation.Source,
+            Reason = newQuotation.Reason,
+            Email = newQuotation.Email,
+            ConnectRemark = newQuotation.ConnectRemark,
+            BookDate = newQuotation.BookDate?.ToString("yyyy-MM-dd"),
+            BookMethod = newQuotation.BookMethod,
+            WorkDate = newQuotation.FixDate?.ToString("yyyy-MM-dd"),
+            FixType = newQuotation.FixType,
+            CarReserved = newQuotation.CarReserved,
+            Content = initialPlainRemark,
+            Remark = newQuotation.Remark,
+            Valuation = newQuotation.Valuation,
+            DiscountPercent = newQuotation.DiscountPercent,
+            Discount = newQuotation.Discount,
+            DiscountReason = newQuotation.DiscountReason,
             Amount = amount,
-            FlagRegularCustomer = quotation.FlagRegularCustomer,
+            FlagRegularCustomer = newQuotation.FlagRegularCustomer,
             FlagExternalCooperation = sourceOrder.FlagExternalCooperation
         };
 
+        await _dbContext.Quatations.AddAsync(newQuotation, cancellationToken);
         await _dbContext.Orders.AddAsync(newOrder, cancellationToken);
 
-        // ---------- 圖片重新綁定 ----------
-        var photos = await _dbContext.PhotoData
-            .Where(photo => photo.QuotationUid == quotation.QuotationUid)
-            .ToListAsync(cancellationToken);
+        // ---------- 圖片複製並重新綁定 ----------
+        var photoUidMap = await DuplicatePhotosForContinuationAsync(
+            quotation?.QuotationUid,
+            newQuotation.QuotationUid,
+            sourceOrder.OrderUid,
+            newOrder.OrderUid,
+            cancellationToken);
 
-        foreach (var photo in photos)
-        {
-            if (string.IsNullOrWhiteSpace(photo.RelatedUid)
-                || string.Equals(photo.RelatedUid, sourceOrder.OrderUid, StringComparison.OrdinalIgnoreCase))
-            {
-                photo.RelatedUid = orderUid;
-            }
-        }
+        var updatedRemark = ReplacePhotoUids(newQuotation.Remark, photoUidMap);
+        newQuotation.Remark = updatedRemark;
+        newOrder.Remark = updatedRemark;
+        newOrder.Content = ExtractPlainRemark(updatedRemark);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder} 並取消原單。",
+            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder} 並複製估價單 {NewQuotation} 後取消原單。",
             operatorLabel,
             sourceOrder.OrderNo,
-            newOrder.OrderNo);
+            newOrder.OrderNo,
+            newQuotation.QuotationNo);
 
         return new MaintenanceOrderContinuationResponse
         {
             OrderUid = newOrder.OrderUid,
             OrderNo = newOrder.OrderNo ?? string.Empty,
-            QuotationUid = quotation.QuotationUid,
-            QuotationNo = quotation.QuotationNo,
+            QuotationUid = newQuotation.QuotationUid,
+            QuotationNo = newQuotation.QuotationNo,
             CreatedAt = newOrder.CreationTimestamp ?? now,
             Status = newOrder.Status ?? "210",
-            Message = "已建立新的續修維修單並取消原維修單。"
+            Message = "已建立新的續修維修單並複製估價與圖片資料。"
         };
     }
 
@@ -1278,6 +1296,362 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         var amount = valuation.Value - (discount ?? 0m);
         return amount < 0 ? 0m : amount;
+    }
+
+    /// <summary>
+    /// 建立續修流程使用的估價單複本，並重設建立者與狀態紀錄。
+    /// </summary>
+    private Quatation CloneQuotationForContinuation(
+        Quatation source,
+        string quotationUid,
+        string quotationNo,
+        int serial,
+        string operatorLabel,
+        DateTime timestamp)
+    {
+        var clone = new Quatation
+        {
+            QuotationUid = quotationUid,
+            QuotationNo = quotationNo,
+            SerialNum = serial,
+            CreationTimestamp = timestamp,
+            CreatedBy = operatorLabel,
+            ModificationTimestamp = timestamp,
+            ModifiedBy = operatorLabel,
+            StoreUid = source.StoreUid,
+            UserUid = source.UserUid,
+            UserName = source.UserName,
+            TechnicianUid = source.TechnicianUid,
+            Date = DateOnly.FromDateTime(timestamp),
+            Status = source.Status,
+            FixType = source.FixType,
+            FixTypeUid = source.FixTypeUid,
+            CarUid = source.CarUid,
+            CarNoInputGlobal = source.CarNoInputGlobal,
+            CarNoInput = source.CarNoInput,
+            CarNo = source.CarNo,
+            Brand = source.Brand,
+            Model = source.Model,
+            BrandUid = source.BrandUid,
+            ModelUid = source.ModelUid,
+            Color = source.Color,
+            CarRemark = source.CarRemark,
+            BrandModel = source.BrandModel,
+            CustomerUid = source.CustomerUid,
+            CustomerType = source.CustomerType,
+            PhoneInputGlobal = source.PhoneInputGlobal,
+            PhoneInput = source.PhoneInput,
+            Phone = source.Phone,
+            Name = source.Name,
+            Gender = source.Gender,
+            Connect = source.Connect,
+            County = source.County,
+            Township = source.Township,
+            Source = source.Source,
+            Email = source.Email,
+            Reason = source.Reason,
+            ConnectRemark = source.ConnectRemark,
+            Valuation = source.Valuation,
+            DiscountPercent = source.DiscountPercent,
+            Discount = source.Discount,
+            DiscountReason = source.DiscountReason,
+            BookDate = source.BookDate,
+            BookMethod = source.BookMethod,
+            CarReserved = source.CarReserved,
+            FixDate = source.FixDate,
+            ToolTest = source.ToolTest,
+            Coat = source.Coat,
+            Envelope = source.Envelope,
+            Paint = source.Paint,
+            Remark = source.Remark,
+            Status110Timestamp = source.Status110Timestamp,
+            Status110User = source.Status110User,
+            Status180Timestamp = source.Status180Timestamp,
+            Status180User = source.Status180User,
+            Status190Timestamp = source.Status190Timestamp,
+            Status190User = source.Status190User,
+            Status191Timestamp = source.Status191Timestamp,
+            Status191User = source.Status191User,
+            Status199Timestamp = source.Status199Timestamp,
+            Status199User = source.Status199User,
+            CurrentStatusDate = timestamp,
+            CurrentStatusUser = operatorLabel,
+            FixExpect = source.FixExpect,
+            Reject = source.Reject,
+            RejectReason = source.RejectReason,
+            PanelBeat = source.PanelBeat,
+            PanelBeatReason = source.PanelBeatReason,
+            FixTimeHour = source.FixTimeHour,
+            FixTimeMin = source.FixTimeMin,
+            FixExpectDay = source.FixExpectDay,
+            FixExpectHour = source.FixExpectHour,
+            FlagRegularCustomer = source.FlagRegularCustomer
+        };
+
+        var statusCode = NormalizeOptionalText(source.Status);
+        if (statusCode is not null)
+        {
+            switch (statusCode)
+            {
+                case "110":
+                    clone.Status110Timestamp = timestamp;
+                    clone.Status110User = operatorLabel;
+                    break;
+                case "180":
+                    clone.Status180Timestamp = timestamp;
+                    clone.Status180User = operatorLabel;
+                    break;
+                case "190":
+                    clone.Status190Timestamp = timestamp;
+                    clone.Status190User = operatorLabel;
+                    break;
+                case "191":
+                    clone.Status191Timestamp = timestamp;
+                    clone.Status191User = operatorLabel;
+                    break;
+                case "195":
+                    clone.Status199Timestamp = timestamp;
+                    clone.Status199User = operatorLabel;
+                    break;
+            }
+        }
+
+        return clone;
+    }
+
+    /// <summary>
+    /// 嘗試複製舊照片並回傳舊新 PhotoUID 的對照表。
+    /// </summary>
+    private async Task<Dictionary<string, string>> DuplicatePhotosForContinuationAsync(
+        string? sourceQuotationUid,
+        string targetQuotationUid,
+        string? sourceOrderUid,
+        string targetOrderUid,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedSourceQuotationUid = NormalizeOptionalText(sourceQuotationUid);
+        if (normalizedSourceQuotationUid is null)
+        {
+            return result;
+        }
+
+        var photos = await _dbContext.PhotoData
+            .Where(photo => photo.QuotationUid == normalizedSourceQuotationUid)
+            .ToListAsync(cancellationToken);
+
+        if (photos.Count == 0)
+        {
+            return result;
+        }
+
+        var storageRoot = EnsurePhotoStorageRoot();
+        var normalizedSourceOrderUid = NormalizeOptionalText(sourceOrderUid);
+
+        foreach (var photo in photos)
+        {
+            var oldPhotoUid = NormalizeOptionalText(photo.PhotoUid);
+            if (oldPhotoUid is null)
+            {
+                continue;
+            }
+
+            var newPhotoUid = BuildPhotoUid();
+            if (!TryClonePhotoFile(storageRoot, oldPhotoUid, newPhotoUid))
+            {
+                _logger.LogWarning(
+                    "續修維修單複製照片 {PhotoUid} 失敗，將沿用舊圖片供參考。",
+                    oldPhotoUid);
+                continue;
+            }
+
+            var clone = new PhotoDatum
+            {
+                PhotoUid = newPhotoUid,
+                QuotationUid = targetQuotationUid,
+                RelatedUid = ShouldBindPhotoToNewOrder(photo.RelatedUid, normalizedSourceOrderUid)
+                    ? targetOrderUid
+                    : photo.RelatedUid,
+                Posion = photo.Posion,
+                Comment = photo.Comment,
+                PhotoShape = photo.PhotoShape,
+                PhotoShapeOther = photo.PhotoShapeOther,
+                PhotoShapeShow = photo.PhotoShapeShow,
+                Cost = photo.Cost,
+                FlagFinish = photo.FlagFinish,
+                FinishCost = photo.FinishCost
+            };
+
+            await _dbContext.PhotoData.AddAsync(clone, cancellationToken);
+            result[oldPhotoUid] = newPhotoUid;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 判斷照片是否需重新綁定到新維修單。
+    /// </summary>
+    private static bool ShouldBindPhotoToNewOrder(string? relatedUid, string? sourceOrderUid)
+    {
+        var normalizedRelated = NormalizeOptionalText(relatedUid);
+        var normalizedSource = NormalizeOptionalText(sourceOrderUid);
+        return normalizedRelated is not null
+            && normalizedSource is not null
+            && string.Equals(normalizedRelated, normalizedSource, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 將 remark 內的舊 PhotoUID 取代為新的識別碼。
+    /// </summary>
+    private static string? ReplacePhotoUids(string? remark, IReadOnlyDictionary<string, string> photoUidMap)
+    {
+        if (string.IsNullOrWhiteSpace(remark) || photoUidMap.Count == 0)
+        {
+            return remark;
+        }
+
+        var updated = remark;
+        foreach (var pair in photoUidMap)
+        {
+            if (string.IsNullOrWhiteSpace(pair.Key) || string.IsNullOrWhiteSpace(pair.Value))
+            {
+                continue;
+            }
+
+            updated = updated.Replace(pair.Key, pair.Value, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return updated;
+    }
+
+    /// <summary>
+    /// 產生新的照片識別碼，維持 Ph_ 前綴格式。
+    /// </summary>
+    private static string BuildPhotoUid()
+    {
+        return $"Ph_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+    }
+
+    /// <summary>
+    /// 建立續修估價單唯一識別碼，維持 Q_ 前綴格式。
+    /// </summary>
+    private static string BuildQuotationUid()
+    {
+        return $"Q_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+    }
+
+    /// <summary>
+    /// 依建立時間產生新的估價單編號。
+    /// </summary>
+    private static string BuildQuotationNo(int serial, DateTime timestamp)
+    {
+        return $"Q{timestamp:yyMM}{serial:0000}";
+    }
+
+    /// <summary>
+    /// 取得實際儲存照片的根目錄，若不存在則自動建立。
+    /// </summary>
+    private string EnsurePhotoStorageRoot()
+    {
+        var root = _photoStorageOptions.RootPath;
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            root = Path.Combine(AppContext.BaseDirectory, "App_Data", "photos");
+        }
+
+        if (!Directory.Exists(root))
+        {
+            Directory.CreateDirectory(root);
+        }
+
+        return root;
+    }
+
+    /// <summary>
+    /// 透過 PhotoUID 推算實際的檔案路徑。
+    /// </summary>
+    private string ResolvePhotoPhysicalPath(string storageRoot, string photoUid)
+    {
+        var matched = Directory.EnumerateFiles(storageRoot, photoUid + ".*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+
+        return !string.IsNullOrWhiteSpace(matched)
+            ? matched
+            : Path.Combine(storageRoot, photoUid);
+    }
+
+    /// <summary>
+    /// 嘗試複製舊照片的實體檔案為新的 PhotoUID。
+    /// </summary>
+    private bool TryClonePhotoFile(string storageRoot, string sourcePhotoUid, string targetPhotoUid)
+    {
+        try
+        {
+            var sourcePath = ResolvePhotoPhysicalPath(storageRoot, sourcePhotoUid);
+            if (!File.Exists(sourcePath))
+            {
+                return false;
+            }
+
+            var extension = Path.GetExtension(sourcePath);
+            if (string.IsNullOrWhiteSpace(extension))
+            {
+                extension = ".bin";
+            }
+
+            var destinationPath = Path.Combine(storageRoot, targetPhotoUid + extension);
+            File.Copy(sourcePath, destinationPath, overwrite: false);
+            return true;
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "續修維修單複製照片 {PhotoUid} 時發生 IO 例外。", sourcePhotoUid);
+            return false;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "續修維修單複製照片 {PhotoUid} 時遭拒存取。", sourcePhotoUid);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// 續修流程取得下一個估價單序號，沿用每月遞增規則。
+    /// </summary>
+    private async Task<int> GenerateNextQuotationSerialAsync(DateTime timestamp, CancellationToken cancellationToken)
+    {
+        var prefix = $"Q{timestamp:yyMM}";
+
+        var prefixCandidates = await _dbContext.Quatations
+            .AsNoTracking()
+            .Where(quotation => !string.IsNullOrEmpty(quotation.QuotationNo) && EF.Functions.Like(quotation.QuotationNo!, prefix + "%"))
+            .OrderByDescending(quotation => quotation.SerialNum)
+            .ThenByDescending(quotation => quotation.QuotationNo)
+            .Select(quotation => new SerialCandidate(quotation.SerialNum, quotation.QuotationNo))
+            .Take(SerialCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+
+        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
+
+        if (maxSerial == 0)
+        {
+            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+
+            var monthCandidates = await _dbContext.Quatations
+                .AsNoTracking()
+                .Where(quotation => quotation.CreationTimestamp >= monthStart && quotation.CreationTimestamp < monthEnd)
+                .OrderByDescending(quotation => quotation.SerialNum)
+                .ThenByDescending(quotation => quotation.QuotationNo)
+                .Select(quotation => new SerialCandidate(quotation.SerialNum, quotation.QuotationNo))
+                .Take(SerialCandidateFetchCount)
+                .ToListAsync(cancellationToken);
+
+            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
+        }
+
+        return maxSerial + 1;
     }
 
     /// <summary>
