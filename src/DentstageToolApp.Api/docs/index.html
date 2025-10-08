@@ -43,21 +43,22 @@
     </style>
 </head>
 <body>
+    <!-- 說明：此頁面提供開發與維運人員定位專案文件的入口與檢核重點 -->
     <h1>文檔目錄</h1>
     <blockquote>
         <p>本文件統整專案現有文件資源，協助團隊快速尋找開發、資料庫與 API 相關資訊，並提供後續維護指引。</p>
     </blockquote>
 
-    <h2>1. 專案導覽與核心說明</h2>
+    <h2>1. 檔案結構與修改重點</h2>
     <ul>
-        <li><a href="../README.md">README.md</a>：介紹專案定位、資料夾結構、開發環境建議與後續作業提醒。</li>
-        <li><code>global.json</code>：鎖定 .NET SDK 版本，確保跨環境一致性。</li>
-        <li><code>DentstageToolApp_Backend.sln</code>：Visual Studio / Rider 可直接載入的方案檔，整合所有後端專案。</li>
+        <li><a href="../../../README.md">README.md</a>：介紹專案定位、資料夾結構、開發環境建議與後續作業提醒。</li>
+        <li><code>../../../global.json</code>：鎖定 .NET SDK 版本，確保跨環境一致性。</li>
+        <li><code>../../../DentstageToolApp_Backend.sln</code>：Visual Studio / Rider 可直接載入的方案檔，整合所有後端專案。</li>
     </ul>
 
     <h2>2. API 文件與測試資源</h2>
     <ul>
-        <li><code>docs/swagger/dentstage-tool-app-api-v1.json</code>：目前匯出的 Swagger 規格，可離線匯入 Swagger UI 或 Postman。</li>
+        <li><code>../../../docs/swagger/dentstage-tool-app-api-v1.json</code>：目前匯出的 Swagger 規格，可離線匯入 Swagger UI 或 Postman。</li>
         <li><code>src/DentstageToolApp.Api/docs/api/index.html</code>：API 操作說明首頁，整理各端點用途與測試流程。</li>
         <li><code>src/DentstageToolApp.Api/docs/api-flow-tester.html</code>：互動式 API 流程測試頁面，支援逐步驗證主要流程。</li>
         <li><code>src/DentstageToolApp.Api/docs/quotation-create-guide.html</code>、<code>quotation-edit-guide.html</code>：估價單新增與編輯流程圖解。</li>
@@ -65,7 +66,7 @@
 
     <h2>3. 資料庫相關文件</h2>
     <ul>
-        <li><code>db_docs/</code>：既有資料庫文件，可對照資料表欄位與規格。</li>
+        <li><code>../../../db_docs/</code>：既有資料庫文件，可對照資料表欄位與規格。</li>
         <li><code>src/DentstageToolApp.Infrastructure/Data/DentstageToolAppContext.cs</code>：DbContext，維護資料表對應與設定。</li>
         <li><code>src/DentstageToolApp.Infrastructure/Entities/</code>：資料庫實體類別，對應各資料表結構。</li>
     </ul>
