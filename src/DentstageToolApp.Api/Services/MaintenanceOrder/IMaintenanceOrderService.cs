@@ -28,4 +28,24 @@ public interface IMaintenanceOrderService
     /// 確認維修開始，將維修單狀態更新為 220。
     /// </summary>
     Task<MaintenanceOrderStatusChangeResponse> ConfirmMaintenanceAsync(MaintenanceOrderConfirmRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 編輯維修單資料，沿用估價單編輯結構。
+    /// </summary>
+    Task UpdateOrderAsync(UpdateMaintenanceOrderRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 續修維修單，複製估價內容建立新的維修單紀錄。
+    /// </summary>
+    Task<MaintenanceOrderContinuationResponse> ContinueOrderAsync(MaintenanceOrderContinueRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 將維修單標記為完成 (290)。
+    /// </summary>
+    Task<MaintenanceOrderStatusChangeResponse> CompleteOrderAsync(MaintenanceOrderCompleteRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 將維修單標記為終止 (295)。
+    /// </summary>
+    Task<MaintenanceOrderStatusChangeResponse> TerminateOrderAsync(MaintenanceOrderTerminateRequest request, string operatorName, CancellationToken cancellationToken);
 }
