@@ -1089,17 +1089,21 @@
           }).format(timestamp);
         };
 
+        // ---------- API 快速帶入靜態範本 ----------
+        // 依據 API 文件整理常用端點，協助在無 Swagger 定義時依舊能快速組裝請求。
         const staticOperationGroups = [
           {
-            name: '常用｜驗證流程',
+            name: '常用｜授權與維運',
             operations: [
               {
                 name: '登入取得權杖',
                 method: 'POST',
                 path: '/auth/login',
-                template: { deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C' },
+                template: {
+                  deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C'
+                },
                 requiresAuth: false,
-                description: '使用裝置機碼取得 Access Token 與 Refresh Token。'
+                description: '以裝置機碼取得 Access/Refresh Token。'
               },
               {
                 name: '刷新 Access Token',
@@ -1110,20 +1114,70 @@
                   deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C'
                 },
                 requiresAuth: false,
-                description: '以 Refresh Token 換取新的 Access Token。'
+                description: '使用 Refresh Token 重新取得 Access Token。'
               },
               {
                 name: '取得登入者資訊',
                 method: 'GET',
                 path: '/auth/info',
                 requiresAuth: true,
-                description: '檢視目前登入者的顯示名稱與角色。'
+                description: '查詢目前登入者的顯示名稱與角色。'
+              },
+              {
+                name: '建立後台帳號與裝置',
+                method: 'POST',
+                path: '/admin/accounts',
+                template: {
+                  displayName: '陳大明',
+                  role: 'StoreManager',
+                  deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C',
+                  deviceName: '高雄總店平板',
+                  operatorName: 'SystemAdmin'
+                },
+                requiresAuth: true,
+                description: '建立管理者帳號並綁定登入裝置。'
+              },
+              {
+                name: '健康檢查',
+                method: 'GET',
+                path: '/healthcheck',
+                requiresAuth: false,
+                description: '確認服務是否運作中（免權杖）。'
               }
             ]
           },
           {
-            name: '車牌流程',
+            name: '基礎資料｜品牌與技師',
             operations: [
+              {
+                name: '品牌與型號清單',
+                method: 'GET',
+                path: '/brands-models',
+                requiresAuth: true,
+                description: '取得品牌與車型樹狀資料供下拉選單使用。'
+              },
+              {
+                name: '技師名單',
+                method: 'GET',
+                path: '/technicians',
+                requiresAuth: true,
+                description: '依登入者所屬門市列出技師清單。'
+              }
+            ]
+          },
+          {
+            name: '車牌模組',
+            operations: [
+              {
+                name: '車牌影像辨識',
+                method: 'POST',
+                path: '/car-plates/recognitions',
+                template: {
+                  imageBase64: 'data:image/jpeg;base64,<貼上影像編碼>'
+                },
+                requiresAuth: true,
+                description: '支援檔案或 Base64，本範例示範以 Base64 字串送出辨識。'
+              },
               {
                 name: '車牌維修紀錄查詢',
                 method: 'POST',
@@ -1132,12 +1186,12 @@
                   carPlateNumber: 'AAA-1234'
                 },
                 requiresAuth: true,
-                description: '依車牌取得維修紀錄摘要。'
+                description: '依車牌號碼取得歷史估價與維修紀錄。'
               }
             ]
           },
           {
-            name: '客戶與車輛',
+            name: '客戶模組',
             operations: [
               {
                 name: '新增客戶',
@@ -1156,7 +1210,7 @@
                   remark: '首次到店，請協助安排體驗'
                 },
                 requiresAuth: true,
-                description: '建立客戶基本資料。'
+                description: '建立客戶主檔，欄位與後端驗證相符。'
               },
               {
                 name: '編輯客戶',
@@ -1176,7 +1230,7 @@
                   remark: '首次到店，請協助安排體驗'
                 },
                 requiresAuth: true,
-                description: '更新既有客戶資料。'
+                description: '更新既有客戶資料，需帶入 customerUid。'
               },
               {
                 name: '電話搜尋客戶',
@@ -1186,8 +1240,13 @@
                   phone: '0988123456'
                 },
                 requiresAuth: true,
-                description: '依電話關鍵字查詢客戶與維修紀錄統計。'
-              },
+                description: '依電話查詢客戶資料與維修次數統計。'
+              }
+            ]
+          },
+          {
+            name: '車輛模組',
+            operations: [
               {
                 name: '新增車輛',
                 method: 'POST',
@@ -1196,11 +1255,11 @@
                   carPlateNumber: 'AAA-1234',
                   brandUid: 'B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF',
                   modelUid: 'M_E706D04B-9F5A-11F0-A812-000C2990DEAF',
-                  color: '白',
-                  remark: '測試建立車輛資料'
+                  color: '白色',
+                  remark: '建立車輛測試資料'
                 },
                 requiresAuth: true,
-                description: '建立車輛資料並綁定車牌。'
+                description: '新增車輛主檔，需搭配品牌與型號 UID。'
               },
               {
                 name: '編輯車輛',
@@ -1211,19 +1270,26 @@
                   carPlateNumber: 'AAA-5678',
                   brandUid: 'B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF',
                   modelUid: 'M_E706D04B-9F5A-11F0-A812-000C2990DEAF',
-                  color: '黑',
-                  remark: '客戶更換為黑色烤漆'
+                  color: '黑色',
+                  remark: '客戶更換車色為黑'
                 },
                 requiresAuth: true,
-                description: '更新既有車輛資料。'
+                description: '更新既有車輛資料，需帶入 carUid。'
               }
             ]
           },
           {
-            name: '常用｜估價與維修',
+            name: '估價單模組',
             operations: [
               {
-                name: '查詢估價單列表 (POST)',
+                name: '估價單列表 (GET)',
+                method: 'GET',
+                path: '/quotations?status=110&page=1&pageSize=20',
+                requiresAuth: true,
+                description: '以查詢參數取得估價單列表，預設查詢估價中資料。'
+              },
+              {
+                name: '估價單列表 (POST)',
                 method: 'POST',
                 path: '/quotations',
                 template: {
@@ -1237,7 +1303,7 @@
                   pageSize: 20
                 },
                 requiresAuth: true,
-                description: '依條件取得估價單列表。'
+                description: '透過 Body 傳遞查詢條件，欄位對應 QuotationListQuery。'
               },
               {
                 name: '新增估價單',
@@ -1258,47 +1324,23 @@
                   },
                   damages: [
                     {
-                      photos: 'Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B',
                       position: '保桿',
                       dentStatus: '大面積',
                       description: '需板金搭配烤漆',
                       estimatedAmount: 4500
                     }
                   ],
-                  carBodyConfirmation: {
-                    signaturePhotoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
-                    damageMarkers: [
-                      {
-                        x: 0.42,
-                        y: 0.63,
-                        hasDent: true,
-                        hasScratch: false,
-                        hasPaintPeel: false,
-                        remark: '主要凹痕'
-                      }
-                    ]
-                  },
                   maintenance: {
                     fixTypeUid: 'F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF',
                     reserveCar: true,
-                    applyCoating: false,
-                    applyWrapping: false,
-                    hasRepainted: false,
-                    needToolEvaluation: true,
-                    otherFee: 800,
-                    roundingDiscount: 200,
-                    percentageDiscount: 10,
-                    discountReason: '回饋老客戶',
                     estimatedRepairDays: 1,
                     estimatedRepairHours: 6,
                     estimatedRestorationPercentage: 90,
-                    suggestedPaintReason: null,
-                    unrepairableReason: null,
                     remark: '請於修復後通知客戶取車'
                   }
                 },
                 requiresAuth: true,
-                description: '建立估價單，需先準備車輛、客戶與圖片資料。'
+                description: '建立估價單，需先準備車輛、客戶與維修設定。'
               },
               {
                 name: '估價單詳情',
@@ -1308,96 +1350,183 @@
                   quotationNo: 'Q25100001'
                 },
                 requiresAuth: true,
-                description: '依估價單編號取得詳情。'
+                description: '依估價單編號取得完整內容。'
+              },
+              {
+                name: '編輯估價單',
+                method: 'POST',
+                path: '/quotations/edit',
+                template: {
+                  quotationNo: 'Q25100001',
+                  remark: '更新估價備註',
+                  damages: [
+                    {
+                      position: '車門',
+                      dentStatus: '輕微',
+                      description: '補充描述',
+                      estimatedAmount: 1800
+                    }
+                  ],
+                  maintenance: {
+                    fixTypeUid: 'F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF',
+                    reserveCar: false,
+                    estimatedRepairDays: 1,
+                    estimatedRepairHours: 4
+                  }
+                },
+                requiresAuth: true,
+                description: '更新估價單內容，需帶入 quotationNo。'
+              },
+              {
+                name: '估價完成',
+                method: 'POST',
+                path: '/quotations/evaluate',
+                template: {
+                  quotationNo: 'Q25100001'
+                },
+                requiresAuth: true,
+                description: '將狀態更新為估價完成 (180)。'
+              },
+              {
+                name: '取消估價/預約',
+                method: 'POST',
+                path: '/quotations/cancel',
+                template: {
+                  quotationNo: 'Q25100001',
+                  reason: '客戶取消到店',
+                  clearReservation: true
+                },
+                requiresAuth: true,
+                description: '取消估價或預約，可選擇是否清除預約日期。'
+              },
+              {
+                name: '轉預約或設定日期',
+                method: 'POST',
+                path: '/quotations/reserve',
+                template: {
+                  quotationNo: 'Q25100001',
+                  reservationDate: '2024-10-20T10:00:00'
+                },
+                requiresAuth: true,
+                description: '設定預約日期，將狀態轉為預約中。'
+              },
+              {
+                name: '更新預約日期',
+                method: 'POST',
+                path: '/quotations/reserve/update',
+                template: {
+                  quotationNo: 'Q25100001',
+                  reservationDate: '2024-10-28T09:30:00'
+                },
+                requiresAuth: true,
+                description: '異動既有預約日期。'
+              },
+              {
+                name: '取消預約',
+                method: 'POST',
+                path: '/quotations/reserve/cancel',
+                template: {
+                  quotationNo: 'Q25100001',
+                  reason: '客戶延期',
+                  clearReservation: true
+                },
+                requiresAuth: true,
+                description: '取消預約並視需求清除預約日期。'
+              },
+              {
+                name: '估價狀態回溯',
+                method: 'POST',
+                path: '/quotations/revert',
+                template: {
+                  quotationNo: 'Q25100001'
+                },
+                requiresAuth: true,
+                description: '將估價單狀態回復上一階段。'
+              },
+              {
+                name: '估價轉維修',
+                method: 'POST',
+                path: '/quotations/maintenance',
+                template: {
+                  quotationNo: 'Q25100001'
+                },
+                requiresAuth: true,
+                description: '將估價單轉為維修單並產生維修編號。'
+              }
+            ]
+          },
+          {
+            name: '維修單模組',
+            operations: [
+              {
+                name: '維修單列表 (GET)',
+                method: 'GET',
+                path: '/maintenance-orders?status=210&page=1&pageSize=20',
+                requiresAuth: true,
+                description: '以查詢參數取得維修單列表，預設查詢待確認資料。'
               },
               {
                 name: '維修單列表 (POST)',
                 method: 'POST',
                 path: '/maintenance-orders',
                 template: {
+                  status: '220',
+                  startDate: '2024-03-01T00:00:00',
+                  endDate: '2024-03-31T23:59:59',
                   page: 1,
-                  pageSize: 20,
-                  status: '200'
+                  pageSize: 20
                 },
                 requiresAuth: true,
-                description: '以 POST 方式取得維修單列表。'
+                description: '透過 Body 查詢維修單，欄位對應 MaintenanceOrderListQuery。'
               },
               {
                 name: '維修單詳情',
                 method: 'POST',
                 path: '/maintenance-orders/detail',
                 template: {
-                  maintenanceOrderUid: 'MO_1234567890'
+                  orderNo: 'M25100001'
                 },
                 requiresAuth: true,
-                description: '查詢單一維修單的詳細資料。'
+                description: '依維修單編號取得詳細資料。'
               },
               {
                 name: '維修單回溯',
                 method: 'POST',
                 path: '/maintenance-orders/revert',
                 template: {
-                  maintenanceOrderUid: 'MO_1234567890',
-                  revertReason: '測試回溯原因'
+                  orderNo: 'M25100001'
                 },
                 requiresAuth: true,
-                description: '將維修單狀態回復上一個節點。'
+                description: '誤按狀態時回復上一階段。'
               },
               {
                 name: '確認維修開始',
                 method: 'POST',
                 path: '/maintenance-orders/confirm',
                 template: {
-                  maintenanceOrderUid: 'MO_1234567890',
-                  confirmRemark: '現場確認開始維修'
+                  orderNo: 'M25100001'
                 },
                 requiresAuth: true,
-                description: '更新維修單狀態為維修中。'
+                description: '更新狀態為維修中。'
               }
             ]
           },
           {
-            name: '常用｜資源查詢',
+            name: '圖片模組',
             operations: [
               {
-                name: '健康檢查',
-                method: 'GET',
-                path: '/healthcheck',
-                requiresAuth: false,
-                description: '確認服務是否運作中。'
-              },
-              {
-                name: '品牌與型號清單',
-                method: 'GET',
-                path: '/brands-models',
-                requiresAuth: true,
-                description: '取得車輛品牌與型號下拉選單資料。'
-              },
-              {
-                name: '技師名單',
-                method: 'GET',
-                path: '/technicians',
-                requiresAuth: true,
-                description: '取得登入者所屬門市的技師列表。'
-              }
-            ]
-          },
-          {
-            name: '常用｜系統維運',
-            operations: [
-              {
-                name: '建立後台帳號與裝置',
+                name: '上傳維修/估價照片',
                 method: 'POST',
-                path: '/admin/accounts',
-                template: {
-                  displayName: '陳大明',
-                  role: 'StoreManager',
-                  deviceKey: 'CFC29A95-885C-CF45-A91C-F0DD3F1DDD7C',
-                  deviceName: '高雄總店平板',
-                  operatorName: 'SystemAdmin'
-                },
+                path: '/photos',
                 requiresAuth: true,
-                description: '建立管理者帳號並綁定裝置。'
+                description: '需使用下方「圖片上傳測試」卡片送出 multipart/form-data。'
+              },
+              {
+                name: '下載圖片',
+                method: 'GET',
+                path: '/photos/{photoUid}',
+                requiresAuth: true,
+                description: '以取得的 photoUid 下載原始影像。'
               }
             ]
           }
