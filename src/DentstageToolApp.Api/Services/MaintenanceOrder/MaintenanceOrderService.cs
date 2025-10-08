@@ -472,12 +472,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             operatorLabel,
             now);
 
-        var orderSerial = await GenerateNextOrderSerialAsync(now, cancellationToken);
-        var orderUid = BuildOrderUid();
-        var orderNoNew = BuildOrderNo(orderSerial, now);
-        var amount = CalculateOrderAmount(newQuotation.Valuation, newQuotation.Discount);
-        var initialPlainRemark = ExtractPlainRemark(newQuotation.Remark);
-
         // ---------- 原維修單狀態更新 ----------
         sourceOrder.Status = "295";
         sourceOrder.Status295Timestamp = now;
@@ -488,99 +482,33 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         sourceOrder.ModifiedBy = operatorLabel;
         sourceOrder.StopReason = "續修取消維修";
 
-        // ---------- 建立新的維修單實體 ----------
-        var newOrder = new Order
-        {
-            OrderUid = orderUid,
-            OrderNo = orderNoNew,
-            SerialNum = orderSerial,
-            CreationTimestamp = now,
-            CreatedBy = operatorLabel,
-            ModificationTimestamp = now,
-            ModifiedBy = operatorLabel,
-            UserUid = NormalizeOptionalText(newQuotation.UserUid) ?? newQuotation.TechnicianUid ?? operatorLabel,
-            UserName = NormalizeOptionalText(newQuotation.UserName) ?? operatorLabel,
-            StoreUid = newQuotation.StoreUid ?? sourceOrder.StoreUid,
-            Date = DateOnly.FromDateTime(now),
-            Status = "210",
-            Status210Date = now,
-            Status210User = operatorLabel,
-            CurrentStatusDate = now,
-            CurrentStatusUser = operatorLabel,
-            QuatationUid = newQuotation.QuotationUid,
-            CarUid = newQuotation.CarUid,
-            CarNoInputGlobal = newQuotation.CarNoInputGlobal,
-            CarNoInput = newQuotation.CarNoInput,
-            CarNo = newQuotation.CarNo,
-            Brand = newQuotation.Brand,
-            Model = newQuotation.Model,
-            Color = newQuotation.Color,
-            CarRemark = newQuotation.CarRemark,
-            BrandModel = newQuotation.BrandModel,
-            CustomerUid = newQuotation.CustomerUid,
-            CustomerType = newQuotation.CustomerType,
-            PhoneInputGlobal = newQuotation.PhoneInputGlobal,
-            PhoneInput = newQuotation.PhoneInput,
-            Phone = newQuotation.Phone,
-            Name = newQuotation.Name,
-            Gender = newQuotation.Gender,
-            Connect = newQuotation.Connect,
-            County = newQuotation.County,
-            Township = newQuotation.Township,
-            Source = newQuotation.Source,
-            Reason = newQuotation.Reason,
-            Email = newQuotation.Email,
-            ConnectRemark = newQuotation.ConnectRemark,
-            BookDate = newQuotation.BookDate?.ToString("yyyy-MM-dd"),
-            BookMethod = newQuotation.BookMethod,
-            WorkDate = newQuotation.FixDate?.ToString("yyyy-MM-dd"),
-            FixType = newQuotation.FixType,
-            CarReserved = newQuotation.CarReserved,
-            Content = initialPlainRemark,
-            Remark = newQuotation.Remark,
-            Valuation = newQuotation.Valuation,
-            DiscountPercent = newQuotation.DiscountPercent,
-            Discount = newQuotation.Discount,
-            DiscountReason = newQuotation.DiscountReason,
-            Amount = amount,
-            FlagRegularCustomer = newQuotation.FlagRegularCustomer,
-            FlagExternalCooperation = sourceOrder.FlagExternalCooperation
-        };
-
         await _dbContext.Quatations.AddAsync(newQuotation, cancellationToken);
-        await _dbContext.Orders.AddAsync(newOrder, cancellationToken);
 
-        // ---------- 圖片複製並重新綁定 ----------
+        // ---------- 圖片複製 ----------
         var photoUidMap = await DuplicatePhotosForContinuationAsync(
             quotation?.QuotationUid,
             newQuotation.QuotationUid,
-            sourceOrder.OrderUid,
-            newOrder.OrderUid,
             cancellationToken);
 
         var updatedRemark = ReplacePhotoUids(newQuotation.Remark, photoUidMap);
         newQuotation.Remark = updatedRemark;
-        newOrder.Remark = updatedRemark;
-        newOrder.Content = ExtractPlainRemark(updatedRemark);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder} 並複製估價單 {NewQuotation} 後取消原單。",
+            "操作人員 {Operator} 針對維修單 {SourceOrder} 複製估價單 {NewQuotation} 並取消原單。",
             operatorLabel,
             sourceOrder.OrderNo,
-            newOrder.OrderNo,
             newQuotation.QuotationNo);
 
         return new MaintenanceOrderContinuationResponse
         {
-            OrderUid = newOrder.OrderUid,
-            OrderNo = newOrder.OrderNo ?? string.Empty,
+            CancelledOrderUid = sourceOrder.OrderUid ?? string.Empty,
+            CancelledOrderNo = sourceOrder.OrderNo ?? string.Empty,
             QuotationUid = newQuotation.QuotationUid,
             QuotationNo = newQuotation.QuotationNo,
-            CreatedAt = newOrder.CreationTimestamp ?? now,
-            Status = newOrder.Status ?? "210",
-            Message = "已建立新的續修維修單並複製估價與圖片資料。"
+            CreatedAt = newQuotation.CreationTimestamp ?? now,
+            Message = "已複製估價與圖片，原維修單已標記為取消維修。"
         };
     }
 
@@ -1425,8 +1353,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private async Task<Dictionary<string, string>> DuplicatePhotosForContinuationAsync(
         string? sourceQuotationUid,
         string targetQuotationUid,
-        string? sourceOrderUid,
-        string targetOrderUid,
         CancellationToken cancellationToken)
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -1446,8 +1372,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         var storageRoot = EnsurePhotoStorageRoot();
-        var normalizedSourceOrderUid = NormalizeOptionalText(sourceOrderUid);
-
         foreach (var photo in photos)
         {
             var oldPhotoUid = NormalizeOptionalText(photo.PhotoUid);
@@ -1469,9 +1393,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             {
                 PhotoUid = newPhotoUid,
                 QuotationUid = targetQuotationUid,
-                RelatedUid = ShouldBindPhotoToNewOrder(photo.RelatedUid, normalizedSourceOrderUid)
-                    ? targetOrderUid
-                    : photo.RelatedUid,
+                RelatedUid = photo.RelatedUid,
                 Posion = photo.Posion,
                 Comment = photo.Comment,
                 PhotoShape = photo.PhotoShape,
@@ -1487,18 +1409,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// 判斷照片是否需重新綁定到新維修單。
-    /// </summary>
-    private static bool ShouldBindPhotoToNewOrder(string? relatedUid, string? sourceOrderUid)
-    {
-        var normalizedRelated = NormalizeOptionalText(relatedUid);
-        var normalizedSource = NormalizeOptionalText(sourceOrderUid);
-        return normalizedRelated is not null
-            && normalizedSource is not null
-            && string.Equals(normalizedRelated, normalizedSource, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -1645,60 +1555,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 .OrderByDescending(quotation => quotation.SerialNum)
                 .ThenByDescending(quotation => quotation.QuotationNo)
                 .Select(quotation => new SerialCandidate(quotation.SerialNum, quotation.QuotationNo))
-                .Take(SerialCandidateFetchCount)
-                .ToListAsync(cancellationToken);
-
-            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
-        }
-
-        return maxSerial + 1;
-    }
-
-    /// <summary>
-    /// 建立維修單唯一識別碼，統一採用 O_ 前綴。
-    /// </summary>
-    private static string BuildOrderUid()
-    {
-        return $"O_{Guid.NewGuid():N}";
-    }
-
-    /// <summary>
-    /// 依日期與序號產生維修單編號。
-    /// </summary>
-    private static string BuildOrderNo(int serial, DateTime timestamp)
-    {
-        return $"O{timestamp:yyMM}{serial:D4}";
-    }
-
-    /// <summary>
-    /// 產生下一個維修單序號，沿用每月遞增規則。
-    /// </summary>
-    private async Task<int> GenerateNextOrderSerialAsync(DateTime timestamp, CancellationToken cancellationToken)
-    {
-        var prefix = $"O{timestamp:yyMM}";
-
-        var prefixCandidates = await _dbContext.Orders
-            .AsNoTracking()
-            .Where(order => !string.IsNullOrEmpty(order.OrderNo) && EF.Functions.Like(order.OrderNo!, prefix + "%"))
-            .OrderByDescending(order => order.SerialNum)
-            .ThenByDescending(order => order.OrderNo)
-            .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
-            .Take(SerialCandidateFetchCount)
-            .ToListAsync(cancellationToken);
-
-        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
-
-        if (maxSerial == 0)
-        {
-            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
-            var monthEnd = monthStart.AddMonths(1);
-
-            var monthCandidates = await _dbContext.Orders
-                .AsNoTracking()
-                .Where(order => order.CreationTimestamp >= monthStart && order.CreationTimestamp < monthEnd)
-                .OrderByDescending(order => order.SerialNum)
-                .ThenByDescending(order => order.OrderNo)
-                .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
                 .Take(SerialCandidateFetchCount)
                 .ToListAsync(cancellationToken);
 
