@@ -181,6 +181,17 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 取得隨機產生的估價單建立測試資料，協助前端快速帶入測試頁面內容。
+    /// </summary>
+    [HttpGet("create/random-test")]
+    [ProducesResponseType(typeof(CreateQuotationTestPageResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<CreateQuotationTestPageResponse>> GetRandomCreateQuotationTestPageAsync(CancellationToken cancellationToken)
+    {
+        var response = await _quotationService.GenerateRandomQuotationTestPageAsync(cancellationToken);
+        return Ok(response);
+    }
+
+    /// <summary>
     /// 取得單一估價單的詳細資料，改以估價單編號作為查詢依據。
     /// </summary>
     [HttpPost("detail")]
