@@ -1807,24 +1807,43 @@ public class QuotationService : IQuotationService
     private static string? ResolvePreviousStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
-        var history = new List<(string Code, DateTime? Timestamp)>
+
+        // 依照流程定義建立狀態堆疊，確保回朔會依序往前尋找。
+        // 狀態 195 的時間點仍儲存在 Status199 欄位，因此在此明確對應。
+        var statusFlow = new List<(string Code, DateTime? Timestamp)>
         {
-            ("195", quotation.Status199Timestamp),
-            ("191", quotation.Status191Timestamp),
-            ("190", quotation.Status190Timestamp),
+            ("110", quotation.Status110Timestamp),
             ("180", quotation.Status180Timestamp),
-            ("110", quotation.Status110Timestamp)
+            ("190", quotation.Status190Timestamp),
+            ("191", quotation.Status191Timestamp),
+            ("195", quotation.Status199Timestamp)
         };
 
-        var ordered = history
-            .Where(item => item.Timestamp.HasValue)
-            .OrderByDescending(item => item.Timestamp!.Value)
-            .ToList();
-
-        foreach (var (code, _) in ordered)
+        if (string.IsNullOrWhiteSpace(currentStatus))
         {
-            if (!string.Equals(code, currentStatus, StringComparison.OrdinalIgnoreCase))
+            // 若估價單目前缺少狀態，保守地回傳最晚的有效狀態，避免流程中斷。
+            return statusFlow
+                .Where(item => item.Timestamp.HasValue)
+                .OrderByDescending(item => item.Timestamp!.Value)
+                .Select(item => item.Code)
+                .FirstOrDefault();
+        }
+
+        var currentIndex = statusFlow.FindIndex(item =>
+            string.Equals(item.Code, currentStatus, StringComparison.OrdinalIgnoreCase));
+
+        if (currentIndex <= 0)
+        {
+            // 找不到對應狀態或已經是最初狀態（110），便無法再往前回朔。
+            return null;
+        }
+
+        for (var index = currentIndex - 1; index >= 0; index--)
+        {
+            var (code, timestamp) = statusFlow[index];
+            if (timestamp.HasValue)
             {
+                // 由近而遠尋找已出現過的狀態，確保可以一路回朔至 110。
                 return code;
             }
         }
