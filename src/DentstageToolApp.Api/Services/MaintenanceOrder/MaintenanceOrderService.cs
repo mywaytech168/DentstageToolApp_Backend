@@ -4,7 +4,10 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.Json;
 using DentstageToolApp.Api.MaintenanceOrders;
+using DentstageToolApp.Api.Quotations;
+using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -18,17 +21,23 @@ namespace DentstageToolApp.Api.Services.MaintenanceOrder;
 public class MaintenanceOrderService : IMaintenanceOrderService
 {
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
+    private const int SerialCandidateFetchCount = 50;
 
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<MaintenanceOrderService> _logger;
+    private readonly IQuotationService _quotationService;
 
     /// <summary>
     /// 建構子，注入資料庫內容物件與記錄器。
     /// </summary>
-    public MaintenanceOrderService(DentstageToolAppContext dbContext, ILogger<MaintenanceOrderService> logger)
+    public MaintenanceOrderService(
+        DentstageToolAppContext dbContext,
+        ILogger<MaintenanceOrderService> logger,
+        IQuotationService quotationService)
     {
         _dbContext = dbContext;
         _logger = logger;
+        _quotationService = quotationService;
     }
 
     // ---------- API 呼叫區 ----------
@@ -125,7 +134,53 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無符合條件的維修單。");
         }
 
-        return MapToDetail(orderEntity);
+        // ---------- 同步估價單詳情 ----------
+        // 先嘗試取得估價單詳情，成功時可沿用估價單的完整巢狀結構，失敗時則回退至維修單原始欄位。
+        var quotationDetail = await TryGetQuotationDetailAsync(orderEntity, cancellationToken);
+
+        return MapToDetail(orderEntity, quotationDetail);
+    }
+
+    /// <summary>
+    /// 嘗試以維修單關聯的估價單編號取得估價詳情，若失敗則記錄警告並回傳 null。
+    /// </summary>
+    private async Task<QuotationDetailResponse?> TryGetQuotationDetailAsync(Order order, CancellationToken cancellationToken)
+    {
+        if (order is null)
+        {
+            return null;
+        }
+
+        var quotationNo = NormalizeOptionalText(order.Quatation?.QuotationNo);
+        if (quotationNo is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            var request = new GetQuotationRequest { QuotationNo = quotationNo };
+            return await _quotationService.GetQuotationAsync(request, cancellationToken);
+        }
+        catch (QuotationManagementException ex)
+        {
+            // 若估價單已被移除或資料不完整，保留警告紀錄並沿用維修單既有資料。
+            _logger.LogWarning(
+                ex,
+                "維修單 {OrderNo} 取得估價單詳情失敗：{Message}",
+                order.OrderNo,
+                ex.Message);
+        }
+        catch (Exception ex)
+        {
+            // 非預期錯誤同樣記錄，避免影響後續維修單資料輸出。
+            _logger.LogError(
+                ex,
+                "維修單 {OrderNo} 取得估價單詳情時發生未預期錯誤。",
+                order.OrderNo);
+        }
+
+        return null;
     }
 
     /// <inheritdoc />
@@ -159,14 +214,22 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少關聯估價單，無法回溯。");
         }
 
-        if (string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+        // ---------- 決定可回復的上一個維修狀態 ----------
+        var currentStatus = NormalizeOptionalText(order.Status);
+        if (currentStatus is null)
         {
-            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單已標記為取消，無需再次回溯。");
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少狀態資訊，無法回溯。");
+        }
+
+        var previousOrderStatus = ResolvePreviousOrderStatus(order, currentStatus);
+        if (previousOrderStatus is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單已位於最早狀態，無法再回溯。");
         }
 
         // ---------- 回溯估價單狀態 ----------
-        var previousStatus = ResolvePreviousStatus(order.Quatation);
-        if (previousStatus is null)
+        var previousQuotationStatus = ResolvePreviousQuotationStatus(order.Quatation);
+        if (previousQuotationStatus is null)
         {
             throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "估價單缺少可回溯的上一個狀態。");
         }
@@ -176,32 +239,29 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ClearCancellationAudit(order.Quatation);
         }
 
-        ApplyQuotationStatus(order.Quatation, previousStatus, operatorLabel, now);
+        ApplyQuotationStatus(order.Quatation, previousQuotationStatus, operatorLabel, now);
 
-        // ---------- 更新維修單狀態為取消 ----------
-        order.Status = "295";
-        order.Status295Timestamp = now;
-        order.Status295User = operatorLabel;
-        order.CurrentStatusDate = now;
-        order.CurrentStatusUser = operatorLabel;
-        order.ModificationTimestamp = now;
-        order.ModifiedBy = operatorLabel;
+        // ---------- 更新維修單狀態 ----------
+        ApplyOrderStatusReversion(order, previousOrderStatus, operatorLabel, now);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
+        var statusTimestamp = GetOrderStatusTimestamp(order, previousOrderStatus) ?? order.CurrentStatusDate;
+
         _logger.LogInformation(
-            "操作人員 {Operator} 將維修單 {OrderNo} 回溯至估價狀態 {Status}，並將維修單標記為取消。",
+            "操作人員 {Operator} 將維修單 {OrderNo} 回溯至狀態 {Status}，並同步回復估價單狀態 {QuotationStatus}。",
             operatorLabel,
             order.OrderNo,
-            previousStatus);
+            previousOrderStatus,
+            previousQuotationStatus);
 
         return new MaintenanceOrderStatusChangeResponse
         {
             OrderUid = order.OrderUid,
             OrderNo = order.OrderNo,
-            Status = order.Status,
-            StatusTime = order.Status295Timestamp,
-            Message = "已回溯至估價階段並取消維修單。"
+            Status = previousOrderStatus,
+            StatusTime = statusTimestamp,
+            Message = $"維修單已回復至狀態 {previousOrderStatus}。"
         };
     }
 
@@ -266,6 +326,363 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         };
     }
 
+    /// <inheritdoc />
+    public async Task UpdateOrderAsync(UpdateMaintenanceOrderRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.BadRequest, "請提供維修單編輯資料。");
+        }
+
+        // ---------- 參數整理 ----------
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 取得維修單與估價單，後續需同步兩者內容。
+        var order = await _dbContext.Orders
+            .Include(entity => entity.Quatation)
+            .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
+
+        if (order is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無需更新的維修單。");
+        }
+
+        if (order.Quatation is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少關聯估價單，無法同步更新。");
+        }
+
+        var quotationNo = order.Quatation.QuotationNo;
+        if (string.IsNullOrWhiteSpace(quotationNo))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "估價單編號缺失，無法同步維修資料。");
+        }
+
+        var requestQuotationNo = NormalizeOptionalText(request.QuotationNo);
+        if (requestQuotationNo is not null && !string.Equals(requestQuotationNo, quotationNo, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單與估價單編號不一致，請確認送出的資料。");
+        }
+
+        // 將估價單編號同步寫回請求物件，沿用估價編輯結構以利 Swagger 呈現一致欄位。
+        request.QuotationNo = quotationNo;
+
+        // 呼叫估價單服務沿用原邏輯，避免雙端處理流程不一致。
+        await _quotationService.UpdateQuotationAsync(request, operatorName, cancellationToken);
+
+        // 重新載入估價單資訊，確保取得最新欄位。
+        await _dbContext.Entry(order.Quatation).ReloadAsync(cancellationToken);
+
+        var quotation = order.Quatation;
+        var plainRemark = ExtractPlainRemark(quotation.Remark);
+        var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+
+        // ---------- 同步維修單欄位 ----------
+        order.CarUid = quotation.CarUid;
+        order.CarNoInputGlobal = quotation.CarNoInputGlobal;
+        order.CarNoInput = quotation.CarNoInput;
+        order.CarNo = quotation.CarNo;
+        order.Brand = quotation.Brand;
+        order.Model = quotation.Model;
+        order.Color = quotation.Color;
+        order.CarRemark = quotation.CarRemark;
+        order.BrandModel = quotation.BrandModel;
+        order.CustomerUid = quotation.CustomerUid;
+        order.CustomerType = quotation.CustomerType;
+        order.PhoneInputGlobal = quotation.PhoneInputGlobal;
+        order.PhoneInput = quotation.PhoneInput;
+        order.Phone = quotation.Phone;
+        order.Name = quotation.Name;
+        order.Gender = quotation.Gender;
+        order.Connect = quotation.Connect;
+        order.County = quotation.County;
+        order.Township = quotation.Township;
+        order.Source = quotation.Source;
+        order.Reason = quotation.Reason;
+        order.Email = quotation.Email;
+        order.ConnectRemark = quotation.ConnectRemark;
+        order.BookDate = quotation.BookDate?.ToString("yyyy-MM-dd");
+        order.WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd");
+        order.FixType = quotation.FixType;
+        order.CarReserved = quotation.CarReserved;
+        order.Content = plainRemark;
+        order.Remark = quotation.Remark;
+        order.Valuation = quotation.Valuation;
+        order.DiscountPercent = quotation.DiscountPercent;
+        order.Discount = quotation.Discount;
+        order.DiscountReason = quotation.DiscountReason;
+        order.Amount = amount;
+        order.ModificationTimestamp = now;
+        order.ModifiedBy = operatorLabel;
+        order.CurrentStatusDate = now;
+        order.CurrentStatusUser = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 更新維修單 {OrderNo} 完成。", operatorLabel, order.OrderNo);
+    }
+
+    /// <inheritdoc />
+    public async Task<MaintenanceOrderContinuationResponse> ContinueOrderAsync(MaintenanceOrderContinueRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.BadRequest, "請提供續修維修單的條件。");
+        }
+
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var sourceOrder = await _dbContext.Orders
+            .Include(entity => entity.Quatation)
+            .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
+
+        if (sourceOrder is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無需續修的維修單。");
+        }
+
+        if (sourceOrder.Quatation is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單缺少估價資料，無法續修。");
+        }
+
+        var quotation = sourceOrder.Quatation;
+        var orderSerial = await GenerateNextOrderSerialAsync(now, cancellationToken);
+        var orderUid = BuildOrderUid();
+        var orderNoNew = BuildOrderNo(orderSerial, now);
+        var plainRemark = ExtractPlainRemark(quotation.Remark);
+        var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+
+        // ---------- 原維修單狀態更新 ----------
+        sourceOrder.Status = "295";
+        sourceOrder.Status295Timestamp = now;
+        sourceOrder.Status295User = operatorLabel;
+        sourceOrder.CurrentStatusDate = now;
+        sourceOrder.CurrentStatusUser = operatorLabel;
+        sourceOrder.ModificationTimestamp = now;
+        sourceOrder.ModifiedBy = operatorLabel;
+        sourceOrder.StopReason = "續修轉單";
+
+        // ---------- 建立新的維修單實體 ----------
+        var newOrder = new Order
+        {
+            OrderUid = orderUid,
+            OrderNo = orderNoNew,
+            SerialNum = orderSerial,
+            CreationTimestamp = now,
+            CreatedBy = operatorLabel,
+            ModificationTimestamp = now,
+            ModifiedBy = operatorLabel,
+            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.TechnicianUid ?? operatorLabel,
+            UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
+            StoreUid = quotation.StoreUid ?? sourceOrder.StoreUid,
+            Date = DateOnly.FromDateTime(now),
+            Status = "210",
+            Status210Date = now,
+            Status210User = operatorLabel,
+            CurrentStatusDate = now,
+            CurrentStatusUser = operatorLabel,
+            QuatationUid = quotation.QuotationUid,
+            CarUid = quotation.CarUid,
+            CarNoInputGlobal = quotation.CarNoInputGlobal,
+            CarNoInput = quotation.CarNoInput,
+            CarNo = quotation.CarNo,
+            Brand = quotation.Brand,
+            Model = quotation.Model,
+            Color = quotation.Color,
+            CarRemark = quotation.CarRemark,
+            BrandModel = quotation.BrandModel,
+            CustomerUid = quotation.CustomerUid,
+            CustomerType = quotation.CustomerType,
+            PhoneInputGlobal = quotation.PhoneInputGlobal,
+            PhoneInput = quotation.PhoneInput,
+            Phone = quotation.Phone,
+            Name = quotation.Name,
+            Gender = quotation.Gender,
+            Connect = quotation.Connect,
+            County = quotation.County,
+            Township = quotation.Township,
+            Source = quotation.Source,
+            Reason = quotation.Reason,
+            Email = quotation.Email,
+            ConnectRemark = quotation.ConnectRemark,
+            BookDate = quotation.BookDate?.ToString("yyyy-MM-dd"),
+            BookMethod = quotation.BookMethod,
+            WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd"),
+            FixType = quotation.FixType,
+            CarReserved = quotation.CarReserved,
+            Content = plainRemark,
+            Remark = quotation.Remark,
+            Valuation = quotation.Valuation,
+            DiscountPercent = quotation.DiscountPercent,
+            Discount = quotation.Discount,
+            DiscountReason = quotation.DiscountReason,
+            Amount = amount,
+            FlagRegularCustomer = quotation.FlagRegularCustomer,
+            FlagExternalCooperation = sourceOrder.FlagExternalCooperation
+        };
+
+        await _dbContext.Orders.AddAsync(newOrder, cancellationToken);
+
+        // ---------- 圖片重新綁定 ----------
+        var photos = await _dbContext.PhotoData
+            .Where(photo => photo.QuotationUid == quotation.QuotationUid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var photo in photos)
+        {
+            if (string.IsNullOrWhiteSpace(photo.RelatedUid)
+                || string.Equals(photo.RelatedUid, sourceOrder.OrderUid, StringComparison.OrdinalIgnoreCase))
+            {
+                photo.RelatedUid = orderUid;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "操作人員 {Operator} 針對維修單 {SourceOrder} 建立續修單 {NewOrder} 並取消原單。",
+            operatorLabel,
+            sourceOrder.OrderNo,
+            newOrder.OrderNo);
+
+        return new MaintenanceOrderContinuationResponse
+        {
+            OrderUid = newOrder.OrderUid,
+            OrderNo = newOrder.OrderNo ?? string.Empty,
+            QuotationUid = quotation.QuotationUid,
+            QuotationNo = quotation.QuotationNo,
+            CreatedAt = newOrder.CreationTimestamp ?? now,
+            Status = newOrder.Status ?? "210",
+            Message = "已建立新的續修維修單並取消原維修單。"
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<MaintenanceOrderStatusChangeResponse> CompleteOrderAsync(MaintenanceOrderCompleteRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.BadRequest, "請提供維修完成的條件。");
+        }
+
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var order = await _dbContext.Orders
+            .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
+
+        if (order is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無需標記完成的維修單。");
+        }
+
+        if (string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "維修單已終止，無法標記為完成。");
+        }
+
+        if (string.Equals(order.Status, "290", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MaintenanceOrderStatusChangeResponse
+            {
+                OrderUid = order.OrderUid,
+                OrderNo = order.OrderNo,
+                Status = order.Status,
+                StatusTime = order.Status290Date,
+                Message = "維修單已處於完成狀態。"
+            };
+        }
+
+        order.Status = "290";
+        order.Status290Date = now;
+        order.Status290User = operatorLabel;
+        order.CurrentStatusDate = now;
+        order.CurrentStatusUser = operatorLabel;
+        order.ModificationTimestamp = now;
+        order.ModifiedBy = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將維修單 {OrderNo} 標記為完成。", operatorLabel, order.OrderNo);
+
+        return new MaintenanceOrderStatusChangeResponse
+        {
+            OrderUid = order.OrderUid,
+            OrderNo = order.OrderNo,
+            Status = order.Status,
+            StatusTime = order.Status290Date,
+            Message = "維修單已更新為維修完成。"
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<MaintenanceOrderStatusChangeResponse> TerminateOrderAsync(MaintenanceOrderTerminateRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.BadRequest, "請提供終止維修的條件。");
+        }
+
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var order = await _dbContext.Orders
+            .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
+
+        if (order is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無需終止的維修單。");
+        }
+
+        if (string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+        {
+            return new MaintenanceOrderStatusChangeResponse
+            {
+                OrderUid = order.OrderUid,
+                OrderNo = order.OrderNo,
+                Status = order.Status,
+                StatusTime = order.Status295Timestamp,
+                Message = "維修單已處於終止狀態。"
+            };
+        }
+
+        order.Status = "295";
+        order.Status295Timestamp = now;
+        order.Status295User = operatorLabel;
+        order.CurrentStatusDate = now;
+        order.CurrentStatusUser = operatorLabel;
+        order.ModificationTimestamp = now;
+        order.ModifiedBy = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將維修單 {OrderNo} 標記為終止。", operatorLabel, order.OrderNo);
+
+        return new MaintenanceOrderStatusChangeResponse
+        {
+            OrderUid = order.OrderUid,
+            OrderNo = order.OrderNo,
+            Status = order.Status,
+            StatusTime = order.Status295Timestamp,
+            Message = "維修單已更新為終止。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -297,46 +714,442 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 將維修單實體轉為詳細資料回應。
+    /// 將維修單實體與估價詳情整併成統一輸出格式。
     /// </summary>
-    private static MaintenanceOrderDetailResponse MapToDetail(Order order)
+    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail)
     {
         var quotation = order.Quatation;
-        var storeName = quotation?.StoreNavigation?.StoreName;
-        var estimatorName = quotation?.TechnicianNavigation?.TechnicianName
-            ?? NormalizeOptionalText(quotation?.UserName)
-            ?? quotation?.CurrentStatusUser;
+        var storeInfo = BuildStoreInfo(order, quotationDetail?.Store);
+        var carInfo = BuildCarInfo(order, quotationDetail?.Car);
+        var customerInfo = BuildCustomerInfo(order, quotationDetail?.Customer);
+        var damages = CloneDamageSummaries(quotationDetail?.Damages);
+        var carBody = CloneCarBodyConfirmation(quotationDetail?.CarBodyConfirmation);
+        var maintenance = BuildMaintenanceDetail(order, quotationDetail?.Maintenance);
+        var amountInfo = BuildAmountInfo(order);
+        var statusHistory = BuildStatusHistory(order);
 
         return new MaintenanceOrderDetailResponse
         {
             OrderUid = order.OrderUid,
             OrderNo = order.OrderNo,
-            QuotationUid = quotation?.QuotationUid,
-            QuotationNo = quotation?.QuotationNo,
-            Status = order.Status,
-            FixType = order.FixType,
-            CreatedAt = order.CreationTimestamp,
-            UpdatedAt = order.ModificationTimestamp,
-            CreatorName = NormalizeOptionalText(order.UserName),
-            StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
-            EstimatorName = NormalizeOptionalText(estimatorName),
-            CustomerName = order.Name,
-            CustomerPhone = order.Phone,
-            CarPlate = order.CarNo,
-            CarBrand = order.Brand,
-            CarModel = order.Model,
-            CarColor = order.Color,
-            BookDate = order.BookDate,
-            WorkDate = order.WorkDate,
-            Remark = order.Remark,
+            QuotationUid = quotationDetail?.QuotationUid ?? quotation?.QuotationUid,
+            QuotationNo = quotationDetail?.QuotationNo ?? quotation?.QuotationNo,
+            Status = NormalizeOptionalText(order.Status) ?? quotationDetail?.Status,
+            CreatedAt = order.CreationTimestamp ?? quotationDetail?.CreatedAt,
+            UpdatedAt = order.ModificationTimestamp ?? quotationDetail?.UpdatedAt ?? order.CreationTimestamp,
+            Store = storeInfo,
+            Car = carInfo,
+            Customer = customerInfo,
+            Damages = damages,
+            CarBodyConfirmation = carBody,
+            Maintenance = maintenance,
+            Amounts = amountInfo,
+            StatusHistory = statusHistory,
+            CurrentStatusUser = statusHistory.CurrentStatusUser
+        };
+    }
+
+    /// <summary>
+    /// 組裝店鋪資訊，優先使用維修單最新資料，若缺少則回退估價單內容。
+    /// </summary>
+    private static QuotationStoreInfo BuildStoreInfo(Order order, QuotationStoreInfo? quotationStore)
+    {
+        var quotation = order.Quatation;
+        var normalizedStoreName = NormalizeOptionalText(quotation?.StoreNavigation?.StoreName)
+            ?? NormalizeOptionalText(order.StoreUid)
+            ?? quotationStore?.StoreName;
+
+        var reservationDate = ParseOptionalDate(order.BookDate)
+            ?? quotation?.BookDate?.ToDateTime(TimeOnly.MinValue)
+            ?? quotationStore?.ReservationDate;
+
+        var repairDate = ParseOptionalDate(order.WorkDate)
+            ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
+            ?? quotationStore?.RepairDate;
+
+        return new QuotationStoreInfo
+        {
+            StoreUid = NormalizeOptionalText(order.StoreUid)
+                ?? NormalizeOptionalText(quotation?.StoreUid)
+                ?? quotationStore?.StoreUid,
+            UserUid = NormalizeOptionalText(order.UserUid)
+                ?? NormalizeOptionalText(quotation?.UserUid)
+                ?? quotationStore?.UserUid,
+            StoreName = normalizedStoreName,
+            EstimatorName = NormalizeOptionalText(quotation?.TechnicianNavigation?.TechnicianName)
+                ?? NormalizeOptionalText(quotation?.UserName)
+                ?? quotationStore?.EstimatorName,
+            CreatorName = NormalizeOptionalText(order.UserName)
+                ?? NormalizeOptionalText(quotation?.CreatedBy)
+                ?? quotationStore?.CreatorName,
+            TechnicianUid = NormalizeOptionalText(quotation?.TechnicianUid) ?? quotationStore?.TechnicianUid,
+            CreatedDate = order.CreationTimestamp
+                ?? quotation?.CreationTimestamp
+                ?? quotationStore?.CreatedDate,
+            ReservationDate = reservationDate,
+            Source = NormalizeOptionalText(order.Source)
+                ?? NormalizeOptionalText(quotation?.Source)
+                ?? quotationStore?.Source,
+            RepairDate = repairDate
+        };
+    }
+
+    /// <summary>
+    /// 整理車輛資訊，保留維修單上的即時資料並補上估價單識別碼。
+    /// </summary>
+    private static QuotationCarInfo BuildCarInfo(Order order, QuotationCarInfo? quotationCar)
+    {
+        var quotation = order.Quatation;
+
+        return new QuotationCarInfo
+        {
+            CarUid = NormalizeOptionalText(order.CarUid)
+                ?? NormalizeOptionalText(quotation?.CarUid)
+                ?? quotationCar?.CarUid,
+            LicensePlate = NormalizeOptionalText(order.CarNo)
+                ?? NormalizeOptionalText(quotation?.CarNo)
+                ?? quotationCar?.LicensePlate,
+            Brand = NormalizeOptionalText(order.Brand)
+                ?? NormalizeOptionalText(quotation?.Brand)
+                ?? quotationCar?.Brand,
+            Model = NormalizeOptionalText(order.Model)
+                ?? NormalizeOptionalText(quotation?.Model)
+                ?? quotationCar?.Model,
+            BrandUid = NormalizeOptionalText(quotation?.BrandUid) ?? quotationCar?.BrandUid,
+            ModelUid = NormalizeOptionalText(quotation?.ModelUid) ?? quotationCar?.ModelUid,
+            Color = NormalizeOptionalText(order.Color)
+                ?? NormalizeOptionalText(quotation?.Color)
+                ?? quotationCar?.Color,
+            Remark = NormalizeOptionalText(order.CarRemark)
+                ?? NormalizeOptionalText(quotation?.CarRemark)
+                ?? quotationCar?.Remark
+        };
+    }
+
+    /// <summary>
+    /// 整理顧客資訊，維修單若有更新則優先採用。
+    /// </summary>
+    private static QuotationCustomerInfo BuildCustomerInfo(Order order, QuotationCustomerInfo? quotationCustomer)
+    {
+        var quotation = order.Quatation;
+
+        return new QuotationCustomerInfo
+        {
+            CustomerUid = NormalizeOptionalText(order.CustomerUid)
+                ?? NormalizeOptionalText(quotation?.CustomerUid)
+                ?? quotationCustomer?.CustomerUid,
+            Name = NormalizeOptionalText(order.Name)
+                ?? NormalizeOptionalText(quotation?.Name)
+                ?? quotationCustomer?.Name,
+            Phone = NormalizeOptionalText(order.Phone)
+                ?? NormalizeOptionalText(quotation?.Phone)
+                ?? quotationCustomer?.Phone,
+            Gender = NormalizeOptionalText(order.Gender)
+                ?? NormalizeOptionalText(quotation?.Gender)
+                ?? quotationCustomer?.Gender,
+            CustomerType = NormalizeOptionalText(order.CustomerType)
+                ?? NormalizeOptionalText(quotation?.CustomerType)
+                ?? quotationCustomer?.CustomerType,
+            County = NormalizeOptionalText(order.County)
+                ?? NormalizeOptionalText(quotation?.County)
+                ?? quotationCustomer?.County,
+            Township = NormalizeOptionalText(order.Township)
+                ?? NormalizeOptionalText(quotation?.Township)
+                ?? quotationCustomer?.Township,
+            Reason = NormalizeOptionalText(order.Reason)
+                ?? NormalizeOptionalText(quotation?.Reason)
+                ?? quotationCustomer?.Reason,
+            Source = NormalizeOptionalText(order.Source)
+                ?? NormalizeOptionalText(quotation?.Source)
+                ?? quotationCustomer?.Source,
+            Remark = NormalizeOptionalText(order.ConnectRemark)
+                ?? NormalizeOptionalText(quotation?.ConnectRemark)
+                ?? quotationCustomer?.Remark
+        };
+    }
+
+    /// <summary>
+    /// 複製估價單的傷痕摘要，確保回傳資料可安全修改。
+    /// </summary>
+    private static List<QuotationDamageSummary> CloneDamageSummaries(List<QuotationDamageSummary>? damages)
+    {
+        if (damages is null || damages.Count == 0)
+        {
+            return new List<QuotationDamageSummary>();
+        }
+
+        var clones = new List<QuotationDamageSummary>(damages.Count);
+        foreach (var damage in damages)
+        {
+            clones.Add(new QuotationDamageSummary
+            {
+                Photos = damage.Photos,
+                Position = damage.Position,
+                DentStatus = damage.DentStatus,
+                Description = damage.Description,
+                EstimatedAmount = damage.EstimatedAmount
+            });
+        }
+
+        return clones;
+    }
+
+    /// <summary>
+    /// 複製車體確認單資料，避免直接回傳內部參考。
+    /// </summary>
+    private static QuotationCarBodyConfirmationResponse? CloneCarBodyConfirmation(QuotationCarBodyConfirmationResponse? carBody)
+    {
+        if (carBody is null)
+        {
+            return null;
+        }
+
+        var markers = carBody.DamageMarkers?.Select(marker => new QuotationCarBodyDamageMarker
+        {
+            X = marker.X,
+            Y = marker.Y,
+            HasDent = marker.HasDent,
+            HasScratch = marker.HasScratch,
+            HasPaintPeel = marker.HasPaintPeel,
+            Remark = marker.Remark
+        }).ToList() ?? new List<QuotationCarBodyDamageMarker>();
+
+        return new QuotationCarBodyConfirmationResponse
+        {
+            DamageMarkers = markers
+        };
+    }
+
+    /// <summary>
+    /// 建立維修設定資訊，將維修單最新備註與折扣同步回傳。
+    /// </summary>
+    private static QuotationMaintenanceDetail BuildMaintenanceDetail(Order order, QuotationMaintenanceDetail? quotationMaintenance)
+    {
+        var maintenance = quotationMaintenance is null
+            ? new QuotationMaintenanceDetail()
+            : new QuotationMaintenanceDetail
+            {
+                FixTypeUid = quotationMaintenance.FixTypeUid,
+                ReserveCar = quotationMaintenance.ReserveCar,
+                ApplyCoating = quotationMaintenance.ApplyCoating,
+                ApplyWrapping = quotationMaintenance.ApplyWrapping,
+                HasRepainted = quotationMaintenance.HasRepainted,
+                NeedToolEvaluation = quotationMaintenance.NeedToolEvaluation,
+                OtherFee = quotationMaintenance.OtherFee,
+                EstimatedRepairDays = quotationMaintenance.EstimatedRepairDays,
+                EstimatedRepairHours = quotationMaintenance.EstimatedRepairHours,
+                EstimatedRestorationPercentage = quotationMaintenance.EstimatedRestorationPercentage,
+                SuggestedPaintReason = quotationMaintenance.SuggestedPaintReason,
+                UnrepairableReason = quotationMaintenance.UnrepairableReason,
+                RoundingDiscount = quotationMaintenance.RoundingDiscount,
+                PercentageDiscount = quotationMaintenance.PercentageDiscount,
+                DiscountReason = quotationMaintenance.DiscountReason,
+                Remark = quotationMaintenance.Remark
+            };
+
+        var reserveCar = ParseBooleanFlag(order.CarReserved);
+        if (reserveCar.HasValue)
+        {
+            maintenance.ReserveCar = reserveCar;
+        }
+
+        // 優先取出維修單儲存的純文字備註，確保回傳資料直接對應 plainRemark。
+        var remark = NormalizeOptionalText(order.Content);
+        if (remark is null)
+        {
+            // 若缺少 Content 資料則回退解析原始 Remark，確保仍可取得純文字內容。
+            remark = NormalizeOptionalText(ExtractPlainRemark(order.Remark));
+        }
+
+        if (remark is not null)
+        {
+            maintenance.Remark = remark;
+        }
+
+        if (order.Discount.HasValue)
+        {
+            maintenance.RoundingDiscount = order.Discount;
+        }
+
+        if (order.DiscountPercent.HasValue)
+        {
+            maintenance.PercentageDiscount = order.DiscountPercent;
+        }
+
+        var discountReason = NormalizeOptionalText(order.DiscountReason);
+        if (discountReason is not null)
+        {
+            maintenance.DiscountReason = discountReason;
+        }
+
+        return maintenance;
+    }
+
+    /// <summary>
+    /// 建立維修單金額資訊，保留估價、折扣與應付欄位，並沿用估價單的資料結構。
+    /// </summary>
+    private static QuotationAmountInfo BuildAmountInfo(Order order)
+    {
+        return new QuotationAmountInfo
+        {
             Valuation = order.Valuation,
             Discount = order.Discount,
-            Amount = order.Amount,
+            DiscountPercent = order.DiscountPercent,
+            Amount = order.Amount
+        };
+    }
+
+    /// <summary>
+    /// 建立維修狀態歷程資訊，統一整理操作人與時間。
+    /// </summary>
+    private static MaintenanceOrderStatusHistory BuildStatusHistory(Order order)
+    {
+        return new MaintenanceOrderStatusHistory
+        {
             Status210Date = order.Status210Date,
+            Status210User = NormalizeOptionalText(order.Status210User),
             Status220Date = order.Status220Date,
+            Status220User = NormalizeOptionalText(order.Status220User),
             Status290Date = order.Status290Date,
+            Status290User = NormalizeOptionalText(order.Status290User),
             Status295Date = order.Status295Timestamp,
-            CurrentStatusUser = order.CurrentStatusUser
+            Status295User = NormalizeOptionalText(order.Status295User),
+            CurrentStatusUser = NormalizeOptionalText(order.CurrentStatusUser)
+        };
+    }
+
+    /// <summary>
+    /// 由維修單現行狀態往回尋找上一個有效的狀態碼。
+    /// </summary>
+    private static string? ResolvePreviousOrderStatus(Order order, string currentStatus)
+    {
+        var history = new List<(string Code, DateTime? Timestamp)>
+        {
+            ("210", order.Status210Date),
+            ("220", order.Status220Date),
+            ("290", order.Status290Date),
+            ("295", order.Status295Timestamp)
+        };
+
+        var currentIndex = history.FindIndex(item => string.Equals(item.Code, currentStatus, StringComparison.OrdinalIgnoreCase));
+        if (currentIndex <= 0)
+        {
+            return null;
+        }
+
+        for (var i = currentIndex - 1; i >= 0; i--)
+        {
+            var (code, timestamp) = history[i];
+            if (timestamp.HasValue || string.Equals(code, "210", StringComparison.OrdinalIgnoreCase))
+            {
+                return code;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 將維修單狀態回復至指定代碼並清除較晚的狀態紀錄。
+    /// </summary>
+    private static void ApplyOrderStatusReversion(Order order, string targetStatus, string operatorLabel, DateTime timestamp)
+    {
+        order.Status = targetStatus;
+        order.ModificationTimestamp = timestamp;
+        order.ModifiedBy = operatorLabel;
+        order.CurrentStatusDate = timestamp;
+        order.CurrentStatusUser = operatorLabel;
+
+        switch (targetStatus)
+        {
+            case "210":
+                order.Status210Date ??= timestamp;
+                order.Status210User ??= operatorLabel;
+                break;
+            case "220":
+                order.Status220Date ??= timestamp;
+                order.Status220User ??= operatorLabel;
+                break;
+            case "290":
+                order.Status290Date ??= timestamp;
+                order.Status290User ??= operatorLabel;
+                break;
+        }
+
+        var statusOrder = new List<string> { "210", "220", "290", "295" };
+        var targetIndex = statusOrder.FindIndex(code => string.Equals(code, targetStatus, StringComparison.OrdinalIgnoreCase));
+
+        for (var i = targetIndex + 1; i < statusOrder.Count; i++)
+        {
+            ClearOrderStatusRecord(order, statusOrder[i]);
+        }
+    }
+
+    /// <summary>
+    /// 將指定狀態的時間與操作人清空，避免保留已回溯的紀錄。
+    /// </summary>
+    private static void ClearOrderStatusRecord(Order order, string statusCode)
+    {
+        switch (statusCode)
+        {
+            case "220":
+                order.Status220Date = null;
+                order.Status220User = null;
+                break;
+            case "290":
+                order.Status290Date = null;
+                order.Status290User = null;
+                break;
+            case "295":
+                order.Status295Timestamp = null;
+                order.Status295User = null;
+                break;
+        }
+    }
+
+    /// <summary>
+    /// 依狀態碼回傳對應的時間戳記，供回傳訊息使用。
+    /// </summary>
+    private static DateTime? GetOrderStatusTimestamp(Order order, string statusCode)
+    {
+        return statusCode switch
+        {
+            "210" => order.Status210Date,
+            "220" => order.Status220Date,
+            "290" => order.Status290Date,
+            "295" => order.Status295Timestamp,
+            _ => order.CurrentStatusDate
+        };
+    }
+
+    /// <summary>
+    /// 嘗試將文字日期轉換為 DateTime，若格式不符則回傳 null。
+    /// </summary>
+    private static DateTime? ParseOptionalDate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTime.TryParse(value, out var parsed) ? parsed : null;
+    }
+
+    /// <summary>
+    /// 將舊系統常見的文字旗標轉換為布林值。
+    /// </summary>
+    private static bool? ParseBooleanFlag(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "y" or "yes" or "true" or "1" or "是" or "有" => true,
+            "n" or "no" or "false" or "0" or "否" or "無" => false,
+            _ => null
         };
     }
 
@@ -377,9 +1190,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 由歷史狀態時間判斷上一個狀態碼。
+    /// 由估價單歷史狀態時間判斷上一個狀態碼。
     /// </summary>
-    private static string? ResolvePreviousStatus(Quatation quotation)
+    private static string? ResolvePreviousQuotationStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
         var history = new List<(string Code, DateTime? Timestamp)>
@@ -425,6 +1238,141 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         quotation.RejectReason = null;
         quotation.Status199Timestamp = null;
         quotation.Status199User = null;
+    }
+
+    /// <summary>
+    /// 解析 remark，若為 JSON 結構則取出 PlainRemark，否則回傳原始內容。
+    /// </summary>
+    private static string? ExtractPlainRemark(string? remark)
+    {
+        if (string.IsNullOrWhiteSpace(remark))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(remark);
+            if (document.RootElement.TryGetProperty("plainRemark", out var plainElement) && plainElement.ValueKind == JsonValueKind.String)
+            {
+                return NormalizeOptionalText(plainElement.GetString());
+            }
+        }
+        catch (JsonException)
+        {
+            // remark 為純文字格式時會進入此區塊，直接回傳原字串即可。
+        }
+
+        return remark;
+    }
+
+    /// <summary>
+    /// 計算維修單應收金額，避免折扣造成負數。
+    /// </summary>
+    private static decimal? CalculateOrderAmount(decimal? valuation, decimal? discount)
+    {
+        if (!valuation.HasValue)
+        {
+            return null;
+        }
+
+        var amount = valuation.Value - (discount ?? 0m);
+        return amount < 0 ? 0m : amount;
+    }
+
+    /// <summary>
+    /// 建立維修單唯一識別碼，統一採用 O_ 前綴。
+    /// </summary>
+    private static string BuildOrderUid()
+    {
+        return $"O_{Guid.NewGuid():N}";
+    }
+
+    /// <summary>
+    /// 依日期與序號產生維修單編號。
+    /// </summary>
+    private static string BuildOrderNo(int serial, DateTime timestamp)
+    {
+        return $"O{timestamp:yyMM}{serial:D4}";
+    }
+
+    /// <summary>
+    /// 產生下一個維修單序號，沿用每月遞增規則。
+    /// </summary>
+    private async Task<int> GenerateNextOrderSerialAsync(DateTime timestamp, CancellationToken cancellationToken)
+    {
+        var prefix = $"O{timestamp:yyMM}";
+
+        var prefixCandidates = await _dbContext.Orders
+            .AsNoTracking()
+            .Where(order => !string.IsNullOrEmpty(order.OrderNo) && EF.Functions.Like(order.OrderNo!, prefix + "%"))
+            .OrderByDescending(order => order.SerialNum)
+            .ThenByDescending(order => order.OrderNo)
+            .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
+            .Take(SerialCandidateFetchCount)
+            .ToListAsync(cancellationToken);
+
+        var maxSerial = ExtractMaxSerial(prefixCandidates, prefix);
+
+        if (maxSerial == 0)
+        {
+            var monthStart = new DateTime(timestamp.Year, timestamp.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+
+            var monthCandidates = await _dbContext.Orders
+                .AsNoTracking()
+                .Where(order => order.CreationTimestamp >= monthStart && order.CreationTimestamp < monthEnd)
+                .OrderByDescending(order => order.SerialNum)
+                .ThenByDescending(order => order.OrderNo)
+                .Select(order => new SerialCandidate(order.SerialNum, order.OrderNo))
+                .Take(SerialCandidateFetchCount)
+                .ToListAsync(cancellationToken);
+
+            maxSerial = ExtractMaxSerial(monthCandidates, prefix);
+        }
+
+        return maxSerial + 1;
+    }
+
+    /// <summary>
+    /// 從候選清單取出最大序號，必要時解析舊資料的編號。
+    /// </summary>
+    private static int ExtractMaxSerial(IEnumerable<SerialCandidate> candidates, string prefix)
+    {
+        var maxSerial = 0;
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.SerialNum is int serial && serial > maxSerial)
+            {
+                maxSerial = serial;
+            }
+
+            if (candidate.DocumentNo is string documentNo)
+            {
+                var parsedSerial = TryParseSerialFromDocumentNo(documentNo, prefix);
+                if (parsedSerial.HasValue && parsedSerial.Value > maxSerial)
+                {
+                    maxSerial = parsedSerial.Value;
+                }
+            }
+        }
+
+        return maxSerial;
+    }
+
+    /// <summary>
+    /// 嘗試由維修單編號解析序號，無法解析時回傳 null。
+    /// </summary>
+    private static int? TryParseSerialFromDocumentNo(string documentNo, string prefix)
+    {
+        if (string.IsNullOrWhiteSpace(documentNo) || !documentNo.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var serialText = documentNo[prefix.Length..];
+        return int.TryParse(serialText, out var result) ? result : null;
     }
 
     /// <summary>
@@ -492,4 +1440,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         return utcNow.AddHours(8);
     }
+
+    /// <summary>
+    /// 維修單序號候選資料結構，封裝資料表上的序號與編號欄位。
+    /// </summary>
+    private sealed record SerialCandidate(int? SerialNum, string? DocumentNo);
 }

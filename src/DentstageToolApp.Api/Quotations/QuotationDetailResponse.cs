@@ -62,6 +62,37 @@ public class QuotationDetailResponse
     /// 維修需求設定資料，提供前端回填維修選項。
     /// </summary>
     public QuotationMaintenanceDetail Maintenance { get; set; } = new();
+
+    /// <summary>
+    /// 金額資訊物件，包含估價金額、折扣與最終應付金額，方便前端統一呈現。
+    /// </summary>
+    public QuotationAmountInfo Amounts { get; set; } = new();
+}
+
+/// <summary>
+/// 估價單金額資訊，統一提供估價金額、折扣與應付金額欄位。
+/// </summary>
+public class QuotationAmountInfo
+{
+    /// <summary>
+    /// 估價金額。
+    /// </summary>
+    public decimal? Valuation { get; set; }
+
+    /// <summary>
+    /// 折扣金額。
+    /// </summary>
+    public decimal? Discount { get; set; }
+
+    /// <summary>
+    /// 折扣百分比。
+    /// </summary>
+    public decimal? DiscountPercent { get; set; }
+
+    /// <summary>
+    /// 最終應付金額。
+    /// </summary>
+    public decimal? Amount { get; set; }
 }
 
 /// <summary>

@@ -31,7 +31,7 @@
 確認維修,POST,/api/maintenance-orders/confirm,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_CONFIRM
 維修誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
 維修自動過期,OTHER,（系統自動排程，無需呼叫 API）,無外部文件（無 OperationId）
-編輯維修單,POST,（尚未提供對應 API）,尚未提供 OperationId
-續修,POST,（尚未提供對應 API）,尚未提供 OperationId
-維修完成,POST,（尚未提供對應 API）,尚未提供 OperationId
-終止維修,POST,（尚未提供對應 API）,尚未提供 OperationId
+編輯維修單,POST,/api/maintenance-orders/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_EDIT
+續修,POST,/api/maintenance-orders/continue,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_CONTINUE
+維修完成,POST,/api/maintenance-orders/complete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_COMPLETE
+終止維修,POST,/api/maintenance-orders/terminate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_TERMINATE
