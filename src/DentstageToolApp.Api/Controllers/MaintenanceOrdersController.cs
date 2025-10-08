@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.MaintenanceOrders;
 using DentstageToolApp.Api.Services.MaintenanceOrder;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -156,6 +157,167 @@ public class MaintenanceOrdersController : ControllerBase
         {
             _logger.LogError(ex, "確認維修流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "確認維修失敗");
+        }
+    }
+
+    /// <summary>
+    /// 編輯維修單資料，沿用估價單編輯的結構提交更新。
+    /// </summary>
+    [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001",
+          "quotationNo": "Q25100001",
+          "car": {
+            "carUid": "Ca_12345678-ABCD-4ABC-8123-000000000001",
+            "licensePlate": "ABC-1234",
+            "color": "珍珠白"
+          },
+          "customer": {
+            "customerUid": "Cu_12345678-ABCD-4ABC-8123-000000000001",
+            "phone": "0912345678",
+            "email": "customer@example.com"
+          },
+          "categoryRemarks": {
+            "dent": "凹痕區塊追加備註",
+            "paint": "烤漆需等待 2 日"
+          },
+          "damages": [
+            {
+              "damageUid": "D_12345678-ABCD-4ABC-8123-000000000001",
+              "remark": "調整估工金額",
+              "estimatedAmount": 3200
+            }
+          ],
+          "maintenance": {
+            "fixTypeUid": "F_12345678-ABCD-4ABC-8123-000000000001",
+            "reserveCar": true,
+            "estimatedRepairDays": 2
+          }
+        }
+        """)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateOrderAsync([FromBody] UpdateMaintenanceOrderRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            await _maintenanceOrderService.UpdateOrderAsync(request, operatorName, cancellationToken);
+            return NoContent();
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "更新維修單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "更新維修單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("更新維修單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，維修單未更新。", "更新維修單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "更新維修單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "更新維修單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 續修維修單，複製估價內容建立新的維修工單。
+    /// </summary>
+    [HttpPost("continue")]
+    [ProducesResponseType(typeof(MaintenanceOrderContinuationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceOrderContinuationResponse>> ContinueOrderAsync([FromBody] MaintenanceOrderContinueRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _maintenanceOrderService.ContinueOrderAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "續修維修單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "續修維修單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("續修維修單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，續修維修單未建立。", "續修維修單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "續修維修單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "續修維修單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 將維修單狀態更新為完成 (290)。
+    /// </summary>
+    [HttpPost("complete")]
+    [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceOrderStatusChangeResponse>> CompleteOrderAsync([FromBody] MaintenanceOrderCompleteRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _maintenanceOrderService.CompleteOrderAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "維修完成操作失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "維修完成失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("維修完成流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，維修單未更新。", "維修完成取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "維修完成流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "維修完成失敗");
+        }
+    }
+
+    /// <summary>
+    /// 將維修單狀態更新為終止 (295)。
+    /// </summary>
+    [HttpPost("terminate")]
+    [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MaintenanceOrderStatusChangeResponse>> TerminateOrderAsync([FromBody] MaintenanceOrderTerminateRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _maintenanceOrderService.TerminateOrderAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "終止維修失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "終止維修失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("終止維修流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，維修單未更新。", "終止維修取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "終止維修流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "終止維修失敗");
         }
     }
 
