@@ -38,6 +38,23 @@
     .log-card {
       margin-bottom: 12px;
     }
+    .operation-tools {
+      margin-bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .log-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+      align-items: center;
+    }
+    .result-viewer {
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -50,7 +67,7 @@
 
   <script>
     // 透過全域 Vue 物件取得 Composition API，確保純靜態頁面也能順利運行
-    const { createApp, ref, reactive, watch, onMounted } = Vue;
+    const { createApp, ref, reactive, watch, onMounted, computed } = Vue;
     const elementPlus = window.ElementPlus;
     const zhTwLocale = window.ElementPlusLocaleZhTw?.default ?? window.ElementPlusLocaleZhTw;
 
@@ -105,8 +122,65 @@
             <div class="card-spacer">
               <el-card>
                 <template #header>
-                  <span>常用操作快速帶入</span>
+                  <span>API 操作快速帶入</span>
                 </template>
+                <el-form label-width="120px" label-position="left">
+                  <el-form-item label="Swagger 定義網址">
+                    <el-input
+                      v-model="swaggerState.specUrl"
+                      @input="handleSpecUrlInput"
+                      clearable
+                      placeholder="例如：https://localhost:7249/swagger/v1/swagger.json"
+                    >
+                      <template #append>
+                        <el-button
+                          type="primary"
+                          @click="loadSwaggerOperations"
+                          :loading="swaggerState.loading"
+                        >載入 API</el-button>
+                      </template>
+                    </el-input>
+                  </el-form-item>
+                  <el-form-item label="API 列表狀態">
+                    <el-space wrap>
+                      <el-tag type="info">自動載入 {{ swaggerOperationCount }} 筆</el-tag>
+                      <el-tag type="success">當前顯示 {{ totalVisibleOperations }} 筆</el-tag>
+                      <span v-if="swaggerState.lastLoadedAt" class="request-url-preview">
+                        最近更新：{{ formatTimestamp(swaggerState.lastLoadedAt) }}
+                      </span>
+                    </el-space>
+                  </el-form-item>
+                  <el-form-item label="關鍵字篩選">
+                    <el-input
+                      v-model="operationKeyword"
+                      clearable
+                      placeholder="輸入名稱、路徑或描述關鍵字"
+                    />
+                  </el-form-item>
+                </el-form>
+                <el-alert
+                  v-if="swaggerState.error"
+                  type="error"
+                  :closable="false"
+                  show-icon
+                  title="載入 Swagger 失敗"
+                  :description="swaggerState.error"
+                  style="margin-bottom: 16px;"
+                />
+                <el-alert
+                  v-if="swaggerOperationCount === 0"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="目前僅顯示常用範本"
+                  description="若需完整 API 清單，請輸入 Swagger 定義網址後載入。"
+                  style="margin-bottom: 12px;"
+                />
+                <div class="operation-tools">
+                  <el-tag type="success">顯示 {{ totalVisibleOperations }} 筆操作</el-tag>
+                  <el-button type="info" size="small" @click="expandAllGroups">全部展開</el-button>
+                  <el-button type="info" size="small" @click="collapseAllGroups">全部收合</el-button>
+                </div>
                 <el-collapse v-model="activeOperationGroups">
                   <el-collapse-item
                     v-for="group in operationGroups"
@@ -117,17 +191,30 @@
                     <el-descriptions :column="1" border>
                       <el-descriptions-item
                         v-for="operation in group.operations"
-                        :key="operation.name"
+                        :key="operation.displayName + operation.method + operation.path"
                       >
                         <template #label>
                           <div>
-                            <strong>{{ operation.name }}</strong>
-                            <div class="request-url-preview">{{ operation.description }}</div>
+                            <strong>{{ operation.displayName }}</strong>
+                            <div class="request-url-preview">{{ operation.description || '尚未撰寫補充說明' }}</div>
                           </div>
                         </template>
                         <div class="operation-body">
                           <div class="request-url-preview">{{ operation.method }} {{ composeUrl(operation.path) }}</div>
-                          <el-button type="primary" size="small" @click="prefillOperation(operation)">帶入到自訂請求</el-button>
+                          <el-space wrap>
+                            <el-tag :type="operation.requiresAuth ? 'danger' : 'info'" effect="plain">
+                              {{ operation.requiresAuth ? '需權杖' : '免權杖' }}
+                            </el-tag>
+                            <el-button type="primary" size="small" @click="prefillOperation(operation)">帶入到自訂請求</el-button>
+                            <el-button
+                              v-if="operation.swaggerLink"
+                              type="success"
+                              size="small"
+                              :href="operation.swaggerLink"
+                              target="_blank"
+                              rel="noopener"
+                            >Swagger</el-button>
+                          </el-space>
                         </div>
                       </el-descriptions-item>
                     </el-descriptions>
@@ -207,8 +294,18 @@
                       </el-form-item>
                     </el-form>
                     <div v-if="carPlateForm.result">
-                      <h4>辨識結果</h4>
-                      <pre>{{ formatJson(carPlateForm.result) }}</pre>
+                      <div class="operation-tools" style="justify-content: space-between;">
+                        <h4 style="margin:0;">辨識結果</h4>
+                        <el-button type="primary" size="small" @click="copyContent(carPlateForm.result, '辨識結果')">複製結果</el-button>
+                      </div>
+                      <el-tabs v-model="responseViewerState.carPlate" type="card" class="result-viewer">
+                        <el-tab-pane label="格式化 JSON" name="formatted">
+                          <pre>{{ formatJson(carPlateForm.result) }}</pre>
+                        </el-tab-pane>
+                        <el-tab-pane label="原始資料" name="raw">
+                          <pre>{{ toRawText(carPlateForm.result) }}</pre>
+                        </el-tab-pane>
+                      </el-tabs>
                     </div>
                   </el-card>
                 </el-col>
@@ -226,8 +323,18 @@
                       </el-form-item>
                     </el-form>
                     <div v-if="carPlateSearchForm.result">
-                      <h4>查詢結果</h4>
-                      <pre>{{ formatJson(carPlateSearchForm.result) }}</pre>
+                      <div class="operation-tools" style="justify-content: space-between;">
+                        <h4 style="margin:0;">查詢結果</h4>
+                        <el-button type="primary" size="small" @click="copyContent(carPlateSearchForm.result, '查詢結果')">複製結果</el-button>
+                      </div>
+                      <el-tabs v-model="responseViewerState.carPlateSearch" type="card" class="result-viewer">
+                        <el-tab-pane label="格式化 JSON" name="formatted">
+                          <pre>{{ formatJson(carPlateSearchForm.result) }}</pre>
+                        </el-tab-pane>
+                        <el-tab-pane label="原始資料" name="raw">
+                          <pre>{{ toRawText(carPlateSearchForm.result) }}</pre>
+                        </el-tab-pane>
+                      </el-tabs>
                     </div>
                   </el-card>
                 </el-col>
@@ -258,8 +365,18 @@
                   </el-form-item>
                 </el-form>
                 <div v-if="photoUploadForm.result">
-                  <h4>上傳回應</h4>
-                  <pre>{{ formatJson(photoUploadForm.result) }}</pre>
+                  <div class="operation-tools" style="justify-content: space-between;">
+                    <h4 style="margin:0;">上傳回應</h4>
+                    <el-button type="primary" size="small" @click="copyContent(photoUploadForm.result, '上傳回應')">複製結果</el-button>
+                  </div>
+                  <el-tabs v-model="responseViewerState.photoUpload" type="card" class="result-viewer">
+                    <el-tab-pane label="格式化 JSON" name="formatted">
+                      <pre>{{ formatJson(photoUploadForm.result) }}</pre>
+                    </el-tab-pane>
+                    <el-tab-pane label="原始資料" name="raw">
+                      <pre>{{ toRawText(photoUploadForm.result) }}</pre>
+                    </el-tab-pane>
+                  </el-tabs>
                 </div>
               </el-card>
             </div>
@@ -282,26 +399,29 @@
                       :color="log.isError ? '#F56C6C' : '#67C23A'"
                     >
                       <el-card class="log-card" shadow="hover">
-                        <h4>{{ log.title }}</h4>
-                        <p style="font-size:12px;color:#909399;">{{ log.request.method }} {{ log.request.url }}</p>
-                        <div>
-                          <strong>請求標頭：</strong>
-                          <pre>{{ formatJson(log.request.headers) }}</pre>
+                        <div class="log-actions">
+                          <h4 style="margin:0;">{{ log.title }}</h4>
+                          <el-tag :type="log.isError ? 'danger' : 'success'" effect="dark">{{ log.response.status }}</el-tag>
+                          <el-button type="primary" size="small" @click="copyContent(log.request, '請求資訊')">複製請求</el-button>
+                          <el-button type="success" size="small" @click="copyContent(log.response, '回應資訊')">複製回應</el-button>
                         </div>
-                        <div v-if="log.request.body">
-                          <strong>請求內容：</strong>
-                          <pre>{{ formatJson(log.request.body) }}</pre>
-                        </div>
-                        <div>
-                          <strong>回應狀態：</strong> {{ log.response.status }}
-                        </div>
-                        <div>
-                          <strong>回應標頭：</strong>
-                          <pre>{{ formatJson(log.response.headers) }}</pre>
-                        </div>
-                        <div>
-                          <strong>回應內容：</strong>
-                          <pre>{{ formatJson(log.response.body) }}</pre>
+                        <p style="font-size:12px;color:#909399; margin-bottom:8px;">{{ log.request.method }} {{ log.request.url }}</p>
+                        <el-descriptions :column="1" border size="small">
+                          <el-descriptions-item label="請求標頭">
+                            <pre>{{ formatJson(log.request.headers) }}</pre>
+                          </el-descriptions-item>
+                          <el-descriptions-item v-if="log.request.body" label="請求內容">
+                            <pre>{{ formatJson(log.request.body) }}</pre>
+                          </el-descriptions-item>
+                          <el-descriptions-item label="回應標頭">
+                            <pre>{{ formatJson(log.response.headers) }}</pre>
+                          </el-descriptions-item>
+                          <el-descriptions-item label="回應內容">
+                            <pre>{{ formatJson(log.response.body) }}</pre>
+                          </el-descriptions-item>
+                        </el-descriptions>
+                        <div v-if="log.errorMessage" class="request-url-preview" style="margin-top:8px;color:#F56C6C;">
+                          錯誤訊息：{{ log.errorMessage }}
                         </div>
                       </el-card>
                     </el-timeline-item>
@@ -353,7 +473,78 @@
         });
 
         const logs = ref([]);
-        const activeOperationGroups = ref(['驗證流程']);
+        const activeOperationGroups = ref([]);
+
+        // ---------- Swagger 與操作列表狀態 ----------
+        const dynamicOperationGroups = ref([]);
+        const operationKeyword = ref('');
+        const swaggerState = reactive({
+          specUrl: '',
+          loading: false,
+          lastLoadedAt: null,
+          error: ''
+        });
+        const manualSpecUrl = ref(false);
+        const hasAutoLoadedSwagger = ref(false);
+
+        // ---------- 結果檢視狀態 ----------
+        const responseViewerState = reactive({
+          carPlate: 'formatted',
+          carPlateSearch: 'formatted',
+          photoUpload: 'formatted'
+        });
+
+        // 依據 API 基底網址推導 Swagger 定義位置，提供使用者快速載入。
+        const buildDefaultSpecUrl = (apiBase) => {
+          if (!apiBase) {
+            return '';
+          }
+          try {
+            const url = new URL(apiBase, window.location.origin);
+            const segments = url.pathname
+              .split('/')
+              .filter((segment) => segment);
+            if (segments.length && segments[segments.length - 1].toLowerCase() === 'api') {
+              segments.pop();
+            }
+            segments.push('swagger', 'v1', 'swagger.json');
+            url.pathname = `/${segments.join('/')}`;
+            url.search = '';
+            url.hash = '';
+            return url.toString();
+          } catch (error) {
+            console.warn('無法根據基底網址推導 Swagger 位置：', error);
+            return '';
+          }
+        };
+
+        // 使用者手動輸入 Swagger 網址時標記狀態，避免後續自動覆寫設定。
+        const handleSpecUrlInput = (value) => {
+          manualSpecUrl.value = true;
+          swaggerState.specUrl = value;
+        };
+
+        // 監聽 API 基底網址變化，自動重新推導 Swagger 定義路徑。
+        watch(
+          () => baseUrl.value,
+          (value) => {
+            if (!manualSpecUrl.value) {
+              swaggerState.specUrl = buildDefaultSpecUrl(value);
+            }
+          },
+          { immediate: true }
+        );
+
+        // 初次自動載入 Swagger，確保進入頁面即可取得完整 API 列表。
+        watch(
+          () => swaggerState.specUrl,
+          (value) => {
+            if (value && !manualSpecUrl.value && !hasAutoLoadedSwagger.value) {
+              hasAutoLoadedSwagger.value = true;
+              loadSwaggerOperations();
+            }
+          }
+        );
 
         const composeUrl = (path) => {
           const normalizedBase = baseUrl.value.replace(/\/$/, '');
@@ -373,6 +564,163 @@
           } catch (error) {
             return String(value);
           }
+        };
+
+        // ---------- 提示訊息工具 ----------
+        const showError = (message) => {
+          // 使用全域 Element Plus 訊息元件呈現錯誤，讓使用者快速了解狀況
+          elementPlus.ElMessage.error(message);
+        };
+
+        const showSuccess = (message) => {
+          // 使用全域 Element Plus 訊息元件呈現成功提示，增進操作體驗
+          elementPlus.ElMessage.success(message);
+        };
+
+        // 將回傳資料轉為原始字串，協助使用者檢查未格式化的內容。
+        const toRawText = (value) => {
+          if (value === null || value === undefined) {
+            return '';
+          }
+          if (typeof value === 'string') {
+            return value;
+          }
+          try {
+            return JSON.stringify(value);
+          } catch (error) {
+            return String(value);
+          }
+        };
+
+        // 輔助複製任意內容到剪貼簿，並以訊息提示複製結果。
+        const copyContent = async (value, label = '內容') => {
+          try {
+            const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+            if (!navigator.clipboard) {
+              throw new Error('瀏覽器不支援自動複製，請手動複製內容。');
+            }
+            await navigator.clipboard.writeText(text);
+            showSuccess(`${label}已複製。`);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '複製失敗，請手動複製內容。';
+            showError(message);
+          }
+        };
+
+        // 判斷 Swagger security 是否需要權杖，以便提示使用者。
+        const hasSecurityRequirement = (security) => {
+          if (!Array.isArray(security)) {
+            return false;
+          }
+          return security.some((item) => item && Object.keys(item).length > 0);
+        };
+
+        const determineRequiresAuth = (operation, spec) => {
+          if (Array.isArray(operation?.security)) {
+            if (operation.security.length === 0) {
+              return false;
+            }
+            return hasSecurityRequirement(operation.security);
+          }
+          if (Array.isArray(spec?.security)) {
+            return hasSecurityRequirement(spec.security);
+          }
+          return false;
+        };
+
+        // 從 Swagger 定義擷取 requestBody 範例，讓測試流程可快速帶入。
+        const extractRequestExample = (operation) => {
+          const requestBody = operation?.requestBody;
+          if (!requestBody || !requestBody.content) {
+            return null;
+          }
+          const content = requestBody.content;
+          const jsonMedia = content['application/json']
+            ?? content['application/*+json']
+            ?? Object.values(content)[0];
+          if (!jsonMedia) {
+            return null;
+          }
+          if (jsonMedia.example) {
+            return jsonMedia.example;
+          }
+          if (jsonMedia.examples) {
+            const firstExample = Object.values(jsonMedia.examples).find((item) => item && item.value !== undefined);
+            if (firstExample && firstExample.value !== undefined) {
+              return firstExample.value;
+            }
+          }
+          if (jsonMedia.schema && jsonMedia.schema.example !== undefined) {
+            return jsonMedia.schema.example;
+          }
+          return null;
+        };
+
+        // 依據 Swagger 定義組合出官方 UI 測試連結，方便切換至 Swagger 試用。
+        const buildSwaggerUiLink = (specUrl, tag, operationId) => {
+          if (!specUrl || !tag || !operationId) {
+            return '';
+          }
+          try {
+            const url = new URL(specUrl, window.location.origin);
+            const pathSegments = url.pathname.split('/');
+            const swaggerIndex = pathSegments.findIndex((segment) => segment.toLowerCase() === 'swagger');
+            if (swaggerIndex === -1) {
+              return '';
+            }
+            url.pathname = `${pathSegments.slice(0, swaggerIndex + 1).join('/')}/index.html`;
+            url.search = '';
+            url.hash = `#/${encodeURIComponent(tag)}/${encodeURIComponent(operationId)}`;
+            return url.toString();
+          } catch (error) {
+            console.warn('建立 Swagger UI 連結時發生錯誤：', error);
+            return '';
+          }
+        };
+
+        // 將 Swagger 解析為群組結構，供操作列表直接渲染。
+        const createDynamicGroups = (spec, specUrl) => {
+          const paths = spec?.paths ?? {};
+          const operations = [];
+          Object.entries(paths).forEach(([pathKey, methods]) => {
+            Object.entries(methods).forEach(([methodKey, operation]) => {
+              if (!operation || typeof operation !== 'object') {
+                return;
+              }
+              const method = methodKey.toUpperCase();
+              const tags = Array.isArray(operation.tags) && operation.tags.length ? operation.tags : ['未分組'];
+              const operationId = operation.operationId?.trim() || `${method}_${pathKey.replace(/[^a-zA-Z0-9]/g, '_')}`;
+              const displayName = operation.summary?.trim() || `${method} ${pathKey}`;
+              operations.push({
+                displayName,
+                name: displayName,
+                method,
+                path: pathKey,
+                description: operation.description || '',
+                requiresAuth: determineRequiresAuth(operation, spec),
+                template: extractRequestExample(operation),
+                tags,
+                swaggerLink: buildSwaggerUiLink(specUrl, tags[0], operationId)
+              });
+            });
+          });
+
+          const groupMap = new Map();
+          operations.forEach((operation) => {
+            operation.tags.forEach((tag) => {
+              if (!groupMap.has(tag)) {
+                groupMap.set(tag, []);
+              }
+              groupMap.get(tag).push(operation);
+            });
+          });
+
+          return Array.from(groupMap.entries())
+            .map(([tag, ops]) => ({
+              name: `Swagger｜${tag}`,
+              operations: ops
+            }))
+            .sort((a, b) => a.name.localeCompare(b.name));
         };
 
         const appendLog = (entry) => {
@@ -418,6 +766,7 @@
           let response;
           let responseText = '';
           let responseData = null;
+          let responseSummary = null;
           let isJson = false;
 
           try {
@@ -437,20 +786,11 @@
               }
             }
 
-            appendLog({
-              title: description ?? '自訂請求',
-              request: {
-                url,
-                method,
-                headers: Object.fromEntries(headers.entries()),
-                body: requestSummary ?? null
-              },
-              response: {
-                status: `${response.status} ${response.statusText}`,
-                headers: Object.fromEntries(response.headers.entries()),
-                body: responseData
-              }
-            });
+            responseSummary = {
+              status: `${response.status} ${response.statusText}`,
+              headers: Object.fromEntries(response.headers.entries()),
+              body: responseData
+            };
 
             if (!response.ok) {
               const errorMessage = isJson && responseData?.detail
@@ -459,8 +799,6 @@
               throw new Error(errorMessage);
             }
 
-            return responseData;
-          } catch (error) {
             appendLog({
               title: description ?? '自訂請求',
               request: {
@@ -469,25 +807,32 @@
                 headers: Object.fromEntries(headers.entries()),
                 body: requestSummary ?? null
               },
-              response: {
-                status: response ? `${response.status} ${response.statusText}` : '未送達',
-                headers: response ? Object.fromEntries(response.headers.entries()) : {},
-                body: responseText || error.message
+              response: responseSummary,
+              isError: false
+            });
+
+            return responseData;
+          } catch (error) {
+            const fallbackResponse = responseSummary ?? {
+              status: response ? `${response.status} ${response.statusText}` : '未送達',
+              headers: response ? Object.fromEntries(response.headers.entries()) : {},
+              body: responseText || (error instanceof Error ? error.message : String(error))
+            };
+
+            appendLog({
+              title: description ?? '自訂請求',
+              request: {
+                url,
+                method,
+                headers: Object.fromEntries(headers.entries()),
+                body: requestSummary ?? null
               },
-              isError: true
+              response: fallbackResponse,
+              isError: true,
+              errorMessage: error instanceof Error ? error.message : '未知錯誤'
             });
             throw error;
           }
-        };
-
-        const showError = (message) => {
-          // 使用全域 Element Plus 訊息元件呈現錯誤，讓使用者快速了解狀況
-          elementPlus.ElMessage.error(message);
-        };
-
-        const showSuccess = (message) => {
-          // 使用全域 Element Plus 訊息元件呈現成功提示，增進操作體驗
-          elementPlus.ElMessage.success(message);
         };
 
         const prefillOperation = (operation) => {
@@ -496,8 +841,14 @@
           requestForm.useAuth = operation.requiresAuth ?? true;
           if (operation.method === 'GET') {
             requestForm.body = '';
+            return;
+          }
+          if (operation.template) {
+            requestForm.body = typeof operation.template === 'string'
+              ? operation.template
+              : JSON.stringify(operation.template, null, 2);
           } else {
-            requestForm.body = operation.template ? JSON.stringify(operation.template, null, 2) : '';
+            requestForm.body = '';
           }
         };
 
@@ -738,9 +1089,9 @@
           }).format(timestamp);
         };
 
-        const operationGroups = [
+        const staticOperationGroups = [
           {
-            name: '驗證流程',
+            name: '常用｜驗證流程',
             operations: [
               {
                 name: '登入取得權杖',
@@ -869,7 +1220,7 @@
             ]
           },
           {
-            name: '估價與維修',
+            name: '常用｜估價與維修',
             operations: [
               {
                 name: '查詢估價單列表 (POST)',
@@ -1006,7 +1357,7 @@
             ]
           },
           {
-            name: '資源查詢',
+            name: '常用｜資源查詢',
             operations: [
               {
                 name: '健康檢查',
@@ -1032,7 +1383,7 @@
             ]
           },
           {
-            name: '系統維運',
+            name: '常用｜系統維運',
             operations: [
               {
                 name: '建立後台帳號與裝置',
@@ -1051,6 +1402,107 @@
             ]
           }
         ];
+
+        // 將操作資訊統一格式，確保後續篩選時欄位完整。
+        const normalizeGroupOperations = (group) => ({
+          name: group.name,
+          operations: group.operations.map((operation) => ({
+            ...operation,
+            displayName: operation.displayName || operation.name || `${operation.method} ${operation.path}`,
+            description: operation.description || '',
+            requiresAuth: operation.requiresAuth ?? true,
+            swaggerLink: operation.swaggerLink || ''
+          }))
+        });
+
+        // 依關鍵字篩選群組內的操作，降低大量 API 時的搜尋成本。
+        const filterGroupsByKeyword = (groups, keyword) => {
+          if (!keyword) {
+            return groups;
+          }
+          const lowered = keyword.toLowerCase();
+          return groups
+            .map((group) => ({
+              name: group.name,
+              operations: group.operations.filter((operation) => {
+                const combined = [operation.displayName, operation.path, operation.description]
+                  .filter(Boolean)
+                  .join(' ')
+                  .toLowerCase();
+                return combined.includes(lowered);
+              })
+            }))
+            .filter((group) => group.operations.length > 0);
+        };
+
+        const operationGroups = computed(() => {
+          const keyword = operationKeyword.value.trim();
+          const normalizedDynamic = dynamicOperationGroups.value.map(normalizeGroupOperations);
+          const normalizedStatic = staticOperationGroups.map(normalizeGroupOperations);
+          const combined = [...normalizedDynamic, ...normalizedStatic];
+          return filterGroupsByKeyword(combined, keyword);
+        });
+
+        const swaggerOperationCount = computed(() =>
+          dynamicOperationGroups.value.reduce((total, group) => total + group.operations.length, 0)
+        );
+
+        const totalVisibleOperations = computed(() =>
+          operationGroups.value.reduce((total, group) => total + group.operations.length, 0)
+        );
+
+        // 讀取 Swagger 定義並轉換為畫面可使用的 API 清單。
+        const loadSwaggerOperations = async () => {
+          if (!swaggerState.specUrl) {
+            showError('請先輸入 Swagger 定義網址。');
+            return;
+          }
+          swaggerState.loading = true;
+          swaggerState.error = '';
+          try {
+            const response = await fetch(swaggerState.specUrl, {
+              headers: { Accept: 'application/json' }
+            });
+            if (!response.ok) {
+              throw new Error(`無法載入 Swagger 定義，狀態碼：${response.status}`);
+            }
+            const spec = await response.json();
+            dynamicOperationGroups.value = createDynamicGroups(spec, swaggerState.specUrl);
+            swaggerState.lastLoadedAt = new Date();
+            showSuccess('Swagger API 列表載入完成。');
+          } catch (error) {
+            const message = error instanceof Error ? error.message : '載入 Swagger 定義時發生未知錯誤。';
+            swaggerState.error = message;
+            dynamicOperationGroups.value = [];
+            showError(message);
+          } finally {
+            swaggerState.loading = false;
+          }
+        };
+
+        // 輔助按鈕：一鍵展開所有群組。
+        const expandAllGroups = () => {
+          activeOperationGroups.value = operationGroups.value.map((group) => group.name);
+        };
+
+        // 輔助按鈕：一鍵收合所有群組。
+        const collapseAllGroups = () => {
+          activeOperationGroups.value = [];
+        };
+
+        watch(
+          () => operationGroups.value.map((group) => group.name),
+          (names) => {
+            if (names.length === 0) {
+              activeOperationGroups.value = [];
+              return;
+            }
+            const current = new Set(activeOperationGroups.value.filter((name) => names.includes(name)));
+            names.slice(0, 3).forEach((name) => current.add(name));
+            activeOperationGroups.value = Array.from(current);
+          },
+          { immediate: true }
+        );
 
         onMounted(() => {
           try {
@@ -1106,7 +1558,18 @@
           logs,
           operationGroups,
           activeOperationGroups,
+          operationKeyword,
+          swaggerState,
+          swaggerOperationCount,
+          totalVisibleOperations,
+          loadSwaggerOperations,
+          expandAllGroups,
+          collapseAllGroups,
+          handleSpecUrlInput,
+          responseViewerState,
           formatJson,
+          toRawText,
+          copyContent,
           formatTimestamp,
           composeUrl,
           prefillOperation,
