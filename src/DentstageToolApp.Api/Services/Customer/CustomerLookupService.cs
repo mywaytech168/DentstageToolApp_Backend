@@ -58,6 +58,79 @@ public class CustomerLookupService : ICustomerLookupService
     }
 
     /// <inheritdoc />
+    public async Task<CustomerListResponse> GetCustomersAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        _logger.LogInformation("查詢全部客戶列表，預期提供前端下拉或列表資料。");
+
+        var items = await _dbContext.Customers
+            .AsNoTracking()
+            .OrderByDescending(customer => customer.CreationTimestamp)
+            .ThenBy(customer => customer.CustomerUid)
+            .Select(customer => new CustomerListItem
+            {
+                CustomerUid = customer.CustomerUid,
+                CustomerName = customer.Name,
+                Phone = customer.Phone,
+                Category = customer.CustomerType,
+                Source = customer.Source,
+                CreatedAt = customer.CreationTimestamp
+            })
+            .ToListAsync(cancellationToken);
+
+        _logger.LogInformation("客戶列表查詢完成，共取得 {Count} 筆資料。", items.Count);
+
+        return new CustomerListResponse
+        {
+            Items = items
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<CustomerDetailResponse> GetCustomerAsync(string customerUid, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var normalizedUid = (customerUid ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalizedUid))
+        {
+            throw new CustomerLookupException(HttpStatusCode.BadRequest, "請提供客戶識別碼。");
+        }
+
+        _logger.LogInformation("查詢客戶詳細資料，UID：{CustomerUid}。", normalizedUid);
+
+        var entity = await _dbContext.Customers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(customer => customer.CustomerUid == normalizedUid, cancellationToken);
+
+        if (entity is null)
+        {
+            throw new CustomerLookupException(HttpStatusCode.NotFound, "找不到對應的客戶資料。");
+        }
+
+        return new CustomerDetailResponse
+        {
+            CustomerUid = entity.CustomerUid,
+            CustomerName = entity.Name,
+            Category = entity.CustomerType,
+            Gender = entity.Gender,
+            Connect = entity.Connect,
+            Phone = entity.Phone,
+            Email = entity.Email,
+            County = entity.County,
+            Township = entity.Township,
+            Source = entity.Source,
+            Reason = entity.Reason,
+            Remark = entity.ConnectRemark,
+            CreatedAt = entity.CreationTimestamp,
+            UpdatedAt = entity.ModificationTimestamp,
+            CreatedBy = entity.CreatedBy,
+            ModifiedBy = entity.ModifiedBy
+        };
+    }
+
+    /// <inheritdoc />
     public async Task<CustomerPhoneSearchResponse> SearchByPhoneAsync(
         CustomerPhoneSearchRequest request,
         CancellationToken cancellationToken)
