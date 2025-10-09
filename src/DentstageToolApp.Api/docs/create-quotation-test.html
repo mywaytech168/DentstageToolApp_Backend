@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>估價單建立測試工具</title>
+  <!-- 說明：引用 Element Plus 樣式確保元件渲染一致 -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: #f5f7fa;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    .page-container {
+      max-width: 1200px;
+      margin: 0 auto 48px auto;
+    }
+    .card-spacer {
+      margin-top: 16px;
+    }
+    .textarea {
+      font-family: "Fira Code", "Consolas", "Courier New", monospace;
+    }
+    .section-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    pre.result-viewer {
+      background-color: #1e1e1e;
+      color: #f8f8f2;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-message {
+      margin-bottom: 4px;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
+    }
+    .summary-item {
+      background-color: #ffffff;
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 6px 16px rgba(31, 45, 61, 0.08);
+    }
+    .summary-item h4 {
+      margin: 0 0 6px 0;
+      font-size: 15px;
+      color: #1f4f82;
+    }
+    .summary-item p {
+      margin: 0;
+      font-size: 13px;
+      color: #606266;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- 說明：透過 CDN 載入 Vue 與 Element Plus，避免額外建置流程 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/locale/zh-tw.min.js"></script>
+
+  <script>
+    // 說明：由全域物件取出 Composition API 與 Element Plus，保持靜態頁面可用性
+    const { createApp, ref, reactive, computed, watch, onMounted } = Vue;
+    const elementPlus = window.ElementPlus;
+    const zhTwLocale = window.ElementPlusLocaleZhTw?.default ?? window.ElementPlusLocaleZhTw;
+
+    if (!elementPlus) {
+      throw new Error('Element Plus 載入失敗，請檢查網路或 CDN 設定。');
+    }
+
+    // ---------- 常數區 ----------
+    const STORAGE_KEY = 'dentstage-create-quotation-test-settings';
+    const BLANK_IMAGE_BASE64 =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+
+    const App = {
+      // ---------- 模板區 ----------
+      template: `
+        <el-config-provider namespace="el" :locale="locale">
+          <div class="page-container">
+            <el-page-header content="估價單建立測試工具" icon=""></el-page-header>
+
+            <el-alert
+              title="操作流程提醒"
+              type="info"
+              show-icon
+              :closable="false"
+              style="margin-top: 12px;"
+              description="依序完成登入、取得測試資料或必要 UID，最後送出估價單建立請求。若環境無現成圖片，可直接點擊『建立空白圖片』取得 PhotoUID。"
+            />
+
+            <!-- 環境與登入設定 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>環境與登入設定</span>
+              </template>
+              <el-form label-width="140px" label-position="left">
+                <el-form-item label="API 基底網址">
+                  <el-input v-model="baseUrl" placeholder="例如：https://localhost:7249/api" clearable />
+                </el-form-item>
+                <el-form-item label="裝置機碼">
+                  <el-input v-model="loginForm.deviceKey" placeholder="請輸入登入使用的裝置機碼" clearable />
+                </el-form-item>
+                <el-form-item>
+                  <div class="section-actions">
+                    <el-button type="primary" :loading="loading.login" @click="login">登入取得權杖</el-button>
+                    <el-button type="success" :disabled="!authState.refreshToken" :loading="loading.refresh" @click="refreshToken">刷新 Access Token</el-button>
+                    <el-button type="info" :disabled="!authState.accessToken" @click="fetchUserInfo">取得登入者資訊</el-button>
+                    <el-button type="warning" @click="clearTokens">清除權杖</el-button>
+                  </div>
+                </el-form-item>
+                <el-form-item label="Access Token">
+                  <el-input v-model="authState.accessToken" type="textarea" :rows="3" readonly />
+                </el-form-item>
+                <el-form-item label="Refresh Token">
+                  <el-input v-model="authState.refreshToken" type="textarea" :rows="2" readonly />
+                </el-form-item>
+              </el-form>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="顯示名稱">{{ authState.displayName || '尚未登入' }}</el-descriptions-item>
+                <el-descriptions-item label="角色">{{ authState.role || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="Access Token 到期">{{ formatTimestamp(authState.accessTokenExpireAt) }}</el-descriptions-item>
+                <el-descriptions-item label="Refresh Token 到期">{{ formatTimestamp(authState.refreshTokenExpireAt) }}</el-descriptions-item>
+                <el-descriptions-item label="裝置狀態">{{ authState.deviceStatus || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="系統訊息">{{ authState.message || '-' }}</el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
+            <!-- 輔助資料快速帶入 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>輔助資料快速帶入</span>
+              </template>
+              <div class="section-actions">
+                <el-button type="primary" :loading="loading.random" :disabled="!hasToken" @click="fetchRandomDraft">
+                  取得隨機測試草稿
+                </el-button>
+                <el-button type="warning" :loading="loading.blankPhoto" :disabled="!hasToken" @click="uploadBlankPhoto">
+                  建立空白圖片取得 PhotoUID
+                </el-button>
+              </div>
+              <el-alert
+                v-if="!hasToken"
+                type="warning"
+                title="請先登入"
+                :closable="false"
+                show-icon
+                description="輔助資料 API 需帶入權杖，請於上方完成登入後再操作。"
+                style="margin-bottom: 12px;"
+              />
+              <div v-if="randomSummary.generatedAt" class="card-spacer">
+                <el-divider content-position="left">最新測試草稿</el-divider>
+                <p>系統於 {{ formatTimestamp(randomSummary.generatedAt) }} 產生以下資料，已自動套用至下方估價單 JSON。</p>
+                <div class="summary-grid">
+                  <div class="summary-item" v-if="randomSummary.technician">
+                    <h4>技師</h4>
+                    <p>UID：{{ randomSummary.technician.uid }}</p>
+                    <p>名稱：{{ randomSummary.technician.name }}</p>
+                    <p>描述：{{ randomSummary.technician.description || '無' }}</p>
+                  </div>
+                  <div class="summary-item" v-if="randomSummary.store">
+                    <h4>門市</h4>
+                    <p>UID：{{ randomSummary.store.uid }}</p>
+                    <p>名稱：{{ randomSummary.store.name }}</p>
+                    <p>描述：{{ randomSummary.store.description || '無' }}</p>
+                  </div>
+                  <div class="summary-item" v-if="randomSummary.customer">
+                    <h4>客戶</h4>
+                    <p>UID：{{ randomSummary.customer.uid }}</p>
+                    <p>姓名：{{ randomSummary.customer.name }}</p>
+                    <p>描述：{{ randomSummary.customer.description || '無' }}</p>
+                  </div>
+                  <div class="summary-item" v-if="randomSummary.car">
+                    <h4>車輛</h4>
+                    <p>UID：{{ randomSummary.car.uid }}</p>
+                    <p>名稱：{{ randomSummary.car.name }}</p>
+                    <p>描述：{{ randomSummary.car.description || '無' }}</p>
+                  </div>
+                  <div class="summary-item" v-if="randomSummary.fixType">
+                    <h4>維修類型</h4>
+                    <p>UID：{{ randomSummary.fixType.uid }}</p>
+                    <p>名稱：{{ randomSummary.fixType.name }}</p>
+                    <p>描述：{{ randomSummary.fixType.description || '無' }}</p>
+                  </div>
+                </div>
+                <el-alert
+                  v-if="randomSummary.notes.length > 0"
+                  type="info"
+                  show-icon
+                  :closable="false"
+                  style="margin-top: 12px;"
+                >
+                  <template #title>系統提示</template>
+                  <ul>
+                    <li v-for="note in randomSummary.notes" :key="note">{{ note }}</li>
+                  </ul>
+                </el-alert>
+              </div>
+
+              <div class="card-spacer">
+                <el-divider content-position="left">最新建立的空白圖片</el-divider>
+                <el-input v-model="blankPhotoUid" placeholder="尚未建立圖片" readonly />
+                <div class="section-actions" style="margin-top: 12px;">
+                  <el-button type="primary" :disabled="!canUseBlankPhoto" @click="appendDamageWithBlankPhoto">
+                    帶入損傷資料（使用空白圖片）
+                  </el-button>
+                  <el-button type="success" :disabled="!canUseBlankPhoto" @click="applySignatureWithBlankPhoto">
+                    套用簽名照片（使用空白圖片）
+                  </el-button>
+                </div>
+                <el-alert
+                  v-if="canUseBlankPhoto"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="損傷資料固定為單筆清單"
+                  description="系統會將 damages 陣列覆蓋為僅含一筆資料，內容包含空白圖片 UID、左前門、需烤漆與估價 4648 等欄位。"
+                  style="margin-top: 8px;"
+                />
+                <el-alert
+                  v-if="!canUseBlankPhoto"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="尚未建立空白圖片"
+                  description="請先點擊『建立空白圖片取得 PhotoUID』，即可快速建立損傷資料與簽名欄位。"
+                  style="margin-top: 8px;"
+                />
+              </div>
+            </el-card>
+
+            <!-- 建立估價單 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>建立估價單</span>
+              </template>
+              <el-alert
+                type="success"
+                :closable="false"
+                show-icon
+                title="操作提醒"
+                description="請確認 JSON 內容必填欄位皆已填入有效 UID，尤其是技師、客戶、車輛與維修類型。若使用上方隨機草稿，可直接調整後送出。"
+                style="margin-bottom: 16px;"
+              />
+              <div class="section-actions">
+                <el-button type="primary" :loading="loading.create" :disabled="!hasToken" @click="createQuotation">送出建立估價單</el-button>
+                <el-button @click="formatRequestJson">格式化 JSON</el-button>
+                <el-button @click="copyRequest">複製 JSON</el-button>
+                <el-button @click="loadDraftAgain" :disabled="loading.random || !hasToken">重新載入最新草稿</el-button>
+              </div>
+              <el-input
+                v-model="createRequestText"
+                type="textarea"
+                :rows="22"
+                class="textarea"
+                placeholder="請輸入 CreateQuotationRequest JSON 內容"
+              />
+              <div v-if="createResponse" class="card-spacer">
+                <el-divider content-position="left">建立結果</el-divider>
+                <pre class="result-viewer">{{ createResponse }}</pre>
+              </div>
+            </el-card>
+
+            <!-- 操作紀錄 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>操作紀錄</span>
+              </template>
+              <div class="section-actions">
+                <el-button type="danger" size="small" @click="clearLogs">清除紀錄</el-button>
+              </div>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="log in logs"
+                  :key="log.id"
+                  :timestamp="formatTimestamp(log.time)"
+                  :type="log.level"
+                  placement="top"
+                >
+                  <div class="log-message">{{ log.message }}</div>
+                  <pre v-if="log.payload" class="result-viewer">{{ log.payload }}</pre>
+                </el-timeline-item>
+                <el-timeline-item v-if="logs.length === 0" timestamp="" type="info">
+                  <div class="log-message">尚未有操作紀錄，請開始進行測試流程。</div>
+                </el-timeline-item>
+              </el-timeline>
+            </el-card>
+          </div>
+        </el-config-provider>
+      `,
+
+      setup() {
+        const message = elementPlus.ElMessage;
+
+        // ---------- 狀態區 ----------
+        const baseUrl = ref('https://localhost:7249/api');
+        const loginForm = reactive({ deviceKey: '' });
+        const authState = reactive({
+          accessToken: '',
+          refreshToken: '',
+          displayName: '',
+          role: '',
+          deviceStatus: '',
+          message: '',
+          accessTokenExpireAt: '',
+          refreshTokenExpireAt: ''
+        });
+        const loading = reactive({
+          login: false,
+          refresh: false,
+          random: false,
+          blankPhoto: false,
+          create: false
+        });
+        const createRequestText = ref(`{
+  "store": {
+    "technicianUid": "",
+    "source": "官方網站"
+  },
+  "car": {
+    "carUid": ""
+  },
+  "customer": {
+    "customerUid": ""
+  },
+  "damages": [
+    {
+      "photos": "",
+      "position": "左前門",
+      "dentStatus": "需烤漆",
+      "description": "建議同時處理刮痕",
+      "estimatedAmount": 4648
+    }
+  ],
+  "carBodyConfirmation": {
+    "signaturePhotoUid": "",
+    "damageMarkers": []
+  },
+  "maintenance": {
+    "fixTypeUid": "",
+    "reserveCar": false,
+    "applyCoating": false,
+    "applyWrapping": false,
+    "hasRepainted": false,
+    "needToolEvaluation": false,
+    "otherFee": 0,
+    "roundingDiscount": 0,
+    "percentageDiscount": 0,
+    "estimatedRepairDays": 0,
+    "estimatedRepairHours": 0,
+    "estimatedRestorationPercentage": 100,
+    "remark": "測試建立估價單"
+  }
+}`);
+        const createResponse = ref('');
+        const randomSummary = reactive({
+          technician: null,
+          store: null,
+          customer: null,
+          car: null,
+          fixType: null,
+          notes: [],
+          generatedAt: ''
+        });
+        const blankPhotoUid = ref('');
+        const logs = ref([]);
+
+        const locale = computed(() => zhTwLocale || undefined);
+        const hasToken = computed(() => !!authState.accessToken);
+        const canUseBlankPhoto = computed(() => !!blankPhotoUid.value);
+
+        // ---------- 方法區 ----------
+
+        // 建立 API 路徑的共用函式，避免重複處理斜線
+        const buildUrl = (path) => {
+          const trimmed = baseUrl.value.replace(/\/$/, '');
+          const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+          return `${trimmed}${normalizedPath}`;
+        };
+
+        // 將資料寫入 localStorage，方便下次載入保留環境設定
+        const persistSettings = () => {
+          const payload = {
+            baseUrl: baseUrl.value,
+            deviceKey: loginForm.deviceKey,
+            accessToken: authState.accessToken,
+            refreshToken: authState.refreshToken,
+            createRequestText: createRequestText.value
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        };
+
+        // 將操作紀錄寫入時間軸
+        const appendLog = (level, messageText, payload) => {
+          logs.value.unshift({
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            level,
+            message: messageText,
+            payload: payload ? JSON.stringify(payload, null, 2) : '',
+            time: new Date().toISOString()
+          });
+          if (logs.value.length > 40) {
+            logs.value = logs.value.slice(0, 40);
+          }
+        };
+
+        // ---------- 工具函式區 ----------
+
+        // 建立固定的損傷資料範本，符合營運提供的標準內容
+        const buildDamageTemplate = (photoUid) => ({
+          photos: photoUid,
+          position: '左前門',
+          dentStatus: '需烤漆',
+          description: '建議同時處理刮痕',
+          estimatedAmount: 4648
+        });
+
+        // 套用空白圖片至損傷陣列，維持唯一固定的列表結構
+        const updateDamageWithPhoto = (photoUid, options = {}) => {
+          const { notify = true, log = true } = options;
+          if (!photoUid) {
+            if (notify) {
+              message.warning('請先建立空白圖片以取得 PhotoUID。');
+            }
+            return { success: false };
+          }
+
+          try {
+            const parsed = JSON.parse(createRequestText.value || '{}');
+
+            if (!Array.isArray(parsed.damages)) {
+              parsed.damages = [];
+            }
+
+            const payload = buildDamageTemplate(photoUid);
+            parsed.damages = [payload];
+
+            createRequestText.value = JSON.stringify(parsed, null, 2);
+            persistSettings();
+
+            if (notify) {
+              message.success('已帶入固定損傷資料並套用空白圖片。');
+            }
+
+            if (log) {
+              appendLog('success', '帶入固定損傷資料並套用空白圖片', { photoUid, damage: payload });
+            }
+
+            return { success: true, payload };
+          } catch (error) {
+            if (notify) {
+              message.warning('JSON 解析失敗，請確認內容格式是否正確。');
+            }
+            if (log) {
+              appendLog('warning', '處理損傷資料失敗', { message: error.message });
+            }
+            return { success: false, error };
+          }
+        };
+
+        // 套用空白圖片至車體簽名欄位，確保簽名必填資料齊全
+        const applySignaturePhoto = (photoUid, { notify = true, log = true } = {}) => {
+          if (!photoUid) {
+            if (notify) {
+              message.warning('請先建立空白圖片以取得 PhotoUID。');
+            }
+            return { success: false };
+          }
+
+          try {
+            const parsed = JSON.parse(createRequestText.value || '{}');
+
+            if (!parsed.carBodyConfirmation || typeof parsed.carBodyConfirmation !== 'object') {
+              parsed.carBodyConfirmation = {};
+            }
+
+            parsed.carBodyConfirmation.signaturePhotoUid = photoUid;
+            if (!Array.isArray(parsed.carBodyConfirmation.damageMarkers)) {
+              parsed.carBodyConfirmation.damageMarkers = [];
+            }
+
+            createRequestText.value = JSON.stringify(parsed, null, 2);
+            persistSettings();
+
+            if (notify) {
+              message.success('已套用簽名照片 UID。');
+            }
+
+            if (log) {
+              appendLog('success', '簽名照片 UID 已更新', { photoUid });
+            }
+
+            return { success: true };
+          } catch (error) {
+            if (notify) {
+              message.warning('JSON 解析失敗，請確認內容格式是否正確。');
+            }
+            if (log) {
+              appendLog('warning', '簽名照片 UID 套用失敗', { message: error.message });
+            }
+            return { success: false, error };
+          }
+        };
+
+        // 處理 API 回傳的 ProblemDetails，統一提示錯誤
+        const handleProblemDetails = async (response) => {
+          let details = await safeReadJson(response);
+          if (!details) {
+            details = { title: '未知錯誤', detail: await response.text() };
+          }
+          const description = details.detail || details.title || '發生未知錯誤';
+          message.error(description);
+          appendLog('danger', `API 回應錯誤：${response.status}`, details);
+          throw new Error(description);
+        };
+
+        // 安全解析 JSON，避免因空白字串導致例外
+        const safeReadJson = async (response) => {
+          try {
+            return await response.clone().json();
+          } catch (error) {
+            return null;
+          }
+        };
+
+        // 登入取得 Access Token 與 Refresh Token
+        const login = async () => {
+          if (!loginForm.deviceKey.trim()) {
+            message.warning('請先輸入裝置機碼。');
+            return;
+          }
+
+          loading.login = true;
+          try {
+            const response = await fetch(buildUrl('/auth/login'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deviceKey: loginForm.deviceKey.trim() })
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            applyLoginResponse(data);
+            message.success('登入成功，已取得 Access Token。');
+            appendLog('success', '登入成功', data);
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '登入流程發生錯誤', { message: error.message });
+          } finally {
+            loading.login = false;
+          }
+        };
+
+        // 透過 Refresh Token 換取新的 Access Token
+        const refreshToken = async () => {
+          if (!authState.refreshToken) {
+            message.warning('目前沒有 Refresh Token，請先登入。');
+            return;
+          }
+
+          loading.refresh = true;
+          try {
+            const response = await fetch(buildUrl('/auth/token/refresh'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                refreshToken: authState.refreshToken,
+                deviceKey: loginForm.deviceKey.trim()
+              })
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            applyLoginResponse(data);
+            message.success('已刷新 Access Token。');
+            appendLog('success', '刷新 Access Token 成功', data);
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '刷新 Token 發生錯誤', { message: error.message });
+          } finally {
+            loading.refresh = false;
+          }
+        };
+
+        // 取得登入者資訊，確認權杖是否有效
+        const fetchUserInfo = async () => {
+          if (!hasToken.value) {
+            message.warning('請先登入以取得權杖。');
+            return;
+          }
+
+          try {
+            const response = await fetch(buildUrl('/auth/info'), {
+              headers: {
+                Authorization: `Bearer ${authState.accessToken}`
+              }
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            appendLog('info', '取得登入者資訊', data);
+            message.success('已取得登入者資訊。');
+          } catch (error) {
+            appendLog('danger', '取得登入者資訊失敗', { message: error.message });
+          }
+        };
+
+        // 套用登入回傳內容至狀態物件
+        const applyLoginResponse = (data) => {
+          authState.accessToken = data.accessToken || '';
+          authState.refreshToken = data.refreshToken || '';
+          authState.displayName = data.displayName || '';
+          authState.role = data.role || '';
+          authState.deviceStatus = data.deviceStatus || '';
+          authState.message = data.message || '';
+          authState.accessTokenExpireAt = data.accessTokenExpireAt || '';
+          authState.refreshTokenExpireAt = data.refreshTokenExpireAt || '';
+        };
+
+        // 從後端取得估價單建立的隨機草稿資料
+        const fetchRandomDraft = async () => {
+          if (!hasToken.value) {
+            message.warning('請先完成登入。');
+            return;
+          }
+
+          loading.random = true;
+          try {
+            const response = await fetch(buildUrl('/quotations/create/random-test'), {
+              headers: {
+                Authorization: `Bearer ${authState.accessToken}`
+              }
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            createRequestText.value = JSON.stringify(data.draft, null, 2);
+            randomSummary.technician = normalizeSummary(data.technician);
+            randomSummary.store = normalizeSummary(data.store);
+            randomSummary.customer = normalizeSummary(data.customer);
+            randomSummary.car = normalizeSummary(data.car);
+            randomSummary.fixType = normalizeSummary(data.fixType);
+            randomSummary.generatedAt = data.generatedAt;
+            randomSummary.notes = Array.isArray(data.notes) ? data.notes : [];
+            message.success('已取得隨機測試資料並套用至 JSON。');
+            appendLog('success', '取得估價單測試草稿成功', data);
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '取得估價單測試草稿失敗', { message: error.message });
+          } finally {
+            loading.random = false;
+          }
+        };
+
+        // 將摘要物件正規化為統一格式
+        const normalizeSummary = (entity) => {
+          if (!entity) {
+            return null;
+          }
+          return {
+            uid: entity.uid || entity.Uid || '',
+            name: entity.name || entity.Name || '',
+            description: entity.description || entity.Description || ''
+          };
+        };
+
+        // 以空白 Base64 產生圖片檔案並上傳取得 PhotoUID
+        const uploadBlankPhoto = async () => {
+          if (!hasToken.value) {
+            message.warning('請先登入取得 Access Token。');
+            return;
+          }
+
+          loading.blankPhoto = true;
+          try {
+            const blob = base64ToBlob(BLANK_IMAGE_BASE64);
+            const file = new File([blob], `blank-${Date.now()}.png`, { type: blob.type });
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const response = await fetch(buildUrl('/photos'), {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${authState.accessToken}`
+              },
+              body: formData
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            blankPhotoUid.value = data.photoUid || '';
+            message.success('已建立空白圖片並取得 PhotoUID。');
+            appendLog('success', '建立空白圖片成功', data);
+            applyBlankPhotoToRequest(blankPhotoUid.value);
+          } catch (error) {
+            appendLog('danger', '建立空白圖片失敗', { message: error.message });
+          } finally {
+            loading.blankPhoto = false;
+          }
+        };
+
+        // 說明：將空白圖片 UID 自動套用至估價單 JSON，避免測試人員手動複製
+        const applyBlankPhotoToRequest = (photoUid) => {
+          if (!photoUid) {
+            return;
+          }
+
+          const damageResult = updateDamageWithPhoto(photoUid, {
+            notify: false,
+            log: false
+          });
+          const signatureResult = applySignaturePhoto(photoUid, {
+            notify: false,
+            log: false
+          });
+
+          if (damageResult.success || signatureResult.success) {
+            appendLog('success', '空白圖片已自動套用至損傷與簽名欄位', { photoUid });
+          } else {
+            message.warning('空白圖片已建立，但自動套用失敗，請透過按鈕手動更新 JSON。');
+          }
+        };
+
+        // 透過最新空白圖片新增損傷陣列資料
+        const appendDamageWithBlankPhoto = () => {
+          updateDamageWithPhoto(blankPhotoUid.value, {});
+        };
+
+        // 透過最新空白圖片套用簽名照片 UID
+        const applySignatureWithBlankPhoto = () => {
+          applySignaturePhoto(blankPhotoUid.value, {});
+        };
+
+        // 將 Base64 字串轉換為 Blob 物件
+        const base64ToBlob = (base64) => {
+          const segments = base64.split(',');
+          const meta = segments[0];
+          const data = segments[1] || '';
+          const match = /data:(.*);base64/.exec(meta);
+          const contentType = match ? match[1] : 'application/octet-stream';
+          const byteCharacters = atob(data);
+          const byteNumbers = new Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i += 1) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const byteArray = new Uint8Array(byteNumbers);
+          return new Blob([byteArray], { type: contentType });
+        };
+
+        // 送出建立估價單請求
+        const createQuotation = async () => {
+          if (!hasToken.value) {
+            message.warning('請先登入取得 Access Token。');
+            return;
+          }
+
+          let parsed;
+          try {
+            parsed = JSON.parse(createRequestText.value);
+          } catch (error) {
+            message.error('JSON 格式錯誤，請確認內容。');
+            appendLog('danger', 'JSON 解析失敗', { message: error.message });
+            return;
+          }
+
+          loading.create = true;
+          try {
+            const response = await fetch(buildUrl('/quotations/create'), {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${authState.accessToken}`
+              },
+              body: JSON.stringify(parsed)
+            });
+
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+
+            const data = await response.json();
+            createResponse.value = JSON.stringify(data, null, 2);
+            message.success('估價單建立成功。');
+            appendLog('success', '估價單建立成功', data);
+          } catch (error) {
+            appendLog('danger', '估價單建立失敗', { message: error.message });
+          } finally {
+            loading.create = false;
+          }
+        };
+
+        // 重新套用最近一次取得的草稿資料
+        const loadDraftAgain = () => {
+          if (randomSummary.generatedAt) {
+            fetchRandomDraft();
+          } else {
+            message.info('尚未取得過測試草稿。');
+          }
+        };
+
+        // 將 JSON 內容重新縮排，方便閱讀
+        const formatRequestJson = () => {
+          try {
+            const parsed = JSON.parse(createRequestText.value);
+            createRequestText.value = JSON.stringify(parsed, null, 2);
+            message.success('已格式化 JSON。');
+            persistSettings();
+          } catch (error) {
+            message.error('無法格式化，請確認 JSON 是否正確。');
+          }
+        };
+
+        // 複製 JSON 內容至剪貼簿
+        const copyRequest = async () => {
+          try {
+            await navigator.clipboard.writeText(createRequestText.value);
+            message.success('已複製至剪貼簿。');
+          } catch (error) {
+            message.error('瀏覽器阻擋複製，請手動選取內容。');
+          }
+        };
+
+        // 清除權杖資訊
+        const clearTokens = () => {
+          authState.accessToken = '';
+          authState.refreshToken = '';
+          authState.displayName = '';
+          authState.role = '';
+          authState.deviceStatus = '';
+          authState.message = '';
+          authState.accessTokenExpireAt = '';
+          authState.refreshTokenExpireAt = '';
+          persistSettings();
+        };
+
+        // 清空操作紀錄
+        const clearLogs = () => {
+          logs.value = [];
+        };
+
+        // 將時間字串轉換為可讀格式
+        const formatTimestamp = (value) => {
+          if (!value) {
+            return '-';
+          }
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            return value;
+          }
+          return new Intl.DateTimeFormat('zh-TW', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          }).format(date);
+        };
+
+        // ---------- 生命週期 ----------
+        onMounted(() => {
+          try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              if (parsed.baseUrl) baseUrl.value = parsed.baseUrl;
+              if (parsed.deviceKey) loginForm.deviceKey = parsed.deviceKey;
+              if (parsed.accessToken) authState.accessToken = parsed.accessToken;
+              if (parsed.refreshToken) authState.refreshToken = parsed.refreshToken;
+              if (parsed.createRequestText) createRequestText.value = parsed.createRequestText;
+            }
+          } catch (error) {
+            console.warn('載入儲存設定時發生錯誤：', error);
+          }
+        });
+
+        watch(
+          () => ({
+            baseUrl: baseUrl.value,
+            deviceKey: loginForm.deviceKey,
+            accessToken: authState.accessToken,
+            refreshToken: authState.refreshToken,
+            createRequestText: createRequestText.value
+          }),
+          () => {
+            persistSettings();
+          },
+          { deep: true }
+        );
+
+        return {
+          locale,
+          baseUrl,
+          loginForm,
+          authState,
+          loading,
+          hasToken,
+          canUseBlankPhoto,
+          randomSummary,
+          blankPhotoUid,
+          createRequestText,
+          createResponse,
+          logs,
+          login,
+          refreshToken,
+          fetchUserInfo,
+          fetchRandomDraft,
+          uploadBlankPhoto,
+          appendDamageWithBlankPhoto,
+          applySignatureWithBlankPhoto,
+          createQuotation,
+          formatRequestJson,
+          copyRequest,
+          clearTokens,
+          clearLogs,
+          formatTimestamp,
+          loadDraftAgain
+        };
+      }
+    };
+
+    createApp(App).use(elementPlus, { locale: zhTwLocale }).mount('#app');
+  </script>
+</body>
+</html>
