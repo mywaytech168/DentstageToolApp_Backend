@@ -135,3 +135,51 @@
 2. 若需建立更多測試資料，可沿用 UID 命名規則（`CUS-YYYYMM-XXXX`、`CAR-YYYYMM-XXXX`、`SHOP-REGION-XXX`）。
 3. 服務類別請依照系統維修分類維護（如鈑金、烤漆、美容、行動服務等），以確保報價與排程正確。
 4. 需要串接品牌或店家主檔時，可新增對應欄位至資料庫或設定檔，以支援自動帶入顯示。
+
+### Swagger / API 請求範例
+
+下列 JSON 可直接貼入 `/api/quotations/create` 端點的 Swagger 測試視窗，示範如何把客戶、車輛、品牌、服務類別與店家資料一併帶入估價單建立流程：
+
+```json
+{
+  "store": {
+    "storeUid": "SHOP-TP-001",
+    "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+    "source": "Facebook 廣告",
+    "serviceCategory": {
+      "categoryUid": "SC-202401-0001",
+      "categoryName": "鈑金修復（小凹痕處理）"
+    }
+  },
+  "car": {
+    "carUid": "CAR-202501-0801",
+    "plateNumber": "ABC-1234",
+    "brand": {
+      "brandUid": "BR-TOYOTA",
+      "brandName": "Toyota"
+    }
+  },
+  "customer": {
+    "customerUid": "CUS-202501-0001",
+    "customerName": "林先生",
+    "customerType": "一般客戶"
+  },
+  "damages": [
+    {
+      "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+      "position": "右前葉子板",
+      "dentStatus": "局部凹痕",
+      "description": "需進行鈑金整形搭配烤漆",
+      "estimatedAmount": 4500
+    }
+  ],
+  "carBodyConfirmation": {
+    "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8"
+  },
+  "maintenance": {
+    "estimatedRestorationPercentage": 90
+  }
+}
+```
+
+> 提醒：若後端尚未實作品牌或服務類別欄位，可先在 Swagger 測試時保留結構以利後續對接，正式串接時再依實際欄位調整。
