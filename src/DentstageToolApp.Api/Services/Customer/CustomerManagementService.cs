@@ -206,6 +206,70 @@ public class CustomerManagementService : ICustomerManagementService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<DeleteCustomerResponse> DeleteCustomerAsync(DeleteCustomerRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new CustomerManagementException(HttpStatusCode.BadRequest, "請提供客戶刪除資料。");
+        }
+
+        // ---------- 參數整理區 ----------
+        var customerUid = NormalizeRequiredText(request.CustomerUid, "客戶識別碼");
+        var operatorLabel = NormalizeOperator(operatorName);
+
+        var customerEntity = await _dbContext.Customers
+            .FirstOrDefaultAsync(customer => customer.CustomerUid == customerUid, cancellationToken);
+
+        if (customerEntity is null)
+        {
+            throw new CustomerManagementException(HttpStatusCode.NotFound, "找不到對應的客戶資料，請確認識別碼是否正確。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料檢核區 ----------
+        var hasQuotations = await _dbContext.Quatations
+            .AsNoTracking()
+            .AnyAsync(quotation => quotation.CustomerUid == customerUid, cancellationToken);
+
+        if (hasQuotations)
+        {
+            throw new CustomerManagementException(HttpStatusCode.Conflict, "該客戶仍有報價單紀錄，請先調整報價單後再刪除。");
+        }
+
+        var hasOrders = await _dbContext.Orders
+            .AsNoTracking()
+            .AnyAsync(order => order.CustomerUid == customerUid, cancellationToken);
+
+        if (hasOrders)
+        {
+            throw new CustomerManagementException(HttpStatusCode.Conflict, "該客戶仍有工單紀錄，請先處理相關工單。");
+        }
+
+        var hasBlackList = await _dbContext.BlackLists
+            .AsNoTracking()
+            .AnyAsync(black => black.CustomerUid == customerUid, cancellationToken);
+
+        if (hasBlackList)
+        {
+            throw new CustomerManagementException(HttpStatusCode.Conflict, "該客戶仍在黑名單紀錄中，請先刪除或解除黑名單。");
+        }
+
+        // ---------- 實體刪除區 ----------
+        _dbContext.Customers.Remove(customerEntity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 刪除客戶 {CustomerUid} ({CustomerName}) 成功。", operatorLabel, customerEntity.CustomerUid, customerEntity.Name);
+
+        // ---------- 組裝回應區 ----------
+        return new DeleteCustomerResponse
+        {
+            CustomerUid = customerEntity.CustomerUid,
+            Message = "已刪除客戶資料。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>

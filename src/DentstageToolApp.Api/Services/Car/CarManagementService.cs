@@ -231,6 +231,61 @@ public class CarManagementService : ICarManagementService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<DeleteCarResponse> DeleteCarAsync(DeleteCarRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new CarManagementException(HttpStatusCode.BadRequest, "請提供車輛刪除資料。");
+        }
+
+        // ---------- 參數整理區 ----------
+        var carUid = NormalizeRequiredText(request.CarUid, "車輛識別碼");
+        var operatorLabel = NormalizeOperator(operatorName);
+
+        var carEntity = await _dbContext.Cars
+            .FirstOrDefaultAsync(car => car.CarUid == carUid, cancellationToken);
+
+        if (carEntity is null)
+        {
+            throw new CarManagementException(HttpStatusCode.NotFound, "找不到對應的車輛資料，請確認識別碼是否正確。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料檢核區 ----------
+        var hasQuotations = await _dbContext.Quatations
+            .AsNoTracking()
+            .AnyAsync(quotation => quotation.CarUid == carUid, cancellationToken);
+
+        if (hasQuotations)
+        {
+            throw new CarManagementException(HttpStatusCode.Conflict, "該車輛仍被報價單使用，請先調整報價單資料後再刪除。");
+        }
+
+        var hasOrders = await _dbContext.Orders
+            .AsNoTracking()
+            .AnyAsync(order => order.CarUid == carUid, cancellationToken);
+
+        if (hasOrders)
+        {
+            throw new CarManagementException(HttpStatusCode.Conflict, "該車輛仍有工單資料，請先處理相關工單。");
+        }
+
+        // ---------- 實體刪除區 ----------
+        _dbContext.Cars.Remove(carEntity);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 刪除車輛 {CarUid} ({Plate}) 成功。", operatorLabel, carEntity.CarUid, carEntity.CarNo);
+
+        // ---------- 組裝回應區 ----------
+        return new DeleteCarResponse
+        {
+            CarUid = carEntity.CarUid,
+            Message = "已刪除車輛資料。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
