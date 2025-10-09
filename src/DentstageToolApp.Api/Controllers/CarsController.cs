@@ -231,6 +231,13 @@ public class CarsController : ControllerBase
     /// 刪除車輛資料，刪除前會確認是否仍被報價單或工單使用。
     /// </summary>
     [HttpPost("delete")]
+    // 透過 SwaggerMockRequestExample 呈現刪除車輛時必填的識別碼欄位，協助 Swagger 頁面產生正確範例。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "carUid": "Ca_12F312C9-4E6C-4A4A-A6C2-6291281A8B44"
+        }
+        """)]
     [ProducesResponseType(typeof(DeleteCarResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Services.Store;
 using DentstageToolApp.Api.Stores;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -108,6 +109,13 @@ public class StoresController : ControllerBase
     /// 新增門市資料。
     /// </summary>
     [HttpPost]
+    // 以範例呈現門市名稱欄位，提供 Swagger 使用者快速理解新增門市所需資料。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "storeName": "高雄旗艦店"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateStoreResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -145,6 +153,14 @@ public class StoresController : ControllerBase
     /// 編輯門市資料。
     /// </summary>
     [HttpPost("edit")]
+    // 呈現需帶入的門市識別碼與更新後名稱，避免 Swagger 使用者漏填必要欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "storeUid": "St_28E50A91-6DA5-4A66-9BA9-6C318D2A9E12",
+          "storeName": "台南服務中心"
+        }
+        """)]
     [ProducesResponseType(typeof(EditStoreResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -183,6 +199,13 @@ public class StoresController : ControllerBase
     /// 刪除門市資料。
     /// </summary>
     [HttpPost("delete")]
+    // 提供範例協助操作人員確認僅需提供門市識別碼即可刪除。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "storeUid": "St_28E50A91-6DA5-4A66-9BA9-6C318D2A9E12"
+        }
+        """)]
     [ProducesResponseType(typeof(DeleteStoreResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
