@@ -23,18 +23,87 @@ namespace DentstageToolApp.Api.Controllers;
 public class CarsController : ControllerBase
 {
     private readonly ICarManagementService _carManagementService;
+    private readonly ICarQueryService _carQueryService;
     private readonly ILogger<CarsController> _logger;
 
     /// <summary>
     /// 建構子，注入車輛維運服務與記錄器。
     /// </summary>
-    public CarsController(ICarManagementService carManagementService, ILogger<CarsController> logger)
+    public CarsController(
+        ICarManagementService carManagementService,
+        ICarQueryService carQueryService,
+        ILogger<CarsController> logger)
     {
         _carManagementService = carManagementService;
+        _carQueryService = carQueryService;
         _logger = logger;
     }
 
     // ---------- API 呼叫區 ----------
+
+    /// <summary>
+    /// 取得車輛列表，供前端顯示車輛資料。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet]
+    [ProducesResponseType(typeof(CarListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CarListResponse>> GetCarsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _carQueryService.GetCarsAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (CarQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "取得車輛列表失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢車輛列表失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("車輛列表查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢車輛列表已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得車輛列表流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢車輛列表失敗");
+        }
+    }
+
+    /// <summary>
+    /// 透過車輛識別碼取得詳細資料。
+    /// </summary>
+    /// <param name="carUid">車輛識別碼。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet("{carUid}")]
+    [ProducesResponseType(typeof(CarDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CarDetailResponse>> GetCarAsync(string carUid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _carQueryService.GetCarAsync(carUid, cancellationToken);
+            return Ok(response);
+        }
+        catch (CarQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "取得車輛明細失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢車輛資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("車輛明細查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢車輛資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得車輛明細流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢車輛資料失敗");
+        }
+    }
 
     /// <summary>
     /// 新增車輛資料，建立車牌、品牌 UID、型號 UID 與備註等欄位。

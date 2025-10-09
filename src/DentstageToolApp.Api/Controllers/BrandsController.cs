@@ -22,18 +22,87 @@ namespace DentstageToolApp.Api.Controllers;
 public class BrandsController : ControllerBase
 {
     private readonly IBrandManagementService _brandManagementService;
+    private readonly IBrandQueryService _brandQueryService;
     private readonly ILogger<BrandsController> _logger;
 
     /// <summary>
     /// 建構子，注入品牌維運服務與記錄器。
     /// </summary>
-    public BrandsController(IBrandManagementService brandManagementService, ILogger<BrandsController> logger)
+    public BrandsController(
+        IBrandManagementService brandManagementService,
+        IBrandQueryService brandQueryService,
+        ILogger<BrandsController> logger)
     {
         _brandManagementService = brandManagementService;
+        _brandQueryService = brandQueryService;
         _logger = logger;
     }
 
     // ---------- API 呼叫區 ----------
+
+    /// <summary>
+    /// 取得品牌列表，供前端顯示品牌下拉選單使用。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet]
+    [ProducesResponseType(typeof(BrandListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BrandListResponse>> GetBrandsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _brandQueryService.GetBrandsAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (BrandQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "取得品牌列表失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢品牌列表失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("品牌列表查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢品牌列表已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得品牌列表流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢品牌列表失敗");
+        }
+    }
+
+    /// <summary>
+    /// 透過品牌識別碼取得品牌詳細資訊。
+    /// </summary>
+    /// <param name="brandUid">品牌識別碼。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet("{brandUid}")]
+    [ProducesResponseType(typeof(BrandDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BrandDetailResponse>> GetBrandAsync(string brandUid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _brandQueryService.GetBrandAsync(brandUid, cancellationToken);
+            return Ok(response);
+        }
+        catch (BrandQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "取得品牌明細失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢品牌資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("品牌明細查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢品牌資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得品牌明細流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢品牌資料失敗");
+        }
+    }
 
     /// <summary>
     /// 新增品牌資料，建立品牌名稱。

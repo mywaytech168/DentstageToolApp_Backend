@@ -10,6 +10,21 @@ namespace DentstageToolApp.Api.Services.Customer;
 public interface ICustomerLookupService
 {
     /// <summary>
+    /// 取得客戶列表，依建立時間倒序排列以便前端展示。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖，供前端在需要時中止請求。</param>
+    /// <returns>回傳整理後的客戶清單。</returns>
+    Task<CustomerListResponse> GetCustomersAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 透過客戶識別碼取得完整客戶資料，供詳細頁使用。
+    /// </summary>
+    /// <param name="customerUid">客戶唯一識別碼。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>回傳對應客戶的詳細資料。</returns>
+    Task<CustomerDetailResponse> GetCustomerAsync(string customerUid, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 透過電話號碼搜尋對應客戶資料並統計維修紀錄。
     /// </summary>
     /// <param name="request">電話搜尋的查詢條件。</param>
