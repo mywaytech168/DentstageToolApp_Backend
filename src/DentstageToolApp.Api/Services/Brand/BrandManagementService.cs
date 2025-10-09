@@ -53,7 +53,7 @@ public class BrandManagementService : IBrandManagementService
         }
 
         // ---------- 實體建立區 ----------
-        var brandEntity = new Brand
+        var brandEntity = new DentstageToolApp.Infrastructure.Entities.Brand
         {
             BrandUid = BuildBrandUid(),
             BrandName = brandName
