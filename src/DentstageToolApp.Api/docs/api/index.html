@@ -232,8 +232,8 @@
         const contentElement = document.getElementById("content");
         const generatedAtElement = document.getElementById("generated-at");
         try {
-            const spec = await fetchSwaggerSpec();
-            renderPage(spec, loadingElement, contentElement);
+            const { spec, sourceUrl } = await fetchSwaggerSpec();
+            renderPage(spec, sourceUrl, loadingElement, contentElement);
             generatedAtElement.textContent = new Date().toLocaleString("zh-TW", { hour12: false });
         } catch (error) {
             loadingElement.textContent = `載入 Swagger 規格失敗：${error.message}`;
@@ -261,8 +261,11 @@
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                // 成功取得規格後直接回傳 JSON。
-                return await response.json();
+                // 成功取得規格後回傳 JSON 與來源網址，供後續生成外部連結使用。
+                return {
+                    spec: await response.json(),
+                    sourceUrl: url
+                };
             } catch (error) {
                 console.warn(`載入 Swagger 規格失敗：${url}`, error);
             }
@@ -274,7 +277,7 @@
     /**
      * 依據 URL 參數判斷顯示列表或單一 API 詳細資訊。
      */
-    function renderPage(spec, loadingElement, contentElement) {
+    function renderPage(spec, specSourceUrl, loadingElement, contentElement) {
         const params = new URLSearchParams(window.location.search);
         const operationId = params.get("operationId");
 
@@ -283,17 +286,17 @@
         contentElement.innerHTML = "";
 
         if (operationId) {
-            renderOperationDetail(spec, operationId, contentElement);
+            renderOperationDetail(spec, specSourceUrl, operationId, contentElement);
         } else {
-            renderOperationList(spec, contentElement);
+            renderOperationList(spec, specSourceUrl, contentElement);
         }
     }
 
     /**
      * 產生所有 API 的列表畫面，依 Tag 分組顯示摘要資訊。
      */
-    function renderOperationList(spec, container) {
-        const operations = collectOperations(spec);
+    function renderOperationList(spec, specSourceUrl, container) {
+        const operations = collectOperations(spec, specSourceUrl);
         if (!operations.length) {
             container.appendChild(createEmptyState("Swagger 中沒有可用的 API 定義。"));
             return;
@@ -303,7 +306,7 @@
         introCard.className = "card";
         introCard.innerHTML = `
             <h2>如何使用</h2>
-            <p>點擊任一列即可查看完整的參數說明、範例與回應結構。右方的 Swagger 連結會直接導向互動式測試畫面。</p>
+            <p>點擊任一列即可查看完整的參數說明、範例與回應結構。右方提供 Swagger 與 Flow 測試兩種快速連結，方便選擇合適的試打工具。</p>
         `;
         container.appendChild(introCard);
 
@@ -341,6 +344,8 @@
                         <a href="?operationId=${encodeURIComponent(operation.operationId)}">DOCS</a>
                         <span aria-hidden="true"> · </span>
                         <a href="${operation.swaggerUiLink}" target="_blank" rel="noopener">Swagger</a>
+                        <span aria-hidden="true"> · </span>
+                        <a href="${operation.flowTesterLink}" target="_blank" rel="noopener">Flow 測試</a>
                     </td>
                 `;
                 table.querySelector("tbody").appendChild(row);
@@ -355,7 +360,7 @@
     /**
      * 顯示單一 API 的完整說明，包含參數、Request Body 與回應結構。
      */
-    function renderOperationDetail(spec, operationId, container) {
+    function renderOperationDetail(spec, specSourceUrl, operationId, container) {
         const operationInfo = findOperationById(spec, operationId);
         if (!operationInfo) {
             container.appendChild(createEmptyState(`找不到 OperationId 為 ${operationId} 的定義。`));
@@ -383,6 +388,8 @@
             </ul>
             <p>
                 <a href="${buildSwaggerUiLink(operation.operationId, operation.tags && operation.tags[0])}" target="_blank" rel="noopener">在 Swagger 中測試</a>
+                <span aria-hidden="true"> · </span>
+                <a href="${buildFlowTesterLink({ operationId: operation.operationId, path, method, tag: operation.tags && operation.tags[0] }, specSourceUrl)}" target="_blank" rel="noopener">在 Flow 測試工具中試打</a>
             </p>
         `;
         container.appendChild(summaryCard);
@@ -502,7 +509,7 @@
     /**
      * 蒐集所有 Operation 的摘要資訊，後續可依 Tag 分組使用。
      */
-    function collectOperations(spec) {
+    function collectOperations(spec, specSourceUrl) {
         const operations = [];
         if (!spec.paths) {
             return operations;
@@ -521,7 +528,13 @@
                     summary: operation.summary,
                     description: operation.description,
                     tags: operation.tags && operation.tags.length ? operation.tags : ["未指定"],
-                    swaggerUiLink: buildSwaggerUiLink(ensuredId, operation.tags && operation.tags[0])
+                    swaggerUiLink: buildSwaggerUiLink(ensuredId, operation.tags && operation.tags[0]),
+                    flowTesterLink: buildFlowTesterLink({
+                        operationId: ensuredId,
+                        path,
+                        method: method.toUpperCase(),
+                        tag: operation.tags && operation.tags[0]
+                    }, specSourceUrl)
                 });
             });
         });
@@ -585,6 +598,35 @@
         // Swagger UI 的錨點組成為 #/分類/OperationId，缺少分類時改用 default 維持定位。
         const anchorTag = tag && typeof tag === "string" && tag.trim() ? encodeURIComponent(tag) : "default";
         return `${baseUrl}#/${anchorTag}/${encodeURIComponent(operationId)}`;
+    }
+
+    /**
+     * 建立導向 Flow 測試工具的連結，並透過查詢參數帶入必要資訊以便自動定位 API。
+     */
+    function buildFlowTesterLink(metadata, specSourceUrl) {
+        try {
+            const flowUrl = new URL("../api-flow-tester.html", window.location.href);
+            const { operationId, path, method, tag } = metadata || {};
+            if (specSourceUrl) {
+                flowUrl.searchParams.set("specUrl", specSourceUrl);
+            }
+            if (operationId) {
+                flowUrl.searchParams.set("operationId", operationId);
+            }
+            if (path) {
+                flowUrl.searchParams.set("path", path);
+            }
+            if (method) {
+                flowUrl.searchParams.set("method", method.toUpperCase());
+            }
+            if (tag) {
+                flowUrl.searchParams.set("tag", tag);
+            }
+            return flowUrl.toString();
+        } catch (error) {
+            console.warn("建立 Flow 測試工具連結時發生錯誤：", error);
+            return "../api-flow-tester.html";
+        }
     }
 
     /**
