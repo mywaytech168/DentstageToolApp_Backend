@@ -1782,10 +1782,8 @@
           }
           prefillOperation(result.operation);
           ensureGroupExpanded(result.groupName);
-          const keywordSeed = initialOperationId || initialOperationPath || '';
-          if (keywordSeed) {
-            operationKeyword.value = keywordSeed;
-          }
+          // 僅展開並帶入指定 API，維持搜尋欄位為空，避免自動篩選造成其他 API 無法顯示。
+          // 使用者若仍需快速定位，可自行輸入關鍵字，保留既有互動行為。
           hasAppliedInitialPrefill.value = true;
           showSuccess('已根據指定的 API 操作自動帶入請求參數。');
         };
