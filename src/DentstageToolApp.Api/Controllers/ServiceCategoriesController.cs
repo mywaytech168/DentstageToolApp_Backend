@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.ServiceCategories;
 using DentstageToolApp.Api.Services.ServiceCategory;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -108,6 +109,13 @@ public class ServiceCategoriesController : ControllerBase
     /// 新增服務類別資料。
     /// </summary>
     [HttpPost]
+    // 加入範例以指引前端填寫 categoryName 欄位，確保 Swagger 文件一致性。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "categoryName": "凹痕修復"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateServiceCategoryResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -145,6 +153,14 @@ public class ServiceCategoriesController : ControllerBase
     /// 編輯服務類別資料。
     /// </summary>
     [HttpPost("edit")]
+    // 呈現需帶入的 serviceCategoryUid 與更新後名稱，協助 Swagger 使用者理解欄位需求。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "serviceCategoryUid": "SC_6E7F1C32-19B0-4F3B-88E2-1046868C9123",
+          "categoryName": "烤漆美容"
+        }
+        """)]
     [ProducesResponseType(typeof(EditServiceCategoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -183,6 +199,13 @@ public class ServiceCategoriesController : ControllerBase
     /// 刪除服務類別資料。
     /// </summary>
     [HttpPost("delete")]
+    // 利用範例明確告知僅需提供服務類別識別碼即可完成刪除動作。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "serviceCategoryUid": "SC_6E7F1C32-19B0-4F3B-88E2-1046868C9123"
+        }
+        """)]
     [ProducesResponseType(typeof(DeleteServiceCategoryResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
