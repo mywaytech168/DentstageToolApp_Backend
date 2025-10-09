@@ -228,7 +228,7 @@
                   :closable="false"
                   show-icon
                   title="損傷資料固定為單筆清單"
-                  description="系統會將 damages 陣列覆蓋為僅含一筆資料，內容包含空白圖片 UID、左前門、需烤漆與估價 4648 等欄位。"
+                  description="系統會將 damages 陣列覆蓋為僅含一筆資料，並將空白圖片 UID 寫入 photos[0].photoUid，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
                   style="margin-top: 8px;"
                 />
                 <el-alert
@@ -339,7 +339,12 @@
   },
   "damages": [
     {
-      "photos": "",
+      "photos": [
+        {
+          "photoUid": "",
+          "isPrimary": true
+        }
+      ],
       "position": "左前門",
       "dentStatus": "需烤漆",
       "description": "建議同時處理刮痕",
@@ -422,7 +427,13 @@
 
         // 建立固定的損傷資料範本，符合營運提供的標準內容
         const buildDamageTemplate = (photoUid) => ({
-          photos: photoUid,
+          // 說明：依據後端最新結構，photos 必須為物件陣列並帶入 photoUid
+          photos: [
+            {
+              photoUid: photoUid || '',
+              isPrimary: true
+            }
+          ],
           position: '左前門',
           dentStatus: '需烤漆',
           description: '建議同時處理刮痕',
