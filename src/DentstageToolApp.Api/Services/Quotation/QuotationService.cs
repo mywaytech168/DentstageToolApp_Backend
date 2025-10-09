@@ -610,6 +610,10 @@ public class QuotationService : IQuotationService
         var photoUids = CollectPhotoUids(normalizedDamages, carBodyConfirmation);
         if (photoUids.Count > 0)
         {
+            // ---------- 圖片綁定前檢核 ----------
+            // 建立估價單時需確認所有圖片主檔皆存在，避免引用已被清除的資料。
+            await EnsurePhotosAvailableForCreationAsync(photoUids, cancellationToken);
+            // 若圖片已綁定其他估價單則禁止重複使用，確保圖片歸屬唯一。
             await _photoService.BindToQuotationAsync(quotationEntity.QuotationUid, photoUids, cancellationToken);
         }
 
@@ -2258,6 +2262,64 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 整理需要綁定的照片識別碼，避免遺漏傷痕或簽名圖片。
     /// </summary>
+    /// <summary>
+    /// 建立估價單前檢查圖片是否存在且未被其他估價單佔用。
+    /// </summary>
+    private async Task EnsurePhotosAvailableForCreationAsync(IEnumerable<string> photoUids, CancellationToken cancellationToken)
+    {
+        if (photoUids is null)
+        {
+            return;
+        }
+
+        // ---------- 資料整理區 ----------
+        // 先將所有圖片識別碼正規化並去重，避免重複查詢或出現空白值。
+        var normalizedUids = photoUids
+            .Select(NormalizeOptionalText)
+            .Where(uid => uid is not null)
+            .Select(uid => uid!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (normalizedUids.Count == 0)
+        {
+            return;
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // ---------- 資料庫查詢 ----------
+        // 僅撈取必要欄位以降低資料庫負擔，確認圖片是否存在與是否已綁定估價單。
+        var photoRecords = await _context.PhotoData
+            .AsNoTracking()
+            .Where(photo => photo.PhotoUid != null && normalizedUids.Contains(photo.PhotoUid))
+            .Select(photo => new { photo.PhotoUid, photo.QuotationUid })
+            .ToListAsync(cancellationToken);
+
+        var existingUids = new HashSet<string>(photoRecords.Select(photo => photo.PhotoUid), StringComparer.OrdinalIgnoreCase);
+        var missingUids = normalizedUids
+            .Where(uid => !existingUids.Contains(uid))
+            .ToList();
+
+        if (missingUids.Count > 0)
+        {
+            var missingList = string.Join(", ", missingUids);
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, $"找不到以下圖片識別碼：{missingList}，請確認是否已上傳。");
+        }
+
+        // 估價單建立時不允許使用已綁定其他估價單的圖片，避免資料錯置。
+        var occupiedUids = photoRecords
+            .Where(photo => !string.IsNullOrWhiteSpace(photo.QuotationUid))
+            .Select(photo => photo.PhotoUid)
+            .ToList();
+
+        if (occupiedUids.Count > 0)
+        {
+            var occupiedList = string.Join(", ", occupiedUids);
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, $"以下圖片已綁定其他估價單：{occupiedList}，請重新選擇圖片或解除綁定。");
+        }
+    }
+
     private static List<string> CollectPhotoUids(IEnumerable<QuotationDamageItem> damages, QuotationCarBodyConfirmation? carBody)
     {
         var uniqueUids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
