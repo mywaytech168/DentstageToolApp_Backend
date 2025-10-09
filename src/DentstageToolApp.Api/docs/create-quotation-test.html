@@ -369,7 +369,7 @@
   },
   "damages": [
     {
-      "photos": "",
+      "photos": [],
       "position": "保桿",
       "dentStatus": "小面積",
       "description": "測試資料",
@@ -690,10 +690,59 @@
             blankPhotoUid.value = data.photoUid || '';
             message.success('已建立空白圖片並取得 PhotoUID。');
             appendLog('success', '建立空白圖片成功', data);
+            applyBlankPhotoToRequest(blankPhotoUid.value);
           } catch (error) {
             appendLog('danger', '建立空白圖片失敗', { message: error.message });
           } finally {
             loading.blankPhoto = false;
+          }
+        };
+
+        // 說明：將空白圖片 UID 自動套用至估價單 JSON，避免測試人員手動複製
+        const applyBlankPhotoToRequest = (photoUid) => {
+          if (!photoUid) {
+            return;
+          }
+
+          try {
+            // ---------- JSON 解析區 ----------
+            const parsed = JSON.parse(createRequestText.value || '{}');
+
+            // 說明：確保 damages 存在且為陣列，沒有資料時新增預設結構
+            if (!Array.isArray(parsed.damages)) {
+              parsed.damages = [];
+            }
+
+            if (parsed.damages.length === 0 || typeof parsed.damages[0] !== 'object') {
+              parsed.damages[0] = {
+                photos: [photoUid],
+                position: '保桿',
+                dentStatus: '小面積',
+                description: '測試資料',
+                estimatedAmount: 1200
+              };
+            } else {
+              const firstDamage = parsed.damages[0];
+              // 說明：無論原始格式為字串或陣列，一律轉成陣列方便帶入 PhotoUID
+              firstDamage.photos = [photoUid];
+            }
+
+            // 說明：確保車體確認資訊存在，並同步帶入簽名照片 UID
+            if (!parsed.carBodyConfirmation || typeof parsed.carBodyConfirmation !== 'object') {
+              parsed.carBodyConfirmation = {};
+            }
+            parsed.carBodyConfirmation.signaturePhotoUid = photoUid;
+            if (!Array.isArray(parsed.carBodyConfirmation.damageMarkers)) {
+              parsed.carBodyConfirmation.damageMarkers = [];
+            }
+
+            createRequestText.value = JSON.stringify(parsed, null, 2);
+            appendLog('success', '空白圖片已套用至估價單 JSON', { photoUid });
+            persistSettings();
+          } catch (error) {
+            // 說明：若 JSON 解析失敗則提示需手動填入，並記錄警告紀錄方便追查
+            message.warning('空白圖片已建立，但自動套用至 JSON 失敗，請手動填寫。');
+            appendLog('warning', '空白圖片套用 JSON 失敗', { message: error.message });
           }
         };
 
