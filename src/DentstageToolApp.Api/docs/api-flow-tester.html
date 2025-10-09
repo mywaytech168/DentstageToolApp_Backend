@@ -563,8 +563,25 @@
         );
 
         const composeUrl = (path) => {
-          const normalizedBase = baseUrl.value.replace(/\/$/, '');
+          // 若尚未設定基底網址則直接回傳原始路徑，避免產生不可預期的空字串或多餘符號。
+          const trimmedBase = (baseUrl.value || '').trim();
+          if (!trimmedBase) {
+            return path;
+          }
+
+          // 規範基底網址與 API 路徑的格式，確保結合時不會多出雙斜線或缺少斜線。
+          const normalizedBase = trimmedBase.replace(/\/$/, '');
           const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+          // 為避免出現「.../api/api/...」的重複片段，若基底網址已以 /api 結尾，
+          // 則刪除路徑開頭對應的 /api，僅保留一次，確保實際呼叫時不會 404。
+          if (
+            normalizedBase.toLowerCase().endsWith('/api') &&
+            normalizedPath.toLowerCase().startsWith('/api/')
+          ) {
+            return `${normalizedBase}${normalizedPath.slice(4)}`;
+          }
+
           return `${normalizedBase}${normalizedPath}`;
         };
 
