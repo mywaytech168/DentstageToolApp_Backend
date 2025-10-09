@@ -149,9 +149,6 @@
                 <el-button type="primary" :loading="loading.random" :disabled="!hasToken" @click="fetchRandomDraft">
                   取得隨機測試草稿
                 </el-button>
-                <el-button type="success" :loading="loading.technician" :disabled="!hasToken" @click="fetchTechnicians">
-                  撈取技師名單
-                </el-button>
                 <el-button type="warning" :loading="loading.blankPhoto" :disabled="!hasToken" @click="uploadBlankPhoto">
                   建立空白圖片取得 PhotoUID
                 </el-button>
@@ -217,57 +214,6 @@
               <div class="card-spacer">
                 <el-divider content-position="left">最新建立的空白圖片</el-divider>
                 <el-input v-model="blankPhotoUid" placeholder="尚未建立圖片" readonly />
-              </div>
-
-              <div class="card-spacer">
-                <el-divider content-position="left">技師名單</el-divider>
-                <el-table :data="technicians" size="small" border empty-text="請先點擊『撈取技師名單』">
-                  <el-table-column prop="technicianUid" label="技師 UID" min-width="260" show-overflow-tooltip></el-table-column>
-                  <el-table-column prop="technicianName" label="技師姓名" min-width="140" show-overflow-tooltip></el-table-column>
-                </el-table>
-              </div>
-            </el-card>
-
-            <!-- 客戶電話查詢 -->
-            <el-card class="card-spacer">
-              <template #header>
-                <span>客戶電話查詢</span>
-              </template>
-              <el-form label-width="140px" label-position="left">
-                <el-form-item label="電話號碼">
-                  <el-input v-model="customerSearchForm.phone" placeholder="請輸入電話，例如：0988123456" clearable />
-                </el-form-item>
-                <el-form-item>
-                  <div class="section-actions">
-                    <el-button type="primary" :loading="loading.customerSearch" :disabled="!hasToken" @click="searchCustomerByPhone">
-                      送出查詢
-                    </el-button>
-                    <el-button @click="clearCustomerSearch">清除結果</el-button>
-                  </div>
-                </el-form-item>
-              </el-form>
-              <el-alert
-                v-if="!hasToken"
-                type="warning"
-                :closable="false"
-                show-icon
-                title="需登入後才能查詢"
-                description="客戶查詢屬於受保護資源，請先取得 Access Token。"
-              />
-              <div v-if="customerSearchResult" class="card-spacer">
-                <el-descriptions :column="2" border size="small">
-                  <el-descriptions-item label="原始輸入">{{ customerSearchResult.queryPhone }}</el-descriptions-item>
-                  <el-descriptions-item label="純數字">{{ customerSearchResult.queryDigits }}</el-descriptions-item>
-                  <el-descriptions-item label="提示訊息" :span="2">{{ customerSearchResult.message || '-' }}</el-descriptions-item>
-                </el-descriptions>
-                <el-divider content-position="left">查詢結果</el-divider>
-                <el-table :data="customerSearchResult.customers" size="small" border empty-text="無符合資料">
-                  <el-table-column prop="customerUid" label="客戶 UID" min-width="240" show-overflow-tooltip></el-table-column>
-                  <el-table-column prop="customerName" label="姓名" min-width="120" show-overflow-tooltip></el-table-column>
-                  <el-table-column prop="phone" label="電話" min-width="140" show-overflow-tooltip></el-table-column>
-                  <el-table-column prop="category" label="分類" min-width="120" show-overflow-tooltip></el-table-column>
-                  <el-table-column prop="source" label="來源" min-width="140" show-overflow-tooltip></el-table-column>
-                </el-table>
               </div>
             </el-card>
 
@@ -351,9 +297,7 @@
           login: false,
           refresh: false,
           random: false,
-          technician: false,
           blankPhoto: false,
-          customerSearch: false,
           create: false
         });
         const createRequestText = ref(`{
@@ -407,9 +351,6 @@
           generatedAt: ''
         });
         const blankPhotoUid = ref('');
-        const technicians = ref([]);
-        const customerSearchForm = reactive({ phone: '' });
-        const customerSearchResult = ref(null);
         const logs = ref([]);
 
         const locale = computed(() => zhTwLocale || undefined);
@@ -628,37 +569,6 @@
           };
         };
 
-        // 呼叫技師名單 API，取得所屬門市的技師 UID
-        const fetchTechnicians = async () => {
-          if (!hasToken.value) {
-            message.warning('請先登入取得 Access Token。');
-            return;
-          }
-
-          loading.technician = true;
-          try {
-            const response = await fetch(buildUrl('/technicians'), {
-              headers: {
-                Authorization: `Bearer ${authState.accessToken}`
-              }
-            });
-
-            if (!response.ok) {
-              await handleProblemDetails(response);
-              return;
-            }
-
-            const data = await response.json();
-            technicians.value = Array.isArray(data.items) ? data.items : [];
-            message.success(`已載入 ${technicians.value.length} 位技師。`);
-            appendLog('info', '取得技師名單', data);
-          } catch (error) {
-            appendLog('danger', '取得技師名單失敗', { message: error.message });
-          } finally {
-            loading.technician = false;
-          }
-        };
-
         // 以空白 Base64 產生圖片檔案並上傳取得 PhotoUID
         const uploadBlankPhoto = async () => {
           if (!hasToken.value) {
@@ -760,51 +670,6 @@
           }
           const byteArray = new Uint8Array(byteNumbers);
           return new Blob([byteArray], { type: contentType });
-        };
-
-        // 依電話搜尋客戶，取得既有客戶 UID
-        const searchCustomerByPhone = async () => {
-          if (!hasToken.value) {
-            message.warning('請先登入。');
-            return;
-          }
-
-          if (!customerSearchForm.phone.trim()) {
-            message.warning('請先輸入電話號碼。');
-            return;
-          }
-
-          loading.customerSearch = true;
-          try {
-            const response = await fetch(buildUrl('/customers/phone-search'), {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${authState.accessToken}`
-              },
-              body: JSON.stringify({ phone: customerSearchForm.phone.trim() })
-            });
-
-            if (!response.ok) {
-              await handleProblemDetails(response);
-              return;
-            }
-
-            const data = await response.json();
-            customerSearchResult.value = data;
-            message.success('電話搜尋完成，可於下方列表複製 CustomerUid。');
-            appendLog('info', '電話搜尋完成', data);
-          } catch (error) {
-            appendLog('danger', '電話搜尋失敗', { message: error.message });
-          } finally {
-            loading.customerSearch = false;
-          }
-        };
-
-        // 清除客戶查詢結果
-        const clearCustomerSearch = () => {
-          customerSearchResult.value = null;
-          customerSearchForm.phone = '';
         };
 
         // 送出建立估價單請求
@@ -958,9 +823,6 @@
           hasToken,
           randomSummary,
           blankPhotoUid,
-          technicians,
-          customerSearchForm,
-          customerSearchResult,
           createRequestText,
           createResponse,
           logs,
@@ -968,10 +830,7 @@
           refreshToken,
           fetchUserInfo,
           fetchRandomDraft,
-          fetchTechnicians,
           uploadBlankPhoto,
-          searchCustomerByPhone,
-          clearCustomerSearch,
           createQuotation,
           formatRequestJson,
           copyRequest,
