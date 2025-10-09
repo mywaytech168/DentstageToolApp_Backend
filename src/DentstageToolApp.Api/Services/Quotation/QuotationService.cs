@@ -820,6 +820,9 @@ public class QuotationService : IQuotationService
         var requestedDamages = request.Damages ?? new List<QuotationDamageItem>();
         var (plainRemark, existingExtra) = ParseRemark(quotation.Remark);
         var maintenanceInfo = request.Maintenance;
+        var storeInfo = request.Store;
+        DateOnly? requestedReservationDate = null;
+        DateOnly? requestedRepairDate = null;
 
         // ---------- 車輛資料同步 ----------
         if (carInfo.LicensePlate is not null)
@@ -909,6 +912,56 @@ public class QuotationService : IQuotationService
         if (customerInfo.Remark is not null)
         {
             quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+        }
+
+        // ---------- 店家與排程資料同步 ----------
+        if (storeInfo is not null)
+        {
+            // 更新來源時沿用建立流程的正規化方式，僅在外部提供資料時才覆寫。
+            if (storeInfo.Source is not null)
+            {
+                quotation.Source = NormalizeOptionalText(storeInfo.Source);
+            }
+
+            // 需要改派技師時同步更新估價單的技師 UID 與顯示名稱。
+            if (!string.IsNullOrWhiteSpace(storeInfo.TechnicianUid))
+            {
+                var normalizedTechnicianUid = NormalizeOptionalText(storeInfo.TechnicianUid);
+
+                if (!string.IsNullOrWhiteSpace(normalizedTechnicianUid) &&
+                    !string.Equals(normalizedTechnicianUid, quotation.TechnicianUid, StringComparison.OrdinalIgnoreCase))
+                {
+                    // 僅在識別碼改變時查詢主檔，避免每次更新都造訪資料庫。
+                    var technicianEntity = await GetTechnicianEntityAsync(normalizedTechnicianUid, cancellationToken);
+                    if (technicianEntity is null)
+                    {
+                        throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的估價技師。");
+                    }
+
+                    var technicianUid = NormalizeOptionalText(technicianEntity.TechnicianUid);
+                    quotation.TechnicianUid = technicianUid;
+                    quotation.UserUid = technicianUid ?? quotation.UserUid;
+                    quotation.UserName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? quotation.UserName;
+
+                    // 技師所屬門市若存在，連動更新 StoreUid 供報表使用。
+                    var technicianStoreUid = NormalizeOptionalText(technicianEntity.StoreUid);
+                    if (technicianStoreUid is not null)
+                    {
+                        quotation.StoreUid = technicianStoreUid;
+                    }
+                }
+            }
+
+            // 僅在外部提供日期時才更新，避免覆蓋原有排程。
+            if (storeInfo.ReservationDate.HasValue)
+            {
+                requestedReservationDate = NormalizeOptionalDate(storeInfo.ReservationDate);
+            }
+
+            if (storeInfo.RepairDate.HasValue)
+            {
+                requestedRepairDate = NormalizeOptionalDate(storeInfo.RepairDate);
+            }
         }
 
         // ---------- 傷痕、簽名與維修資訊同步 ----------
@@ -1047,6 +1100,17 @@ public class QuotationService : IQuotationService
         quotation.FixExpectDay = fixExpectDay;
         quotation.FixExpectHour = fixExpectHour;
         quotation.FixExpect = FormatEstimatedRestorationPercentage(estimatedRestorationPercentage);
+
+        if (requestedReservationDate.HasValue)
+        {
+            // 預約日期需儲存為 DateOnly，維持資料庫欄位型別一致。
+            quotation.BookDate = requestedReservationDate;
+        }
+
+        if (requestedRepairDate.HasValue)
+        {
+            quotation.FixDate = requestedRepairDate;
+        }
 
         var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
         quotation.Reject = rejectFlag ? true : null;
