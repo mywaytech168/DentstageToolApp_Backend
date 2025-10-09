@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>估價單與維修單流程測試工具</title>
+  <!-- 說明：引入 Element Plus 樣式，確保元件呈現一致 -->
+  <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      background-color: #f5f7fa;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+    }
+    .page-container {
+      max-width: 1280px;
+      margin: 0 auto 64px auto;
+    }
+    .card-spacer {
+      margin-top: 16px;
+    }
+    .section-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .textarea {
+      font-family: "Fira Code", "Consolas", "Courier New", monospace;
+    }
+    pre.result-viewer {
+      background-color: #1e1e1e;
+      color: #f8f8f2;
+      padding: 12px;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-message {
+      margin-bottom: 6px;
+    }
+    .operation-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .operation-grid.two-column {
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    }
+    .card-note {
+      color: #606266;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- 說明：透過 CDN 引入 Vue 與 Element Plus，避免需要額外建置 -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+  <script src="https://unpkg.com/element-plus/dist/locale/zh-tw.min.js"></script>
+
+  <script>
+    // 說明：由全域 Vue 物件取得 Composition API，讓純 HTML 也能使用最新語法
+    const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+    const elementPlus = window.ElementPlus;
+    const zhTwLocale = window.ElementPlusLocaleZhTw?.default ?? window.ElementPlusLocaleZhTw;
+
+    if (!elementPlus) {
+      throw new Error('Element Plus 載入失敗，請檢查 CDN 設定。');
+    }
+
+    // ---------- 常數區 ----------
+    const STORAGE_KEY = 'dentstage-quotation-maintenance-test-settings';
+
+    // ---------- 輔助函式區 ----------
+    /**
+     * 說明：建立預設的估價單編輯請求範本，協助使用者快速填寫必填欄位。
+     */
+    const createBlankQuotationPayload = () => ({
+      quotationNo: '',
+      store: {
+        technicianUid: '',
+        source: '',
+        reservationDate: null,
+        repairDate: null
+      },
+      car: {
+        carUid: ''
+      },
+      customer: {
+        customerUid: ''
+      },
+      categoryRemarks: {
+        dent: '',
+        paint: '',
+        other: ''
+      },
+      remark: '',
+      damages: [],
+      carBodyConfirmation: null,
+      maintenance: {
+        fixTypeUid: '',
+        reserveCar: false,
+        applyCoating: false,
+        applyWrapping: false,
+        hasRepainted: false,
+        needToolEvaluation: false,
+        otherFee: 0,
+        estimatedRepairDays: 0,
+        estimatedRepairHours: 0,
+        estimatedRestorationPercentage: 0,
+        suggestedPaintReason: '',
+        unrepairableReason: '',
+        roundingDiscount: 0,
+        percentageDiscount: 0,
+        discountReason: '',
+        remark: ''
+      }
+    });
+
+    /**
+     * 說明：建立預設的維修單編輯請求範本，沿用估價單結構並加上 orderNo。
+     */
+    const createBlankMaintenancePayload = () => ({
+      orderNo: '',
+      quotationNo: '',
+      store: {
+        technicianUid: '',
+        source: '',
+        reservationDate: null,
+        repairDate: null
+      },
+      car: {
+        carUid: ''
+      },
+      customer: {
+        customerUid: ''
+      },
+      categoryRemarks: {
+        dent: '',
+        paint: '',
+        other: ''
+      },
+      remark: '',
+      damages: [],
+      carBodyConfirmation: null,
+      maintenance: {
+        fixTypeUid: '',
+        reserveCar: false,
+        applyCoating: false,
+        applyWrapping: false,
+        hasRepainted: false,
+        needToolEvaluation: false,
+        otherFee: 0,
+        estimatedRepairDays: 0,
+        estimatedRepairHours: 0,
+        estimatedRestorationPercentage: 0,
+        suggestedPaintReason: '',
+        unrepairableReason: '',
+        roundingDiscount: 0,
+        percentageDiscount: 0,
+        discountReason: '',
+        remark: ''
+      }
+    });
+
+    /**
+     * 說明：由估價單詳情資料建立編輯請求，盡量保留既有欄位避免遺失資訊。
+     */
+    const buildQuotationUpdatePayload = (detail) => {
+      if (!detail) {
+        return createBlankQuotationPayload();
+      }
+
+      const payload = createBlankQuotationPayload();
+      payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
+      payload.store = {
+        technicianUid: detail.store?.technicianUid ?? '',
+        source: detail.store?.source ?? '',
+        reservationDate: detail.store?.reservationDate ?? null,
+        repairDate: detail.store?.repairDate ?? null
+      };
+      payload.car = {
+        carUid: detail.car?.carUid ?? ''
+      };
+      payload.customer = {
+        customerUid: detail.customer?.customerUid ?? ''
+      };
+      payload.categoryRemarks = {
+        dent: detail.categoryRemarks?.dent ?? '',
+        paint: detail.categoryRemarks?.paint ?? '',
+        other: detail.categoryRemarks?.other ?? ''
+      };
+      payload.remark = detail.remark ?? '';
+      payload.damages = Array.isArray(detail.damages)
+        ? detail.damages.map((item) => ({
+            photos: item.photos ?? '',
+            position: item.position ?? '',
+            dentStatus: item.dentStatus ?? '',
+            description: item.description ?? '',
+            estimatedAmount: item.estimatedAmount ?? 0
+          }))
+        : [];
+      payload.carBodyConfirmation = detail.carBodyConfirmation
+        ? {
+            signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
+            damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
+              ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
+                  x: marker.x ?? 0,
+                  y: marker.y ?? 0,
+                  hasDent: !!marker.hasDent,
+                  hasScratch: !!marker.hasScratch,
+                  hasPaintPeel: !!marker.hasPaintPeel,
+                  remark: marker.remark ?? ''
+                }))
+              : []
+          }
+        : null;
+      payload.maintenance = detail.maintenance
+        ? {
+            fixTypeUid: detail.maintenance.fixTypeUid ?? '',
+            reserveCar: detail.maintenance.reserveCar ?? false,
+            applyCoating: detail.maintenance.applyCoating ?? false,
+            applyWrapping: detail.maintenance.applyWrapping ?? false,
+            hasRepainted: detail.maintenance.hasRepainted ?? false,
+            needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+            otherFee: detail.maintenance.otherFee ?? 0,
+            estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
+            estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
+            estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
+            suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+            unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+            roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
+            percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
+            discountReason: detail.maintenance.discountReason ?? '',
+            remark: detail.maintenance.remark ?? ''
+          }
+        : payload.maintenance;
+      return payload;
+    };
+
+    /**
+     * 說明：由維修單詳情資料建立編輯請求，延伸估價單轉換邏輯並補上 orderNo。
+     */
+    const buildMaintenanceUpdatePayload = (detail) => {
+      if (!detail) {
+        return createBlankMaintenancePayload();
+      }
+
+      const payload = createBlankMaintenancePayload();
+      payload.orderNo = detail.orderNo ?? payload.orderNo;
+      payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
+      payload.store = {
+        technicianUid: detail.store?.technicianUid ?? '',
+        source: detail.store?.source ?? '',
+        reservationDate: detail.store?.reservationDate ?? null,
+        repairDate: detail.store?.repairDate ?? null
+      };
+      payload.car = {
+        carUid: detail.car?.carUid ?? ''
+      };
+      payload.customer = {
+        customerUid: detail.customer?.customerUid ?? ''
+      };
+      payload.categoryRemarks = {
+        dent: detail.categoryRemarks?.dent ?? '',
+        paint: detail.categoryRemarks?.paint ?? '',
+        other: detail.categoryRemarks?.other ?? ''
+      };
+      payload.remark = detail.remark ?? '';
+      payload.damages = Array.isArray(detail.damages)
+        ? detail.damages.map((item) => ({
+            photos: item.photos ?? '',
+            position: item.position ?? '',
+            dentStatus: item.dentStatus ?? '',
+            description: item.description ?? '',
+            estimatedAmount: item.estimatedAmount ?? 0
+          }))
+        : [];
+      payload.carBodyConfirmation = detail.carBodyConfirmation
+        ? {
+            signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
+            damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
+              ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
+                  x: marker.x ?? 0,
+                  y: marker.y ?? 0,
+                  hasDent: !!marker.hasDent,
+                  hasScratch: !!marker.hasScratch,
+                  hasPaintPeel: !!marker.hasPaintPeel,
+                  remark: marker.remark ?? ''
+                }))
+              : []
+          }
+        : null;
+      payload.maintenance = detail.maintenance
+        ? {
+            fixTypeUid: detail.maintenance.fixTypeUid ?? '',
+            reserveCar: detail.maintenance.reserveCar ?? false,
+            applyCoating: detail.maintenance.applyCoating ?? false,
+            applyWrapping: detail.maintenance.applyWrapping ?? false,
+            hasRepainted: detail.maintenance.hasRepainted ?? false,
+            needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+            otherFee: detail.maintenance.otherFee ?? 0,
+            estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
+            estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
+            estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
+            suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+            unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+            roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
+            percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
+            discountReason: detail.maintenance.discountReason ?? '',
+            remark: detail.maintenance.remark ?? ''
+          }
+        : payload.maintenance;
+      return payload;
+    };
+
+    // ---------- Vue Application ----------
+    const App = {
+      template: `
+        <el-config-provider namespace="el" :locale="locale">
+          <div class="page-container">
+            <el-page-header content="估價單與維修單流程測試工具" icon=""></el-page-header>
+
+            <el-alert
+              title="操作流程建議"
+              type="info"
+              show-icon
+              :closable="false"
+              style="margin-top: 12px;"
+              description="依序完成登入、輸入估價單編號後即可測試取得詳情、編輯、狀態切換、轉維修與維修單完成等流程。"
+            />
+
+            <!-- 環境與登入設定 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>環境與登入設定</span>
+              </template>
+              <el-form label-width="140px" label-position="left">
+                <el-form-item label="API 基底網址">
+                  <el-input v-model="baseUrl" placeholder="例如：https://localhost:7249/api" clearable />
+                </el-form-item>
+                <el-form-item label="裝置機碼">
+                  <el-input v-model="loginForm.deviceKey" placeholder="請輸入登入使用的裝置機碼" clearable />
+                </el-form-item>
+                <el-form-item>
+                  <div class="section-actions">
+                    <el-button type="primary" :loading="loading.login" @click="login">登入取得權杖</el-button>
+                    <el-button type="success" :loading="loading.refresh" :disabled="!authState.refreshToken" @click="refreshToken">刷新 Access Token</el-button>
+                    <el-button type="info" :disabled="!hasToken" :loading="loading.userInfo" @click="fetchUserInfo">取得登入者資訊</el-button>
+                    <el-button type="warning" @click="clearTokens">清除權杖</el-button>
+                  </div>
+                </el-form-item>
+                <el-form-item label="Access Token">
+                  <el-input v-model="authState.accessToken" type="textarea" :rows="3" readonly />
+                </el-form-item>
+                <el-form-item label="Refresh Token">
+                  <el-input v-model="authState.refreshToken" type="textarea" :rows="2" readonly />
+                </el-form-item>
+              </el-form>
+              <el-descriptions :column="2" border size="small">
+                <el-descriptions-item label="顯示名稱">{{ authState.displayName || '尚未登入' }}</el-descriptions-item>
+                <el-descriptions-item label="角色">{{ authState.role || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="Access Token 到期">{{ formatTimestamp(authState.accessTokenExpireAt) }}</el-descriptions-item>
+                <el-descriptions-item label="Refresh Token 到期">{{ formatTimestamp(authState.refreshTokenExpireAt) }}</el-descriptions-item>
+                <el-descriptions-item label="裝置狀態">{{ authState.deviceStatus || '-' }}</el-descriptions-item>
+                <el-descriptions-item label="系統訊息">{{ authState.message || '-' }}</el-descriptions-item>
+              </el-descriptions>
+            </el-card>
+
+            <!-- 估價單操作區 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>估價單操作</span>
+              </template>
+              <p class="card-note">從輸入估價單編號開始，依序測試取得詳情、編輯與狀態切換。系統會自動將詳情轉換為編輯範本，方便直接送出。</p>
+              <div class="operation-grid two-column">
+                <div>
+                  <el-form label-width="140px" label-position="left">
+                    <el-form-item label="估價單編號">
+                      <el-input v-model="quotationForm.quotationNo" placeholder="例如：Q25100001" clearable />
+                    </el-form-item>
+                    <el-form-item label="預約日期">
+                      <el-date-picker
+                        v-model="quotationForm.reservationDate"
+                        type="datetime"
+                        placeholder="選擇預約日期"
+                        format="YYYY-MM-DD HH:mm"
+                        value-format="YYYY-MM-DDTHH:mm:ss"
+                        clearable
+                        style="width: 100%;"
+                      />
+                    </el-form-item>
+                    <el-form-item label="取消原因">
+                      <el-input v-model="quotationForm.cancelReason" placeholder="預設會由後端自動填寫" clearable />
+                    </el-form-item>
+                    <el-form-item label="清除預約日期">
+                      <el-switch v-model="quotationForm.clearReservation" />
+                    </el-form-item>
+                  </el-form>
+                  <div class="section-actions">
+                    <el-button type="primary" :loading="loading.fetchQuotation" :disabled="!hasToken" @click="fetchQuotationDetail">取得估價單詳情</el-button>
+                    <el-button type="success" :loading="loading.updateQuotation" :disabled="!hasToken" @click="updateQuotation">送出估價單編輯</el-button>
+                    <el-button type="warning" :loading="loading.evaluate" :disabled="!hasToken" @click="completeEvaluation">估價完成 (180)</el-button>
+                    <el-button type="info" :loading="loading.reserve" :disabled="!hasToken" @click="convertToReservation">轉預約 (190)</el-button>
+                    <el-button type="info" :loading="loading.reserveUpdate" :disabled="!hasToken" @click="updateReservationDate">更改預約日期</el-button>
+                    <el-button type="danger" :loading="loading.reserveCancel" :disabled="!hasToken" @click="cancelReservation">取消預約 / 估價單</el-button>
+                    <el-button type="warning" plain :loading="loading.revertQuotation" :disabled="!hasToken" @click="revertQuotationStatus">狀態回溯</el-button>
+                    <el-button type="primary" plain :loading="loading.convertMaintenance" :disabled="!hasToken" @click="convertToMaintenance">轉為維修單</el-button>
+                  </div>
+                </div>
+                <div>
+                  <el-tabs type="border-card">
+                    <el-tab-pane label="估價單詳情 (唯讀)">
+                      <el-input v-model="quotationForm.detailPreview" type="textarea" :rows="18" readonly class="textarea" />
+                    </el-tab-pane>
+                    <el-tab-pane label="估價單編輯範本">
+                      <el-input v-model="quotationForm.editPayload" type="textarea" :rows="18" class="textarea" />
+                    </el-tab-pane>
+                  </el-tabs>
+                </div>
+              </div>
+            </el-card>
+
+            <!-- 維修單操作區 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>維修單操作</span>
+              </template>
+              <p class="card-note">轉維修成功後會自動帶入最新維修單編號，亦可自行輸入既有維修單進行測試。</p>
+              <div class="operation-grid two-column">
+                <div>
+                  <el-form label-width="140px" label-position="left">
+                    <el-form-item label="維修單編號">
+                      <el-input v-model="maintenanceForm.orderNo" placeholder="例如：O25100001" clearable />
+                    </el-form-item>
+                    <el-form-item label="終止原因">
+                      <el-input v-model="maintenanceForm.terminateReason" placeholder="可留空，後端會提供預設訊息" clearable />
+                    </el-form-item>
+                  </el-form>
+                  <div class="section-actions">
+                    <el-button type="primary" :loading="loading.fetchOrder" :disabled="!hasToken" @click="fetchMaintenanceDetail">取得維修單詳情</el-button>
+                    <el-button type="success" :loading="loading.updateOrder" :disabled="!hasToken" @click="updateMaintenanceOrder">送出維修單編輯</el-button>
+                    <el-button type="warning" :loading="loading.confirmOrder" :disabled="!hasToken" @click="confirmMaintenance">確認維修開始 (280)</el-button>
+                    <el-button type="primary" plain :loading="loading.revertOrder" :disabled="!hasToken" @click="revertMaintenanceStatus">狀態回溯</el-button>
+                    <el-button type="info" :loading="loading.continueOrder" :disabled="!hasToken" @click="continueMaintenance">續修維修單</el-button>
+                    <el-button type="success" plain :loading="loading.completeOrder" :disabled="!hasToken" @click="completeMaintenance">維修完成 (290)</el-button>
+                    <el-button type="danger" :loading="loading.terminateOrder" :disabled="!hasToken" @click="terminateMaintenance">終止維修 (295)</el-button>
+                  </div>
+                </div>
+                <div>
+                  <el-tabs type="border-card">
+                    <el-tab-pane label="維修單詳情 (唯讀)">
+                      <el-input v-model="maintenanceForm.detailPreview" type="textarea" :rows="18" readonly class="textarea" />
+                    </el-tab-pane>
+                    <el-tab-pane label="維修單編輯範本">
+                      <el-input v-model="maintenanceForm.editPayload" type="textarea" :rows="18" class="textarea" />
+                    </el-tab-pane>
+                  </el-tabs>
+                </div>
+              </div>
+            </el-card>
+
+            <!-- 回應與紀錄 -->
+            <el-card class="card-spacer">
+              <template #header>
+                <span>最新 API 回應</span>
+              </template>
+              <pre class="result-viewer">{{ lastResponse }}</pre>
+            </el-card>
+
+            <el-card class="card-spacer">
+              <template #header>
+                <span>操作紀錄</span>
+              </template>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="log in logs"
+                  :key="log.id"
+                  :timestamp="formatTimestamp(log.timestamp)"
+                  :type="log.type"
+                  placement="top"
+                >
+                  <div class="log-message"><strong>{{ log.title }}</strong></div>
+                  <pre class="result-viewer" style="margin: 0;">{{ log.payload }}</pre>
+                </el-timeline-item>
+              </el-timeline>
+              <el-empty v-if="!logs.length" description="尚無操作紀錄" />
+            </el-card>
+          </div>
+        </el-config-provider>
+      `,
+      setup() {
+        const message = elementPlus.ElMessage;
+
+        // ---------- 狀態區 ----------
+        const baseUrl = ref('');
+        const loginForm = reactive({ deviceKey: '' });
+        const authState = reactive({
+          accessToken: '',
+          refreshToken: '',
+          displayName: '',
+          role: '',
+          message: '',
+          accessTokenExpireAt: '',
+          refreshTokenExpireAt: '',
+          deviceStatus: ''
+        });
+        const quotationForm = reactive({
+          quotationNo: '',
+          reservationDate: '',
+          cancelReason: '',
+          clearReservation: true,
+          detailPreview: '',
+          editPayload: JSON.stringify(createBlankQuotationPayload(), null, 2)
+        });
+        const maintenanceForm = reactive({
+          orderNo: '',
+          terminateReason: '',
+          detailPreview: '',
+          editPayload: JSON.stringify(createBlankMaintenancePayload(), null, 2)
+        });
+        const logs = ref([]);
+        const lastResponse = ref('等待操作...');
+        const loading = reactive({
+          login: false,
+          refresh: false,
+          userInfo: false,
+          fetchQuotation: false,
+          updateQuotation: false,
+          evaluate: false,
+          reserve: false,
+          reserveUpdate: false,
+          reserveCancel: false,
+          revertQuotation: false,
+          convertMaintenance: false,
+          fetchOrder: false,
+          updateOrder: false,
+          confirmOrder: false,
+          revertOrder: false,
+          continueOrder: false,
+          completeOrder: false,
+          terminateOrder: false
+        });
+
+        // ---------- 計算屬性 ----------
+        const hasToken = computed(() => Boolean(authState.accessToken));
+
+        // ---------- 共用方法區 ----------
+        /**
+         * 說明：組合完整的 API 網址，並檢查是否已設定基底網址。
+         */
+        const buildUrl = (path) => {
+          if (!baseUrl.value) {
+            throw new Error('請先設定 API 基底網址。');
+          }
+          return `${baseUrl.value.replace(/\/$/, '')}${path}`;
+        };
+
+        /**
+         * 說明：統一格式化日期字串，方便顯示於畫面。
+         */
+        const formatTimestamp = (value) => {
+          if (!value) return '-';
+          const date = value instanceof Date ? value : new Date(value);
+          if (Number.isNaN(date.getTime())) {
+            return value;
+          }
+          return `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')} ${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}:${`${date.getSeconds()}`.padStart(2, '0')}`;
+        };
+
+        /**
+         * 說明：記錄操作歷程並顯示於時間軸，方便檢視請求與回應。
+         */
+        const appendLog = (type, title, payload) => {
+          logs.value = [
+            {
+              id: `${Date.now()}-${Math.random()}`,
+              type,
+              title,
+              payload: typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2),
+              timestamp: new Date().toISOString()
+            },
+            ...logs.value
+          ].slice(0, 30);
+        };
+
+        /**
+         * 說明：統一儲存最新回應內容，並以 prettify 後的 JSON 呈現。
+         */
+        const updateLastResponse = (data) => {
+          lastResponse.value = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+        };
+
+        /**
+         * 說明：安全解析 JSON，避免空字串或格式錯誤造成例外。
+         */
+        const safeParse = (text) => {
+          try {
+            return JSON.parse(text);
+          } catch (error) {
+            throw new Error('JSON 解析失敗，請檢查內容格式。');
+          }
+        };
+
+        /**
+         * 說明：統一處理非 2xx 回應並顯示錯誤訊息。
+         */
+        const handleProblemDetails = async (response) => {
+          let details = null;
+          try {
+            details = await response.clone().json();
+          } catch (_) {
+            details = { title: '未知錯誤', detail: await response.text() };
+          }
+          const description = details.detail || details.title || '發生未知錯誤';
+          message.error(description);
+          appendLog('danger', `API 回應錯誤：${response.status}`, details);
+          updateLastResponse(details);
+          throw new Error(description);
+        };
+
+        /**
+         * 說明：將登入結果寫回狀態，並保留過期時間等資訊。
+         */
+        const applyLoginResponse = (data) => {
+          authState.accessToken = data.accessToken ?? '';
+          authState.refreshToken = data.refreshToken ?? '';
+          authState.displayName = data.displayName ?? '';
+          authState.role = data.role ?? '';
+          authState.message = data.message ?? '';
+          authState.accessTokenExpireAt = data.accessTokenExpireAt ?? '';
+          authState.refreshTokenExpireAt = data.refreshTokenExpireAt ?? '';
+          authState.deviceStatus = data.deviceStatus ?? '';
+        };
+
+        /**
+         * 說明：將目前設定寫入 localStorage，避免重新整理後資料遺失。
+         */
+        const persistSettings = () => {
+          const payload = {
+            baseUrl: baseUrl.value,
+            deviceKey: loginForm.deviceKey,
+            authState,
+            quotationForm: {
+              quotationNo: quotationForm.quotationNo,
+              reservationDate: quotationForm.reservationDate,
+              cancelReason: quotationForm.cancelReason,
+              clearReservation: quotationForm.clearReservation,
+              editPayload: quotationForm.editPayload
+            },
+            maintenanceForm: {
+              orderNo: maintenanceForm.orderNo,
+              terminateReason: maintenanceForm.terminateReason,
+              editPayload: maintenanceForm.editPayload
+            }
+          };
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+        };
+
+        /**
+         * 說明：載入先前儲存的設定值，降低重複輸入時間。
+         */
+        const restoreSettings = () => {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          try {
+            const parsed = JSON.parse(raw);
+            if (parsed.baseUrl) baseUrl.value = parsed.baseUrl;
+            if (parsed.deviceKey) loginForm.deviceKey = parsed.deviceKey;
+            if (parsed.authState) Object.assign(authState, parsed.authState);
+            if (parsed.quotationForm) Object.assign(quotationForm, {
+              quotationNo: parsed.quotationForm.quotationNo ?? quotationForm.quotationNo,
+              reservationDate: parsed.quotationForm.reservationDate ?? quotationForm.reservationDate,
+              cancelReason: parsed.quotationForm.cancelReason ?? quotationForm.cancelReason,
+              clearReservation: parsed.quotationForm.clearReservation ?? quotationForm.clearReservation,
+              editPayload: parsed.quotationForm.editPayload ?? quotationForm.editPayload
+            });
+            if (parsed.maintenanceForm) Object.assign(maintenanceForm, {
+              orderNo: parsed.maintenanceForm.orderNo ?? maintenanceForm.orderNo,
+              terminateReason: parsed.maintenanceForm.terminateReason ?? maintenanceForm.terminateReason,
+              editPayload: parsed.maintenanceForm.editPayload ?? maintenanceForm.editPayload
+            });
+            lastResponse.value = '已載入上次儲存的設定，可直接開始測試。';
+          } catch (error) {
+            console.warn('設定還原失敗：', error);
+          }
+        };
+
+        /**
+         * 說明：統一附加授權標頭並送出請求。
+         */
+        const authorizedFetch = (path, options = {}) => {
+          if (!hasToken.value) {
+            message.warning('請先登入取得 Access Token。');
+            throw new Error('缺少 Access Token');
+          }
+          const headers = {
+            'Content-Type': 'application/json',
+            ...(options.headers || {}),
+            Authorization: `Bearer ${authState.accessToken}`
+          };
+          return fetch(buildUrl(path), { ...options, headers });
+        };
+
+        // ---------- API 呼叫區 ----------
+        const login = async () => {
+          if (!loginForm.deviceKey.trim()) {
+            message.warning('請先輸入裝置機碼。');
+            return;
+          }
+          loading.login = true;
+          try {
+            const response = await fetch(buildUrl('/auth/login'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deviceKey: loginForm.deviceKey.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            applyLoginResponse(data);
+            appendLog('success', '登入成功', data);
+            updateLastResponse(data);
+            message.success('登入成功，已取得 Access Token。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '登入流程發生錯誤', { message: error.message });
+          } finally {
+            loading.login = false;
+          }
+        };
+
+        const refreshToken = async () => {
+          if (!authState.refreshToken) {
+            message.warning('目前沒有 Refresh Token，請先登入。');
+            return;
+          }
+          loading.refresh = true;
+          try {
+            const response = await fetch(buildUrl('/auth/token/refresh'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                refreshToken: authState.refreshToken,
+                deviceKey: loginForm.deviceKey.trim()
+              })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            applyLoginResponse(data);
+            appendLog('success', '刷新 Access Token 成功', data);
+            updateLastResponse(data);
+            message.success('已刷新 Access Token。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '刷新 Token 發生錯誤', { message: error.message });
+          } finally {
+            loading.refresh = false;
+          }
+        };
+
+        const fetchUserInfo = async () => {
+          loading.userInfo = true;
+          try {
+            const response = await authorizedFetch('/auth/info', {
+              method: 'GET',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('info', '取得登入者資訊', data);
+            updateLastResponse(data);
+            message.success('取得登入資訊成功。');
+          } catch (error) {
+            appendLog('danger', '取得登入資訊失敗', { message: error.message });
+          } finally {
+            loading.userInfo = false;
+          }
+        };
+
+        const fetchQuotationDetail = async () => {
+          if (!quotationForm.quotationNo.trim()) {
+            message.warning('請先輸入估價單編號。');
+            return;
+          }
+          loading.fetchQuotation = true;
+          try {
+            const response = await authorizedFetch('/quotations/detail', {
+              method: 'POST',
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            quotationForm.detailPreview = JSON.stringify(data, null, 2);
+            quotationForm.editPayload = JSON.stringify(buildQuotationUpdatePayload(data), null, 2);
+            appendLog('primary', '取得估價單詳情成功', data);
+            updateLastResponse(data);
+            message.success('已取得估價單詳情。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '取得估價單詳情失敗', { message: error.message });
+          } finally {
+            loading.fetchQuotation = false;
+          }
+        };
+
+        const updateQuotation = async () => {
+          loading.updateQuotation = true;
+          try {
+            const payload = safeParse(quotationForm.editPayload || '{}');
+            const response = await authorizedFetch('/quotations/edit', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            appendLog('success', '估價單編輯成功', payload);
+            updateLastResponse({ status: 'success', message: '估價單編輯成功' });
+            message.success('估價單編輯成功。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '估價單編輯失敗', { message: error.message });
+          } finally {
+            loading.updateQuotation = false;
+          }
+        };
+
+        const completeEvaluation = async () => {
+          loading.evaluate = true;
+          try {
+            const response = await authorizedFetch('/quotations/evaluate', {
+              method: 'POST',
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('success', '估價完成', data);
+            updateLastResponse(data);
+            message.success('估價單已更新為估價完成狀態。');
+          } catch (error) {
+            appendLog('danger', '估價完成失敗', { message: error.message });
+          } finally {
+            loading.evaluate = false;
+          }
+        };
+
+        const convertToReservation = async () => {
+          if (!quotationForm.reservationDate) {
+            message.warning('請選擇預約日期。');
+            return;
+          }
+          loading.reserve = true;
+          try {
+            const response = await authorizedFetch('/quotations/reserve', {
+              method: 'POST',
+              body: JSON.stringify({
+                quotationNo: quotationForm.quotationNo.trim(),
+                reservationDate: quotationForm.reservationDate
+              })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('success', '轉預約成功', data);
+            updateLastResponse(data);
+            message.success('估價單已轉為預約。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '轉預約失敗', { message: error.message });
+          } finally {
+            loading.reserve = false;
+          }
+        };
+
+        const updateReservationDate = async () => {
+          if (!quotationForm.reservationDate) {
+            message.warning('請選擇預約日期。');
+            return;
+          }
+          loading.reserveUpdate = true;
+          try {
+            const response = await authorizedFetch('/quotations/reserve/update', {
+              method: 'POST',
+              body: JSON.stringify({
+                quotationNo: quotationForm.quotationNo.trim(),
+                reservationDate: quotationForm.reservationDate
+              })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('primary', '更新預約日期成功', data);
+            updateLastResponse(data);
+            message.success('預約日期更新成功。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '更新預約日期失敗', { message: error.message });
+          } finally {
+            loading.reserveUpdate = false;
+          }
+        };
+
+        const cancelReservation = async () => {
+          loading.reserveCancel = true;
+          try {
+            const response = await authorizedFetch('/quotations/reserve/cancel', {
+              method: 'POST',
+              body: JSON.stringify({
+                quotationNo: quotationForm.quotationNo.trim(),
+                reason: quotationForm.cancelReason || undefined,
+                clearReservation: quotationForm.clearReservation
+              })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('warning', '取消預約 / 估價單成功', data);
+            updateLastResponse(data);
+            message.success('已取消估價單或預約狀態。');
+          } catch (error) {
+            appendLog('danger', '取消預約失敗', { message: error.message });
+          } finally {
+            loading.reserveCancel = false;
+          }
+        };
+
+        const revertQuotationStatus = async () => {
+          loading.revertQuotation = true;
+          try {
+            const response = await authorizedFetch('/quotations/revert', {
+              method: 'POST',
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('info', '估價單狀態回溯成功', data);
+            updateLastResponse(data);
+            message.success('估價單狀態已回溯。');
+          } catch (error) {
+            appendLog('danger', '估價單狀態回溯失敗', { message: error.message });
+          } finally {
+            loading.revertQuotation = false;
+          }
+        };
+
+        const convertToMaintenance = async () => {
+          loading.convertMaintenance = true;
+          try {
+            const response = await authorizedFetch('/quotations/maintenance', {
+              method: 'POST',
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            maintenanceForm.orderNo = data.orderNo ?? maintenanceForm.orderNo;
+            if (data.orderNo) {
+              message.success(`轉維修成功，新工單編號：${data.orderNo}`);
+            } else {
+              message.success('轉維修成功。');
+            }
+            appendLog('success', '估價單轉維修成功', data);
+            updateLastResponse(data);
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '估價單轉維修失敗', { message: error.message });
+          } finally {
+            loading.convertMaintenance = false;
+          }
+        };
+
+        const fetchMaintenanceDetail = async () => {
+          if (!maintenanceForm.orderNo.trim()) {
+            message.warning('請先輸入維修單編號。');
+            return;
+          }
+          loading.fetchOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/detail', {
+              method: 'POST',
+              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            maintenanceForm.detailPreview = JSON.stringify(data, null, 2);
+            maintenanceForm.editPayload = JSON.stringify(buildMaintenanceUpdatePayload(data), null, 2);
+            appendLog('primary', '取得維修單詳情成功', data);
+            updateLastResponse(data);
+            message.success('已取得維修單詳情。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '取得維修單詳情失敗', { message: error.message });
+          } finally {
+            loading.fetchOrder = false;
+          }
+        };
+
+        const updateMaintenanceOrder = async () => {
+          loading.updateOrder = true;
+          try {
+            const payload = safeParse(maintenanceForm.editPayload || '{}');
+            const response = await authorizedFetch('/maintenance-orders/edit', {
+              method: 'POST',
+              body: JSON.stringify(payload)
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            appendLog('success', '維修單編輯成功', payload);
+            updateLastResponse({ status: 'success', message: '維修單編輯成功' });
+            message.success('維修單編輯成功。');
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '維修單編輯失敗', { message: error.message });
+          } finally {
+            loading.updateOrder = false;
+          }
+        };
+
+        const confirmMaintenance = async () => {
+          loading.confirmOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/confirm', {
+              method: 'POST',
+              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('success', '確認維修成功', data);
+            updateLastResponse(data);
+            message.success('維修單已更新為維修中。');
+          } catch (error) {
+            appendLog('danger', '確認維修失敗', { message: error.message });
+          } finally {
+            loading.confirmOrder = false;
+          }
+        };
+
+        const revertMaintenanceStatus = async () => {
+          loading.revertOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/revert', {
+              method: 'POST',
+              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('info', '維修單狀態回溯成功', data);
+            updateLastResponse(data);
+            message.success('維修單狀態已回溯。');
+          } catch (error) {
+            appendLog('danger', '維修單狀態回溯失敗', { message: error.message });
+          } finally {
+            loading.revertOrder = false;
+          }
+        };
+
+        const continueMaintenance = async () => {
+          loading.continueOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/continue', {
+              method: 'POST',
+              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('primary', '續修維修單成功', data);
+            updateLastResponse(data);
+            if (data.newOrderNo) {
+              maintenanceForm.orderNo = data.newOrderNo;
+              message.success(`續修成功，新的維修單編號為：${data.newOrderNo}`);
+            } else {
+              message.success('續修維修單成功。');
+            }
+            persistSettings();
+          } catch (error) {
+            appendLog('danger', '續修維修單失敗', { message: error.message });
+          } finally {
+            loading.continueOrder = false;
+          }
+        };
+
+        const completeMaintenance = async () => {
+          loading.completeOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/complete', {
+              method: 'POST',
+              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('success', '維修完成成功', data);
+            updateLastResponse(data);
+            message.success('維修單已完成。');
+          } catch (error) {
+            appendLog('danger', '維修完成失敗', { message: error.message });
+          } finally {
+            loading.completeOrder = false;
+          }
+        };
+
+        const terminateMaintenance = async () => {
+          loading.terminateOrder = true;
+          try {
+            const response = await authorizedFetch('/maintenance-orders/terminate', {
+              method: 'POST',
+              body: JSON.stringify({
+                orderNo: maintenanceForm.orderNo.trim(),
+                reason: maintenanceForm.terminateReason || undefined
+              })
+            });
+            if (!response.ok) {
+              await handleProblemDetails(response);
+              return;
+            }
+            const data = await response.json();
+            appendLog('warning', '終止維修成功', data);
+            updateLastResponse(data);
+            message.success('維修單已終止。');
+          } catch (error) {
+            appendLog('danger', '終止維修失敗', { message: error.message });
+          } finally {
+            loading.terminateOrder = false;
+          }
+        };
+
+        const clearTokens = () => {
+          applyLoginResponse({});
+          message.success('已清除權杖資訊。');
+          persistSettings();
+        };
+
+        // ---------- 生命週期 ----------
+        onMounted(() => {
+          restoreSettings();
+        });
+
+        watch([baseUrl, () => loginForm.deviceKey], persistSettings);
+        watch(() => authState.accessToken, persistSettings);
+
+        return {
+          baseUrl,
+          loginForm,
+          authState,
+          quotationForm,
+          maintenanceForm,
+          logs,
+          lastResponse,
+          loading,
+          hasToken,
+          locale: zhTwLocale,
+          formatTimestamp,
+          login,
+          refreshToken,
+          fetchUserInfo,
+          clearTokens,
+          fetchQuotationDetail,
+          updateQuotation,
+          completeEvaluation,
+          convertToReservation,
+          updateReservationDate,
+          cancelReservation,
+          revertQuotationStatus,
+          convertToMaintenance,
+          fetchMaintenanceDetail,
+          updateMaintenanceOrder,
+          confirmMaintenance,
+          revertMaintenanceStatus,
+          continueMaintenance,
+          completeMaintenance,
+          terminateMaintenance
+        };
+      }
+    };
+
+    createApp(App).use(elementPlus).mount('#app');
+  </script>
+</body>
+</html>
