@@ -265,6 +265,42 @@
                     <el-button type="primary" @click="sendCustomRequest" :loading="requestLoading">送出請求</el-button>
                   </el-form-item>
                 </el-form>
+                <div v-if="customRequestState.summary" class="card-spacer" style="margin-top: 12px;">
+                  <el-alert
+                    :type="customRequestState.success ? 'success' : 'error'"
+                    :title="customRequestState.success ? '請求成功' : '請求失敗'"
+                    :description="customRequestState.message"
+                    :closable="false"
+                    show-icon
+                    style="margin-bottom: 12px;"
+                  />
+                  <div class="operation-tools" style="justify-content: space-between;">
+                    <el-space wrap>
+                      <el-tag :type="customRequestState.success ? 'success' : 'danger'" effect="dark">
+                        {{ customRequestState.summary.status }}
+                      </el-tag>
+                      <span class="request-url-preview">最近更新：{{ formatTimestamp(customRequestState.updatedAt) }}</span>
+                    </el-space>
+                    <el-button
+                      type="primary"
+                      size="small"
+                      @click="copyContent(customRequestState.summary.body, '回應內容')"
+                    >複製回應</el-button>
+                  </div>
+                  <el-descriptions :column="1" border size="small" style="margin-bottom: 12px;">
+                    <el-descriptions-item label="回應標頭">
+                      <pre>{{ formatJson(customRequestState.summary.headers) }}</pre>
+                    </el-descriptions-item>
+                  </el-descriptions>
+                  <el-tabs v-model="responseViewerState.customRequest" type="card" class="result-viewer">
+                    <el-tab-pane label="格式化 JSON" name="formatted">
+                      <pre>{{ formatJson(customRequestState.summary.body) }}</pre>
+                    </el-tab-pane>
+                    <el-tab-pane label="原始資料" name="raw">
+                      <pre>{{ toRawText(customRequestState.summary.body) }}</pre>
+                    </el-tab-pane>
+                  </el-tabs>
+                </div>
               </el-card>
             </div>
 
@@ -505,6 +541,7 @@
 
         // ---------- 結果檢視狀態 ----------
         const responseViewerState = reactive({
+          customRequest: 'formatted',
           carPlate: 'formatted',
           carPlateSearch: 'formatted',
           photoUpload: 'formatted'
@@ -765,7 +802,7 @@
           });
         };
 
-        const performRequest = async ({ method, path, body, includeAuth = true, contentType = 'application/json', formData, description }) => {
+        const performRequest = async ({ method, path, body, includeAuth = true, contentType = 'application/json', formData, description, captureSummary = false }) => {
           const url = composeUrl(path);
           const headers = new Headers();
 
@@ -845,6 +882,14 @@
               isError: false
             });
 
+            if (captureSummary) {
+              // 將回應摘要包裝回傳，供需要即時顯示結果的流程（例如自訂請求）使用
+              return {
+                data: responseData,
+                summary: responseSummary
+              };
+            }
+
             return responseData;
           } catch (error) {
             const fallbackResponse = responseSummary ?? {
@@ -865,7 +910,12 @@
               isError: true,
               errorMessage: error instanceof Error ? error.message : '未知錯誤'
             });
-            throw error;
+            const normalizedError = error instanceof Error ? error : new Error(String(error));
+            if (captureSummary) {
+              // 將錯誤時的回應摘要綁定在錯誤物件上，讓呼叫端可以顯示詳細內容
+              normalizedError.summary = fallbackResponse;
+            }
+            throw normalizedError;
           }
         };
 
@@ -886,23 +936,52 @@
           }
         };
 
+        const customRequestState = reactive({
+          // summary 儲存 performRequest 回傳的 HTTP 狀態、標頭與 body，提供畫面顯示
+          summary: null,
+          // success 標記本次呼叫是否成功，以決定顯示對應樣式
+          success: null,
+          // message 顯示給使用者的說明，搭配提示訊息呈現
+          message: '',
+          // updatedAt 保留最新結果時間，顯示在畫面上協助追蹤
+          updatedAt: null
+        });
+
         const sendCustomRequest = async () => {
           requestLoading.value = true;
           try {
             const body = requestForm.body && requestForm.method !== 'GET'
               ? requestForm.body
               : undefined;
-            await performRequest({
+            const { data, summary } = await performRequest({
               method: requestForm.method,
               path: requestForm.path,
               body,
               includeAuth: requestForm.useAuth,
               contentType: 'application/json',
-              description: '自訂請求'
+              description: '自訂請求',
+              captureSummary: true
             });
+            customRequestState.summary = summary;
+            customRequestState.success = true;
+            customRequestState.message = '請求已送出並完成。';
+            customRequestState.updatedAt = new Date();
             showSuccess('請求已送出並完成。');
+            return data;
           } catch (error) {
-            showError(error.message || '請求失敗，請稍後再試。');
+            const message = error instanceof Error ? error.message : '請求失敗，請稍後再試。';
+            const fallback = error && typeof error === 'object' && 'summary' in error
+              ? error.summary
+              : {
+                  status: '未送達',
+                  headers: {},
+                  body: message
+                };
+            customRequestState.summary = fallback;
+            customRequestState.success = false;
+            customRequestState.message = message;
+            customRequestState.updatedAt = new Date();
+            showError(message);
           } finally {
             requestLoading.value = false;
           }
@@ -1938,6 +2017,7 @@
           collapseAllGroups,
           handleSpecUrlInput,
           responseViewerState,
+          customRequestState,
           formatJson,
           toRawText,
           copyContent,
