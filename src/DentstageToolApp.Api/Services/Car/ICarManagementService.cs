@@ -27,4 +27,13 @@ public interface ICarManagementService
     /// <returns>回傳編輯完成的車輛資訊。</returns>
     Task<EditCarResponse> EditCarAsync(EditCarRequest request, string operatorName, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// 刪除既有車輛資料，刪除前會檢查是否仍被報價單或工單引用。
+    /// </summary>
+    /// <param name="request">車輛刪除請求內容。</param>
+    /// <param name="operatorName">操作人員名稱。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>刪除完成後的確認訊息。</returns>
+    Task<DeleteCarResponse> DeleteCarAsync(DeleteCarRequest request, string operatorName, CancellationToken cancellationToken);
+
 }
