@@ -1,4 +1,4 @@
-流程階段,功能,HTTP Method,API-EN,額外文檔
+﻿流程階段,功能,HTTP Method,API-EN,額外文檔
 通用,登入,POST,/api/auth/login,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_AUTH_LOGIN
 通用,顯示使用者帳號,GET,/api/auth/info,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_AUTH_INFO
 通用,上傳圖片,POST,/api/photos,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PHOTOS
