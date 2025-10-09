@@ -100,7 +100,7 @@
               show-icon
               :closable="false"
               style="margin-top: 12px;"
-              description="依序完成登入、取得測試資料或必要 UID，最後送出估價單建立請求。若環境無現成圖片，可直接點擊『建立空白圖片』取得 PhotoUID。"
+              description="依序完成登入、取得測試資料或必要 UID，最後送出估價單建立請求。若環境無現成圖片，可直接點擊上方按鈕建立損傷或簽名專用空白圖片以取得 PhotoUID。"
             />
 
             <!-- 環境與登入設定 -->
@@ -149,8 +149,21 @@
                 <el-button type="primary" :loading="loading.random" :disabled="!hasToken" @click="fetchRandomDraft">
                   取得隨機測試草稿
                 </el-button>
-                <el-button type="warning" :loading="loading.blankPhoto" :disabled="!hasToken" @click="uploadBlankPhoto">
-                  建立空白圖片取得 PhotoUID
+                <el-button
+                  type="warning"
+                  :loading="loading.damagePhoto"
+                  :disabled="!hasToken"
+                  @click="createDamageBlankPhoto"
+                >
+                  建立損傷空白圖片取得 PhotoUID
+                </el-button>
+                <el-button
+                  type="success"
+                  :loading="loading.signaturePhoto"
+                  :disabled="!hasToken"
+                  @click="createSignatureBlankPhoto"
+                >
+                  建立簽名空白圖片取得 PhotoUID
                 </el-button>
               </div>
               <el-alert
@@ -213,31 +226,47 @@
 
               <div class="card-spacer">
                 <el-divider content-position="left">最新建立的空白圖片</el-divider>
-                <el-input v-model="blankPhotoUid" placeholder="尚未建立圖片" readonly />
+                <el-form label-width="140px" label-position="left">
+                  <el-form-item label="損傷用 PhotoUID">
+                    <el-input v-model="damagePhotoUid" placeholder="尚未建立圖片" readonly />
+                  </el-form-item>
+                  <el-form-item label="簽名用 PhotoUID">
+                    <el-input v-model="signaturePhotoUid" placeholder="尚未建立圖片" readonly />
+                  </el-form-item>
+                </el-form>
                 <div class="section-actions" style="margin-top: 12px;">
-                  <el-button type="primary" :disabled="!canUseBlankPhoto" @click="appendDamageWithBlankPhoto">
-                    帶入損傷資料（使用空白圖片）
+                  <el-button type="primary" :disabled="!canUseDamagePhoto" @click="appendDamageWithPhoto">
+                    帶入損傷資料（使用損傷圖片）
                   </el-button>
-                  <el-button type="success" :disabled="!canUseBlankPhoto" @click="applySignatureWithBlankPhoto">
-                    套用簽名照片（使用空白圖片）
+                  <el-button type="success" :disabled="!canUseSignaturePhoto" @click="applySignatureWithPhoto">
+                    套用簽名照片（使用簽名圖片）
                   </el-button>
                 </div>
                 <el-alert
-                  v-if="canUseBlankPhoto"
+                  v-if="canUseDamagePhoto"
                   type="info"
                   :closable="false"
                   show-icon
-                  title="損傷資料固定為單筆清單"
-                  description="系統會將 damages 陣列覆蓋為僅含一筆資料，內容包含空白圖片 UID、左前門、需烤漆與估價 4648 等欄位。"
+                  title="損傷資料可重複新增"
+                  description="系統會在 damages 陣列末端新增一筆固定範例，並直接將 PhotoUID 寫入 photos 欄位，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
                   style="margin-top: 8px;"
                 />
                 <el-alert
-                  v-if="!canUseBlankPhoto"
+                  v-if="canUseSignaturePhoto"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="簽名僅保留最新圖片"
+                  description="簽名欄位僅會維持單一 PhotoUID，重複套用時會直接覆蓋舊資料。"
+                  style="margin-top: 8px;"
+                />
+                <el-alert
+                  v-if="!canUseDamagePhoto && !canUseSignaturePhoto"
                   type="info"
                   :closable="false"
                   show-icon
                   title="尚未建立空白圖片"
-                  description="請先點擊『建立空白圖片取得 PhotoUID』，即可快速建立損傷資料與簽名欄位。"
+                  description="請先點擊上方按鈕分別建立損傷或簽名使用的空白圖片，即可快速建立對應欄位。"
                   style="margin-top: 8px;"
                 />
               </div>
@@ -323,7 +352,8 @@
           login: false,
           refresh: false,
           random: false,
-          blankPhoto: false,
+          damagePhoto: false,
+          signaturePhoto: false,
           create: false
         });
         const createRequestText = ref(`{
@@ -376,12 +406,14 @@
           notes: [],
           generatedAt: ''
         });
-        const blankPhotoUid = ref('');
+        const damagePhotoUid = ref('');
+        const signaturePhotoUid = ref('');
         const logs = ref([]);
 
         const locale = computed(() => zhTwLocale || undefined);
         const hasToken = computed(() => !!authState.accessToken);
-        const canUseBlankPhoto = computed(() => !!blankPhotoUid.value);
+        const canUseDamagePhoto = computed(() => !!damagePhotoUid.value);
+        const canUseSignaturePhoto = computed(() => !!signaturePhotoUid.value);
 
         // ---------- 方法區 ----------
 
@@ -422,19 +454,20 @@
 
         // 建立固定的損傷資料範本，符合營運提供的標準內容
         const buildDamageTemplate = (photoUid) => ({
-          photos: photoUid,
+          // 說明：依照估價單 API 需求，photos 採字串儲存單一圖片 UID
+          photos: photoUid || '',
           position: '左前門',
           dentStatus: '需烤漆',
           description: '建議同時處理刮痕',
           estimatedAmount: 4648
         });
 
-        // 套用空白圖片至損傷陣列，維持唯一固定的列表結構
+        // 套用圖片至損傷陣列，允許多筆資料堆疊以模擬多處損傷
         const updateDamageWithPhoto = (photoUid, options = {}) => {
           const { notify = true, log = true } = options;
           if (!photoUid) {
             if (notify) {
-              message.warning('請先建立空白圖片以取得 PhotoUID。');
+              message.warning('請先建立或輸入損傷用 PhotoUID。');
             }
             return { success: false };
           }
@@ -446,18 +479,21 @@
               parsed.damages = [];
             }
 
+            // 若預設模板尚未填寫照片，先移除占位資料避免送出無效項目
+            parsed.damages = parsed.damages.filter((item) => item && item.photos);
+
             const payload = buildDamageTemplate(photoUid);
-            parsed.damages = [payload];
+            parsed.damages.push(payload);
 
             createRequestText.value = JSON.stringify(parsed, null, 2);
             persistSettings();
 
             if (notify) {
-              message.success('已帶入固定損傷資料並套用空白圖片。');
+              message.success('已新增一筆固定損傷資料並套用指定圖片。');
             }
 
             if (log) {
-              appendLog('success', '帶入固定損傷資料並套用空白圖片', { photoUid, damage: payload });
+              appendLog('success', '新增固定損傷資料並套用圖片', { photoUid, damage: payload });
             }
 
             return { success: true, payload };
@@ -466,17 +502,17 @@
               message.warning('JSON 解析失敗，請確認內容格式是否正確。');
             }
             if (log) {
-              appendLog('warning', '處理損傷資料失敗', { message: error.message });
+              appendLog('warning', '新增損傷資料失敗', { message: error.message });
             }
             return { success: false, error };
           }
         };
 
-        // 套用空白圖片至車體簽名欄位，確保簽名必填資料齊全
+        // 套用指定圖片至車體簽名欄位，確保簽名必填資料齊全
         const applySignaturePhoto = (photoUid, { notify = true, log = true } = {}) => {
           if (!photoUid) {
             if (notify) {
-              message.warning('請先建立空白圖片以取得 PhotoUID。');
+              message.warning('請先建立或輸入簽名用 PhotoUID。');
             }
             return { success: false };
           }
@@ -694,14 +730,16 @@
           };
         };
 
-        // 以空白 Base64 產生圖片檔案並上傳取得 PhotoUID
-        const uploadBlankPhoto = async () => {
+        // 以空白 Base64 產生圖片檔案並上傳取得 PhotoUID，依目標分類儲存
+        const uploadBlankPhoto = async (target) => {
           if (!hasToken.value) {
             message.warning('請先登入取得 Access Token。');
             return;
           }
 
-          loading.blankPhoto = true;
+          const loadingKey = target === 'signature' ? 'signaturePhoto' : 'damagePhoto';
+          const targetName = target === 'signature' ? '簽名' : '損傷';
+          loading[loadingKey] = true;
           try {
             const blob = base64ToBlob(BLANK_IMAGE_BASE64);
             const file = new File([blob], `blank-${Date.now()}.png`, { type: blob.type });
@@ -722,48 +760,47 @@
             }
 
             const data = await response.json();
-            blankPhotoUid.value = data.photoUid || '';
-            message.success('已建立空白圖片並取得 PhotoUID。');
-            appendLog('success', '建立空白圖片成功', data);
-            applyBlankPhotoToRequest(blankPhotoUid.value);
+            const photoUid = data.photoUid || '';
+
+            if (target === 'signature') {
+              signaturePhotoUid.value = photoUid;
+              message.success('已建立簽名空白圖片並取得 PhotoUID。');
+              appendLog('success', '建立簽名空白圖片成功', data);
+              const result = applySignaturePhoto(photoUid, { notify: false });
+              if (result.success) {
+                appendLog('success', '簽名空白圖片已自動套用', { photoUid });
+              }
+            } else {
+              damagePhotoUid.value = photoUid;
+              message.success('已建立損傷空白圖片並取得 PhotoUID。');
+              appendLog('success', '建立損傷空白圖片成功', data);
+              const result = updateDamageWithPhoto(photoUid, { notify: false });
+              if (result.success) {
+                appendLog('success', '損傷空白圖片已自動新增損傷資料', { photoUid });
+              }
+            }
           } catch (error) {
-            appendLog('danger', '建立空白圖片失敗', { message: error.message });
+            appendLog('danger', `建立${targetName}空白圖片失敗`, { message: error.message });
           } finally {
-            loading.blankPhoto = false;
+            loading[loadingKey] = false;
           }
         };
 
-        // 說明：將空白圖片 UID 自動套用至估價單 JSON，避免測試人員手動複製
-        const applyBlankPhotoToRequest = (photoUid) => {
-          if (!photoUid) {
-            return;
-          }
-
-          const damageResult = updateDamageWithPhoto(photoUid, {
-            notify: false,
-            log: false
-          });
-          const signatureResult = applySignaturePhoto(photoUid, {
-            notify: false,
-            log: false
-          });
-
-          if (damageResult.success || signatureResult.success) {
-            appendLog('success', '空白圖片已自動套用至損傷與簽名欄位', { photoUid });
-          } else {
-            message.warning('空白圖片已建立，但自動套用失敗，請透過按鈕手動更新 JSON。');
-          }
+        // 透過最新損傷圖片新增損傷陣列資料
+        const appendDamageWithPhoto = () => {
+          updateDamageWithPhoto(damagePhotoUid.value, {});
         };
 
-        // 透過最新空白圖片新增損傷陣列資料
-        const appendDamageWithBlankPhoto = () => {
-          updateDamageWithPhoto(blankPhotoUid.value, {});
+        // 透過最新簽名圖片套用簽名照片 UID
+        const applySignatureWithPhoto = () => {
+          applySignaturePhoto(signaturePhotoUid.value, {});
         };
 
-        // 透過最新空白圖片套用簽名照片 UID
-        const applySignatureWithBlankPhoto = () => {
-          applySignaturePhoto(blankPhotoUid.value, {});
-        };
+        // 建立損傷專用空白圖片
+        const createDamageBlankPhoto = () => uploadBlankPhoto('damage');
+
+        // 建立簽名專用空白圖片
+        const createSignatureBlankPhoto = () => uploadBlankPhoto('signature');
 
         // 將 Base64 字串轉換為 Blob 物件
         const base64ToBlob = (base64) => {
@@ -930,9 +967,11 @@
           authState,
           loading,
           hasToken,
-          canUseBlankPhoto,
+          canUseDamagePhoto,
+          canUseSignaturePhoto,
           randomSummary,
-          blankPhotoUid,
+          damagePhotoUid,
+          signaturePhotoUid,
           createRequestText,
           createResponse,
           logs,
@@ -941,8 +980,10 @@
           fetchUserInfo,
           fetchRandomDraft,
           uploadBlankPhoto,
-          appendDamageWithBlankPhoto,
-          applySignatureWithBlankPhoto,
+          appendDamageWithPhoto,
+          applySignatureWithPhoto,
+          createDamageBlankPhoto,
+          createSignatureBlankPhoto,
           createQuotation,
           formatRequestJson,
           copyRequest,
