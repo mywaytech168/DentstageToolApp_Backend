@@ -16,10 +16,9 @@ DentstageToolApp_Backend/
 │  │  ├─ Controllers/
 │  │  │  └─ HealthCheckController.cs    # 健康檢查 API，提供服務狀態
 │  │  ├─ docs/                          # API 測試與操作說明文件
-│  │  │  ├─ api-flow-tester.html        # API 流程測試工具頁面
 │  │  │  ├─ quotation-create-guide.html # 新增估價單流程與欄位對照說明頁面
 │  │  │  └─ api/
-│  │  │     └─ index.html               # API 說明頁面
+│  │  │     └─ index.html               # API 說明與 Flow 測試工具整合頁
 │  │  ├─ Program.cs                     # 服務啟動、中介層與 DbContext 註冊
 │  │  ├─ appsettings*.json              # 組態檔，可依環境調整與設定連線字串
 │  │  └─ Properties/launchSettings.json # 開發階段啟動設定
