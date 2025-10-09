@@ -5,5 +5,5 @@
 - [API 文件首頁](../src/DentstageToolApp.Api/docs/index.html)
 - [API 文件索引](../src/DentstageToolApp.Api/docs/api/index.html)
 - [報價建立教學](../src/DentstageToolApp.Api/docs/quotation-create-guide.html)
-- [報價編輯教學](../src/DentstageToolApp.Api/docs/quotation-edit-guide.html)
 - [API Flow 測試工具](../src/DentstageToolApp.Api/docs/api-flow-tester.html)
+- [Swagger API 文件](https://localhost:7249/swagger/index.html)
