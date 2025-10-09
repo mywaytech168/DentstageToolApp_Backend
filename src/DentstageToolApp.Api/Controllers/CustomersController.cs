@@ -42,6 +42,70 @@ public class CustomersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
+    /// 取得所有客戶的概覽清單。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖，供前端在需要時中止請求。</param>
+    [HttpGet]
+    [ProducesResponseType(typeof(CustomerListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CustomerListResponse>> GetCustomersAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _customerLookupService.GetCustomersAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (CustomerLookupException ex)
+        {
+            _logger.LogWarning(ex, "取得客戶列表失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢客戶列表失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("客戶列表查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢客戶列表已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得客戶列表流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢客戶列表失敗");
+        }
+    }
+
+    /// <summary>
+    /// 透過客戶識別碼取得完整客戶資料。
+    /// </summary>
+    /// <param name="customerUid">客戶識別碼。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet("{customerUid}")]
+    [ProducesResponseType(typeof(CustomerDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<CustomerDetailResponse>> GetCustomerAsync(string customerUid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _customerLookupService.GetCustomerAsync(customerUid, cancellationToken);
+            return Ok(response);
+        }
+        catch (CustomerLookupException ex)
+        {
+            _logger.LogWarning(ex, "取得客戶明細失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢客戶資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("客戶明細查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢客戶資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得客戶明細流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢客戶資料失敗");
+        }
+    }
+
+    /// <summary>
     /// 新增客戶資料，建立姓名、電話、來源與備註等欄位。
     /// </summary>
     /// <remarks>

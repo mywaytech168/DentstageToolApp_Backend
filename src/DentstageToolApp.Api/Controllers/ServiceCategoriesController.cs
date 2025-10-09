@@ -22,18 +22,87 @@ namespace DentstageToolApp.Api.Controllers;
 public class ServiceCategoriesController : ControllerBase
 {
     private readonly IServiceCategoryManagementService _serviceCategoryManagementService;
+    private readonly IServiceCategoryQueryService _serviceCategoryQueryService;
     private readonly ILogger<ServiceCategoriesController> _logger;
 
     /// <summary>
     /// 建構子，注入服務類別維運服務與記錄器。
     /// </summary>
-    public ServiceCategoriesController(IServiceCategoryManagementService serviceCategoryManagementService, ILogger<ServiceCategoriesController> logger)
+    public ServiceCategoriesController(
+        IServiceCategoryManagementService serviceCategoryManagementService,
+        IServiceCategoryQueryService serviceCategoryQueryService,
+        ILogger<ServiceCategoriesController> logger)
     {
         _serviceCategoryManagementService = serviceCategoryManagementService;
+        _serviceCategoryQueryService = serviceCategoryQueryService;
         _logger = logger;
     }
 
     // ---------- API 呼叫區 ----------
+
+    /// <summary>
+    /// 取得所有服務類別列表。
+    /// </summary>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet]
+    [ProducesResponseType(typeof(ServiceCategoryListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ServiceCategoryListResponse>> GetServiceCategoriesAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _serviceCategoryQueryService.GetServiceCategoriesAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (ServiceCategoryQueryException ex)
+        {
+            _logger.LogWarning(ex, "取得服務類別列表失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢服務類別列表失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("服務類別列表查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢服務類別列表已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得服務類別列表流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢服務類別列表失敗");
+        }
+    }
+
+    /// <summary>
+    /// 透過識別碼取得服務類別詳細資料。
+    /// </summary>
+    /// <param name="serviceCategoryUid">服務類別識別碼。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet("{serviceCategoryUid}")]
+    [ProducesResponseType(typeof(ServiceCategoryDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<ServiceCategoryDetailResponse>> GetServiceCategoryAsync(string serviceCategoryUid, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _serviceCategoryQueryService.GetServiceCategoryAsync(serviceCategoryUid, cancellationToken);
+            return Ok(response);
+        }
+        catch (ServiceCategoryQueryException ex)
+        {
+            _logger.LogWarning(ex, "取得服務類別明細失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢服務類別資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("服務類別明細查詢流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "查詢服務類別資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "取得服務類別明細流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢服務類別資料失敗");
+        }
+    }
 
     /// <summary>
     /// 新增服務類別資料。
