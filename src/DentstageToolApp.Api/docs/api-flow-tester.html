@@ -71,6 +71,14 @@
     const elementPlus = window.ElementPlus;
     const zhTwLocale = window.ElementPlusLocaleZhTw?.default ?? window.ElementPlusLocaleZhTw;
 
+    // 解析網址查詢參數，支援自動選取目標 API 與指定 Swagger 來源。
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialSpecUrl = urlParams.get('specUrl') || '';
+    const initialOperationId = urlParams.get('operationId') || '';
+    const initialOperationPath = urlParams.get('path') || '';
+    const initialOperationMethod = (urlParams.get('method') || '').toUpperCase();
+    const initialOperationTag = urlParams.get('tag') || '';
+
     if (!elementPlus) {
       // 若 Element Plus 未成功載入，提前拋出錯誤提醒開發者檢查網路或 CDN 狀態
       throw new Error('Element Plus 載入失敗，請確認 CDN 狀態。');
@@ -479,13 +487,21 @@
         const dynamicOperationGroups = ref([]);
         const operationKeyword = ref('');
         const swaggerState = reactive({
-          specUrl: '',
+          specUrl: initialSpecUrl,
           loading: false,
           lastLoadedAt: null,
           error: ''
         });
         const manualSpecUrl = ref(false);
+        if (initialSpecUrl) {
+          // 透過外部指定 Swagger 來源時視為手動設定，避免被自動推導覆蓋。
+          manualSpecUrl.value = true;
+        }
         const hasAutoLoadedSwagger = ref(false);
+        const hasAppliedInitialPrefill = ref(false);
+        const shouldPrefillFromQuery = Boolean(
+          initialOperationId || (initialOperationMethod && initialOperationPath)
+        );
 
         // ---------- 結果檢視狀態 ----------
         const responseViewerState = reactive({
@@ -700,7 +716,8 @@
                 requiresAuth: determineRequiresAuth(operation, spec),
                 template: extractRequestExample(operation),
                 tags,
-                swaggerLink: buildSwaggerUiLink(specUrl, tags[0], operationId)
+                swaggerLink: buildSwaggerUiLink(specUrl, tags[0], operationId),
+                operationId
               });
             });
           });
@@ -1710,6 +1727,77 @@
           operationGroups.value.reduce((total, group) => total + group.operations.length, 0)
         );
 
+        const ensureGroupExpanded = (groupName) => {
+          if (!groupName) {
+            return;
+          }
+          const current = new Set(activeOperationGroups.value);
+          current.add(groupName);
+          activeOperationGroups.value = Array.from(current);
+        };
+
+        const isOperationMatchByQuery = (operation) => {
+          if (!operation || typeof operation !== 'object') {
+            return false;
+          }
+          if (initialOperationId && operation.operationId) {
+            if (operation.operationId === initialOperationId) {
+              return true;
+            }
+          }
+          if (initialOperationMethod && initialOperationPath) {
+            const method = (operation.method || '').toUpperCase();
+            if (method === initialOperationMethod && operation.path === initialOperationPath) {
+              return true;
+            }
+          }
+          return false;
+        };
+
+        const findOperationFromGroups = () => {
+          for (const group of operationGroups.value) {
+            const matched = group.operations.find(isOperationMatchByQuery);
+            if (matched) {
+              return { groupName: group.name, operation: matched };
+            }
+          }
+          return null;
+        };
+
+        const tryApplyInitialPrefill = () => {
+          if (!shouldPrefillFromQuery || hasAppliedInitialPrefill.value) {
+            return;
+          }
+          const result = findOperationFromGroups();
+          if (!result) {
+            if (initialOperationTag) {
+              const fallback = operationGroups.value.find((group) =>
+                typeof group.name === 'string' && group.name.includes(initialOperationTag)
+              );
+              if (fallback) {
+                ensureGroupExpanded(fallback.name);
+              }
+            }
+            return;
+          }
+          prefillOperation(result.operation);
+          ensureGroupExpanded(result.groupName);
+          const keywordSeed = initialOperationId || initialOperationPath || '';
+          if (keywordSeed) {
+            operationKeyword.value = keywordSeed;
+          }
+          hasAppliedInitialPrefill.value = true;
+          showSuccess('已根據指定的 API 操作自動帶入請求參數。');
+        };
+
+        watch(
+          () => operationGroups.value,
+          () => {
+            tryApplyInitialPrefill();
+          },
+          { deep: true }
+        );
+
         // 讀取 Swagger 定義並轉換為畫面可使用的 API 清單。
         const loadSwaggerOperations = async () => {
           if (!swaggerState.specUrl) {
@@ -1729,6 +1817,7 @@
             dynamicOperationGroups.value = createDynamicGroups(spec, swaggerState.specUrl);
             swaggerState.lastLoadedAt = new Date();
             showSuccess('Swagger API 列表載入完成。');
+            tryApplyInitialPrefill();
           } catch (error) {
             const message = error instanceof Error ? error.message : '載入 Swagger 定義時發生未知錯誤。';
             swaggerState.error = message;
@@ -1783,6 +1872,14 @@
             }
           } catch (error) {
             console.warn('載入設定失敗：', error);
+          }
+          if (initialSpecUrl) {
+            // 若外部已指定 Swagger 路徑，立即觸發載入並帶入對應操作。
+            swaggerState.specUrl = initialSpecUrl;
+            loadSwaggerOperations();
+          } else {
+            // 沒有指定 Swagger 來源時，仍嘗試對靜態範本套用帶入邏輯。
+            tryApplyInitialPrefill();
           }
         });
 
