@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Brands;
 using DentstageToolApp.Api.Services.Brand;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -108,6 +109,13 @@ public class BrandsController : ControllerBase
     /// 新增品牌資料，建立品牌名稱。
     /// </summary>
     [HttpPost]
+    // 以 SwaggerMockRequestExample 補上新增品牌的範例，讓 Swagger 介面顯示可直接複製的欄位格式。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "brandName": "DentStage 維修品牌"
+        }
+        """)]
     [ProducesResponseType(typeof(CreateBrandResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -145,6 +153,14 @@ public class BrandsController : ControllerBase
     /// 編輯品牌資料，更新品牌名稱。
     /// </summary>
     [HttpPost("edit")]
+    // 透過範例說明需帶入品牌識別碼與更新後名稱，避免 Swagger 使用者漏填欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "brandUid": "B_45AC5C9D-9B56-4B01-A510-72F0C28F58AA",
+          "brandName": "DentStage 豪華車系"
+        }
+        """)]
     [ProducesResponseType(typeof(EditBrandResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -183,6 +199,13 @@ public class BrandsController : ControllerBase
     /// 刪除品牌資料。
     /// </summary>
     [HttpPost("delete")]
+    // 提供刪除品牌時的識別碼範例，讓串接者清楚需要傳送的欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "brandUid": "B_45AC5C9D-9B56-4B01-A510-72F0C28F58AA"
+        }
+        """)]
     [ProducesResponseType(typeof(DeleteBrandResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

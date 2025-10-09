@@ -289,6 +289,13 @@ public class CustomersController : ControllerBase
     /// 刪除客戶資料，刪除前會確認是否仍有報價單、工單或黑名單紀錄。
     /// </summary>
     [HttpPost("delete")]
+    // 使用 SwaggerMockRequestExample 提供刪除操作的請求格式範例，降低前端串接時的欄位猜測成本。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "customerUid": "Cu_5AF83218-6C72-4B2F-95A4-2B5FCB029B3B"
+        }
+        """)]
     [ProducesResponseType(typeof(DeleteCustomerResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
