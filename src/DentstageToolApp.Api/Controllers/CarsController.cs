@@ -158,6 +158,44 @@ public class CarsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 刪除車輛資料，刪除前會確認是否仍被報價單或工單使用。
+    /// </summary>
+    [HttpPost("delete")]
+    [ProducesResponseType(typeof(DeleteCarResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<DeleteCarResponse>> DeleteCarAsync([FromBody] DeleteCarRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _carManagementService.DeleteCarAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (CarManagementException ex)
+        {
+            _logger.LogWarning(ex, "刪除車輛失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "刪除車輛資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("刪除車輛流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "刪除車輛資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "刪除車輛流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "刪除車輛資料失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>

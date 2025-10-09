@@ -26,4 +26,13 @@ public interface ICustomerManagementService
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>回傳編輯完成的客戶資訊。</returns>
     Task<EditCustomerResponse> EditCustomerAsync(EditCustomerRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 刪除既有客戶資料，刪除前會確認是否仍存在關聯報價單或工單。
+    /// </summary>
+    /// <param name="request">客戶刪除請求內容。</param>
+    /// <param name="operatorName">操作人員名稱。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>刪除完成後的確認訊息。</returns>
+    Task<DeleteCustomerResponse> DeleteCustomerAsync(DeleteCustomerRequest request, string operatorName, CancellationToken cancellationToken);
 }
