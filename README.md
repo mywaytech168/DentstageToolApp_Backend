@@ -18,7 +18,6 @@ DentstageToolApp_Backend/
 │  │  ├─ docs/                          # API 測試與操作說明文件
 │  │  │  ├─ api-flow-tester.html        # API 流程測試工具頁面
 │  │  │  ├─ quotation-create-guide.html # 新增估價單流程與欄位對照說明頁面
-│  │  │  ├─ quotation-edit-guide.html   # 編輯估價單流程說明頁面
 │  │  │  └─ api/
 │  │  │     └─ index.html               # API 說明頁面
 │  │  ├─ Program.cs                     # 服務啟動、中介層與 DbContext 註冊
@@ -39,7 +38,7 @@ DentstageToolApp_Backend/
 2. 於專案根目錄執行 `dotnet restore` 下載所需套件。
 3. 依據實際環境調整 `appsettings.json` 或 `appsettings.Development.json` 的 `DentstageToolAppDatabase` 連線字串。
 4. 以 `dotnet run --project src/DentstageToolApp.Api` 啟動後端服務。
-5. 服務啟動後，可透過 `https://localhost:7249/swagger` 瀏覽 API 說明文件。
+5. 服務啟動後，可透過 [https://localhost:7249/swagger/index.html](https://localhost:7249/swagger/index.html) 瀏覽 Swagger API 說明文件。
 6. 若需離線瀏覽 API，可打開 `docs/swagger/dentstage-tool-app-api-v1.json` 於 Swagger UI 或 Postman 匯入檢視。
 7. 需要了解新增估價單欄位與流程，可直接開啟 `src/DentstageToolApp.Api/docs/quotation-create-guide.html` 進行瀏覽。
 
