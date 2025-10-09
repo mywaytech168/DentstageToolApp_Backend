@@ -169,37 +169,25 @@ public class MaintenanceOrdersController : ControllerBase
         {
           "quotationNo": "Q25100001",
           "orderNo": "O25100001",
+          "store": {
+            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "source": "官方網站",
+            "reservationDate": "2024-10-15T10:00:00",
+            "repairDate": "2024-10-25T09:00:00"
+          },
           "car": {
-            "carUid": "Ca_12345678-ABCD-4ABC-8123-000000000001",
-            "licensePlate": "ABC-1234",
-            "brandUid": "Br_01234567-89AB-4CDE-8123-000000000001",
-            "modelUid": "Mo_01234567-89AB-4CDE-8123-000000000001",
-            "color": "珍珠白"
+            "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
           },
           "customer": {
-            "customerUid": "Cu_12345678-ABCD-4ABC-8123-000000000001",
-            "phone": "0912345678",
-            "email": "customer@example.com"
-          },
-          "remark": "同步更新維修備註",
-          "categoryRemarks": {
-            "dent": "凹痕區塊追加備註",
-            "paint": "烤漆需等待 2 日",
-            "other": ""
+            "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
           "damages": [
             {
-              "damageUid": "D_12345678-ABCD-4ABC-8123-000000000001",
-              "photos": [
-                {
-                  "photoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
-                  "description": "主要傷痕"
-                }
-              ],
-              "position": "左前葉子板",
-              "dentStatus": "凹痕",
-              "remark": "調整估工金額",
-              "estimatedAmount": 3200
+              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+              "position": "保桿",
+              "dentStatus": "大面積",
+              "description": "需板金搭配烤漆",
+              "estimatedAmount": 4500
             }
           ],
           "carBodyConfirmation": {
@@ -216,7 +204,7 @@ public class MaintenanceOrdersController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixTypeUid": "F_12345678-ABCD-4ABC-8123-000000000001",
+            "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
@@ -226,12 +214,12 @@ public class MaintenanceOrdersController : ControllerBase
             "roundingDiscount": 200,
             "percentageDiscount": 10,
             "discountReason": "回饋老客戶",
-            "estimatedRepairDays": 2,
+            "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,
             "suggestedPaintReason": null,
             "unrepairableReason": null,
-            "remark": "維修單更新後須重派技師"
+            "remark": "請於修復後通知客戶取車"
           }
         }
         """)]
