@@ -86,9 +86,6 @@
     const STORAGE_KEY = 'dentstage-create-quotation-test-settings';
     const BLANK_IMAGE_BASE64 =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
-    const DAMAGE_POSITIONS = ['保桿', '車門', '葉子板', '引擎蓋', '車頂'];
-    const DAMAGE_STATUS_OPTIONS = ['小面積', '中面積', '大面積'];
-    const DAMAGE_DESCRIPTIONS = ['測試鈑噴', '測試凹痕', '測試細部', '測試保險件'];
 
     const App = {
       // ---------- 模板區 ----------
@@ -219,12 +216,21 @@
                 <el-input v-model="blankPhotoUid" placeholder="尚未建立圖片" readonly />
                 <div class="section-actions" style="margin-top: 12px;">
                   <el-button type="primary" :disabled="!canUseBlankPhoto" @click="appendDamageWithBlankPhoto">
-                    新增損傷資料（使用空白圖片）
+                    帶入損傷資料（使用空白圖片）
                   </el-button>
                   <el-button type="success" :disabled="!canUseBlankPhoto" @click="applySignatureWithBlankPhoto">
                     套用簽名照片（使用空白圖片）
                   </el-button>
                 </div>
+                <el-alert
+                  v-if="canUseBlankPhoto"
+                  type="info"
+                  :closable="false"
+                  show-icon
+                  title="損傷資料固定為單筆清單"
+                  description="系統會將 damages 陣列覆蓋為僅含一筆資料，內容包含空白圖片 UID、左前門、需烤漆與估價 4648 等欄位。"
+                  style="margin-top: 8px;"
+                />
                 <el-alert
                   v-if="!canUseBlankPhoto"
                   type="info"
@@ -333,11 +339,11 @@
   },
   "damages": [
     {
-      "photos": [],
-      "position": "保桿",
-      "dentStatus": "小面積",
-      "description": "測試資料",
-      "estimatedAmount": 1200
+      "photos": "",
+      "position": "左前門",
+      "dentStatus": "需烤漆",
+      "description": "建議同時處理刮痕",
+      "estimatedAmount": 4648
     }
   ],
   "carBodyConfirmation": {
@@ -414,27 +420,18 @@
 
         // ---------- 工具函式區 ----------
 
-        // 產生指定範圍的亂數整數，確保估價金額落在可預期範圍
-        const getRandomInt = (min, max) => {
-          const lower = Math.ceil(min);
-          const upper = Math.floor(max);
-          return Math.floor(Math.random() * (upper - lower + 1)) + lower;
-        };
-
-        // 從列表中取得隨機元素，讓測試資料更貼近真實案例
-        const getRandomItem = (list) => list[Math.floor(Math.random() * list.length)];
-
-        // 建立附帶空白圖片的損傷資料範本，簡化測試人員填寫流程
+        // 建立固定的損傷資料範本，符合營運提供的標準內容
         const buildDamageTemplate = (photoUid) => ({
-          photos: [photoUid],
-          position: getRandomItem(DAMAGE_POSITIONS),
-          dentStatus: getRandomItem(DAMAGE_STATUS_OPTIONS),
-          description: `${getRandomItem(DAMAGE_DESCRIPTIONS)}-${getRandomInt(100, 999)}`,
-          estimatedAmount: getRandomInt(800, 4800)
+          photos: photoUid,
+          position: '左前門',
+          dentStatus: '需烤漆',
+          description: '建議同時處理刮痕',
+          estimatedAmount: 4648
         });
 
-        // 套用空白圖片至損傷陣列，支援追加與覆寫模式
-        const updateDamageWithPhoto = (photoUid, { mode = 'ensureFirst', notify = true, log = true } = {}) => {
+        // 套用空白圖片至損傷陣列，維持唯一固定的列表結構
+        const updateDamageWithPhoto = (photoUid, options = {}) => {
+          const { notify = true, log = true } = options;
           if (!photoUid) {
             if (notify) {
               message.warning('請先建立空白圖片以取得 PhotoUID。');
@@ -449,48 +446,18 @@
               parsed.damages = [];
             }
 
-            let payload;
-            if (mode === 'append') {
-              payload = buildDamageTemplate(photoUid);
-              parsed.damages.push(payload);
-            } else {
-              if (parsed.damages.length === 0) {
-                payload = buildDamageTemplate(photoUid);
-                parsed.damages.push(payload);
-              } else {
-                const target = parsed.damages[0];
-                if (!Array.isArray(target.photos)) {
-                  target.photos = [];
-                }
-                target.photos = [photoUid];
-                if (!target.position) {
-                  target.position = getRandomItem(DAMAGE_POSITIONS);
-                }
-                if (!target.dentStatus) {
-                  target.dentStatus = getRandomItem(DAMAGE_STATUS_OPTIONS);
-                }
-                if (!target.description) {
-                  target.description = `${getRandomItem(DAMAGE_DESCRIPTIONS)}-${getRandomInt(100, 999)}`;
-                }
-                const amountNumber = Number(target.estimatedAmount);
-                if (!Number.isFinite(amountNumber) || amountNumber <= 0) {
-                  target.estimatedAmount = getRandomInt(800, 4800);
-                }
-                payload = target;
-              }
-            }
+            const payload = buildDamageTemplate(photoUid);
+            parsed.damages = [payload];
 
             createRequestText.value = JSON.stringify(parsed, null, 2);
             persistSettings();
 
             if (notify) {
-              const notifyText = mode === 'append' ? '已新增一筆損傷資料並套用空白圖片。' : '已套用空白圖片至損傷資料。';
-              message.success(notifyText);
+              message.success('已帶入固定損傷資料並套用空白圖片。');
             }
 
             if (log) {
-              const logText = mode === 'append' ? '新增損傷資料並套用空白圖片' : '更新損傷資料照片';
-              appendLog('success', logText, { photoUid, damage: payload });
+              appendLog('success', '帶入固定損傷資料並套用空白圖片', { photoUid, damage: payload });
             }
 
             return { success: true, payload };
@@ -773,7 +740,6 @@
           }
 
           const damageResult = updateDamageWithPhoto(photoUid, {
-            mode: 'ensureFirst',
             notify: false,
             log: false
           });
@@ -791,7 +757,7 @@
 
         // 透過最新空白圖片新增損傷陣列資料
         const appendDamageWithBlankPhoto = () => {
-          updateDamageWithPhoto(blankPhotoUid.value, { mode: 'append' });
+          updateDamageWithPhoto(blankPhotoUid.value, {});
         };
 
         // 透過最新空白圖片套用簽名照片 UID
