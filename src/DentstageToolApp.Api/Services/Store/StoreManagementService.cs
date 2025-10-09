@@ -51,7 +51,7 @@ public class StoreManagementService : IStoreManagementService
         }
 
         // ---------- 實體建立區 ----------
-        var entity = new Infrastructure.Entities.Store
+        var entity = new DentstageToolApp.Infrastructure.Entities.Store
         {
             StoreUid = BuildStoreUid(),
             StoreName = storeName

@@ -40,7 +40,7 @@ public class ModelManagementService : IModelManagementService
         var brandUid = NormalizeOptionalText(request.BrandUid);
         var operatorLabel = NormalizeOperator(operatorName);
 
-        Brand? brandEntity = null;
+        DentstageToolApp.Infrastructure.Entities.Brand? brandEntity = null;
         if (!string.IsNullOrEmpty(brandUid))
         {
             brandEntity = await ResolveBrandAsync(brandUid, cancellationToken);
@@ -62,7 +62,7 @@ public class ModelManagementService : IModelManagementService
         }
 
         // ---------- 實體建立區 ----------
-        var modelEntity = new Infrastructure.Entities.Model
+        var modelEntity = new DentstageToolApp.Infrastructure.Entities.Model
         {
             ModelUid = BuildModelUid(),
             ModelName = modelName,
@@ -106,7 +106,7 @@ public class ModelManagementService : IModelManagementService
             throw new ModelManagementException(HttpStatusCode.NotFound, "找不到對應的車型資料，請確認識別碼是否正確。");
         }
 
-        Brand? brandEntity = null;
+        DentstageToolApp.Infrastructure.Entities.Brand? brandEntity = null;
         if (!string.IsNullOrEmpty(brandUid))
         {
             brandEntity = await ResolveBrandAsync(brandUid, cancellationToken);
@@ -244,7 +244,7 @@ public class ModelManagementService : IModelManagementService
     /// <summary>
     /// 依識別碼查詢品牌資料，若找不到則丟出錯誤。
     /// </summary>
-    private async Task<Brand> ResolveBrandAsync(string brandUid, CancellationToken cancellationToken)
+    private async Task<DentstageToolApp.Infrastructure.Entities.Brand> ResolveBrandAsync(string brandUid, CancellationToken cancellationToken)
     {
         var brand = await _dbContext.Brands
             .AsNoTracking()

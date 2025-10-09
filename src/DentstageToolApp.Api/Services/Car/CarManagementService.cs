@@ -353,7 +353,7 @@ public class CarManagementService : ICarManagementService
     /// <summary>
     /// 依照傳入品牌識別碼取得品牌資料，若未帶入則回傳 null。
     /// </summary>
-    private async Task<Brand?> ResolveBrandAsync(string? brandUid, CancellationToken cancellationToken)
+    private async Task<DentstageToolApp.Infrastructure.Entities.Brand?> ResolveBrandAsync(string? brandUid, CancellationToken cancellationToken)
     {
         var normalizedUid = NormalizeOptionalText(brandUid);
         if (normalizedUid is null)
@@ -376,7 +376,7 @@ public class CarManagementService : ICarManagementService
     /// <summary>
     /// 依照傳入車型識別碼取得車型資料，會檢查與指定品牌是否相符。
     /// </summary>
-    private async Task<Model?> ResolveModelAsync(string? modelUid, string? expectedBrandUid, CancellationToken cancellationToken)
+    private async Task<DentstageToolApp.Infrastructure.Entities.Model?> ResolveModelAsync(string? modelUid, string? expectedBrandUid, CancellationToken cancellationToken)
     {
         var normalizedUid = NormalizeOptionalText(modelUid);
         if (normalizedUid is null)
