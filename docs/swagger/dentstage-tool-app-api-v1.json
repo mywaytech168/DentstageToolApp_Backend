@@ -59,6 +59,10 @@
                     "type": "object",
                     "description": "門市來源與技師資訊。",
                     "properties": {
+                      "storeUid": {
+                        "type": "string",
+                        "description": "門市主檔 UID。"
+                      },
                       "technicianUid": {
                         "type": "string",
                         "description": "估價技師的 UID。"
@@ -66,6 +70,9 @@
                       "source": {
                         "type": "string",
                         "description": "客戶來源描述。"
+                      },
+                      "serviceCategory": {
+                        "$ref": "#/components/schemas/ServiceCategorySummary"
                       }
                     }
                   },
@@ -76,6 +83,13 @@
                       "carUid": {
                         "type": "string",
                         "description": "車輛主檔 UID。"
+                      },
+                      "plateNumber": {
+                        "type": "string",
+                        "description": "車牌號碼。"
+                      },
+                      "brand": {
+                        "$ref": "#/components/schemas/BrandSummary"
                       }
                     }
                   },
@@ -86,6 +100,14 @@
                       "customerUid": {
                         "type": "string",
                         "description": "客戶 UID。"
+                      },
+                      "customerName": {
+                        "type": "string",
+                        "description": "客戶名稱。"
+                      },
+                      "customerType": {
+                        "type": "string",
+                        "description": "客戶類別 (一般、企業、VIP 等)。"
                       }
                     }
                   },
@@ -145,21 +167,33 @@
               },
               "example": {
                 "store": {
+                  "storeUid": "SHOP-TP-001",
                   "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
-                  "source": "官方網站"
+                  "source": "Facebook 廣告",
+                  "serviceCategory": {
+                    "categoryUid": "SC-202401-0001",
+                    "categoryName": "鈑金修復（小凹痕處理）"
+                  }
                 },
                 "car": {
-                  "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
+                  "carUid": "CAR-202501-0801",
+                  "plateNumber": "ABC-1234",
+                  "brand": {
+                    "brandUid": "BR-TOYOTA",
+                    "brandName": "Toyota"
+                  }
                 },
                 "customer": {
-                  "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
+                  "customerUid": "CUS-202501-0001",
+                  "customerName": "林先生",
+                  "customerType": "一般客戶"
                 },
                 "damages": [
                   {
                     "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                    "position": "保桿",
-                    "dentStatus": "大面積",
-                    "description": "需板金搭配烤漆",
+                    "position": "右前葉子板",
+                    "dentStatus": "局部凹痕",
+                    "description": "需進行鈑金整形搭配烤漆",
                     "estimatedAmount": 4500
                   }
                 ],
@@ -208,6 +242,34 @@
           "message",
           "timestamp"
         ]
+      },
+      "ServiceCategorySummary": {
+        "type": "object",
+        "description": "服務類別概要資訊，方便測試不同維修項目。",
+        "properties": {
+          "categoryUid": {
+            "type": "string",
+            "description": "服務類別主檔 UID。"
+          },
+          "categoryName": {
+            "type": "string",
+            "description": "服務類別名稱。"
+          }
+        }
+      },
+      "BrandSummary": {
+        "type": "object",
+        "description": "品牌概要資訊，對應車輛品牌主檔。",
+        "properties": {
+          "brandUid": {
+            "type": "string",
+            "description": "品牌主檔 UID。"
+          },
+          "brandName": {
+            "type": "string",
+            "description": "品牌名稱。"
+          }
+        }
       }
     }
   }
