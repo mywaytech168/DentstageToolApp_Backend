@@ -107,6 +107,21 @@
 - **中央下發**：每 5–10 分鐘同步一次，視資料量調整。
 - **Sync Log 清理**：每日或每週清除已同步且超過保留期的紀錄。
 
+## 組態與背景排程實作
+- `appsettings.json` 新增 `Sync` 區段，用於辨識目前執行個體的角色（中央、直營、連盟）與背景同步頻率。
+- 直營／連盟門市需設定 `StoreId`、`StoreType`，並透過 `BackgroundSyncIntervalMinutes` 控制排程週期（預設 60 分鐘）。
+- 直營／連盟門市會啟動 `StoreSyncBackgroundService`，自動每小時更新 `store_sync_states` 與統計尚未同步的紀錄數量，做為監控與排程觸發依據。
+- 中央伺服器角色則不會啟動該背景工作，僅保留 API 與資料整合功能。
+
+```json
+"Sync": {
+  "ServerRole": "DirectStore",
+  "StoreId": "STORE-001",
+  "StoreType": "Direct",
+  "BackgroundSyncIntervalMinutes": 60
+}
+```
+
 ## 程式結構建議
 - `LocalDbService`：負責讀寫本地 MySQL 與 `sync_log`。
 - `RemoteSyncService`：呼叫中央 API 進行上傳／下載。
