@@ -35,12 +35,12 @@ public class SyncLog
     /// <summary>
     /// 異動來源伺服器，協助辨識是中央或分店。
     /// </summary>
-    public string SourceServer { get; set; } = null!;
+    public string? SourceServer { get; set; }
 
     /// <summary>
     /// 門市型態（直營店或連盟店），協助區分同步流程。
     /// </summary>
-    public string StoreType { get; set; } = null!;
+    public string? StoreType { get; set; }
 
     /// <summary>
     /// 是否已同步至目標端。
