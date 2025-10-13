@@ -1,10 +1,10 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Infrastructure.Data;
-using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -76,7 +76,7 @@ public class StoreSyncBackgroundService : BackgroundService
     }
 
     /// <summary>
-    /// 執行單次門市同步流程：更新狀態並統計待處理資料量。
+    /// 執行單次門市同步流程：補齊同步紀錄欄位並統計待處理資料量。
     /// </summary>
     private async Task RunSyncCycleAsync(CancellationToken cancellationToken)
     {
@@ -84,43 +84,46 @@ public class StoreSyncBackgroundService : BackgroundService
         {
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
-            var now = DateTime.UtcNow;
 
-            // ---------- 取得或建立門市同步狀態 ----------
-            var storeState = await dbContext.StoreSyncStates.FirstOrDefaultAsync(
-                state => state.StoreId == _syncOptions.StoreId && state.StoreType == _syncOptions.StoreType,
-                cancellationToken);
+            // ---------- 準備門市識別資訊，供同步紀錄補齊使用 ----------
+            var storeId = _syncOptions.StoreId ?? _syncOptions.NormalizedServerRole ?? "UNKNOWN";
+            var storeType = _syncOptions.StoreType ?? _syncOptions.NormalizedServerRole ?? "UNKNOWN";
 
-            if (storeState is null)
+            // ---------- 補齊待同步紀錄的來源資訊 ----------
+            var batchSize = _syncOptions.BackgroundSyncBatchSize <= 0 ? 100 : _syncOptions.BackgroundSyncBatchSize;
+            var pendingLogs = await dbContext.SyncLogs
+                .Where(log => !log.Synced)
+                .OrderBy(log => log.UpdatedAt)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            foreach (var log in pendingLogs)
             {
-                storeState = new StoreSyncState
+                if (string.IsNullOrWhiteSpace(log.SourceServer))
                 {
-                    StoreId = _syncOptions.StoreId!,
-                    StoreType = _syncOptions.StoreType!,
-                    LastUploadTime = now,
-                    LastDownloadTime = now
-                };
-                await dbContext.StoreSyncStates.AddAsync(storeState, cancellationToken);
+                    // 透過設定檔補齊來源伺服器，讓中央可辨識門市來源
+                    log.SourceServer = storeId;
+                }
+
+                if (string.IsNullOrWhiteSpace(log.StoreType))
+                {
+                    // 透過設定檔補齊門市型態，中央可依類型決定處理邏輯
+                    log.StoreType = storeType;
+                }
             }
-            else
+
+            if (pendingLogs.Count > 0)
             {
-                storeState.LastUploadTime = now;
-                storeState.LastDownloadTime = now;
+                await dbContext.SaveChangesAsync(cancellationToken);
             }
 
-            // ---------- 統計待同步筆數，提供監控參考 ----------
-            var pendingCount = await dbContext.SyncLogs.CountAsync(
-                log => !log.Synced && log.StoreType == _syncOptions.StoreType,
-                cancellationToken);
-
-            await dbContext.SaveChangesAsync(cancellationToken);
+            var pendingCount = await dbContext.SyncLogs.CountAsync(log => !log.Synced, cancellationToken);
 
             _logger.LogInformation(
-                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 未同步筆數: {PendingCount}, 執行時間: {Time:O}",
-                _syncOptions.StoreId,
-                _syncOptions.StoreType,
-                pendingCount,
-                now);
+                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 未同步筆數: {PendingCount}",
+                storeId,
+                storeType,
+                pendingCount);
         }
         catch (Exception ex)
         {

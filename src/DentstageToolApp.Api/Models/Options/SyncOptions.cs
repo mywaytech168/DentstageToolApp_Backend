@@ -28,6 +28,11 @@ public class SyncOptions
     public int BackgroundSyncIntervalMinutes { get; set; } = 60;
 
     /// <summary>
+    /// 單次背景同步要處理的最大筆數，避免一次讀取過多資料造成效能問題。
+    /// </summary>
+    public int BackgroundSyncBatchSize { get; set; } = 100;
+
+    /// <summary>
     /// 將伺服器角色轉換為既定常數，避免大小寫造成判斷差異。
     /// </summary>
     public string NormalizedServerRole => SyncServerRoles.Normalize(ServerRole);

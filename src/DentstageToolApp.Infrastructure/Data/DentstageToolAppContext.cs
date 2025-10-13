@@ -919,10 +919,8 @@ public class DentstageToolAppContext : DbContext
             .IsRequired()
             .HasMaxLength(20);
         entity.Property(e => e.SourceServer)
-            .IsRequired()
             .HasMaxLength(50);
         entity.Property(e => e.StoreType)
-            .IsRequired()
             .HasMaxLength(50);
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("datetime");

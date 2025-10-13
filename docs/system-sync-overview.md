@@ -28,7 +28,7 @@
 | `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
 | `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
 
-- 透過 Trigger 或應用程式，在 `orders`（或其他目標資料表）異動時插入一筆 `sync_logs`。
+- 透過 `db_docs/sync_logs_triggers.sql` 建立 Trigger，於所有業務資料表的新增／修改／刪除時自動插入 `sync_logs`，確保差異來源一致。
 - `store_sync_states` 由中央伺服器在同步成功後更新。
 
 ## 同步流程
@@ -110,7 +110,8 @@
 ## 組態與背景排程實作
 - `appsettings.json` 新增 `Sync` 區段，用於辨識目前執行個體的角色（中央、直營、連盟）與背景同步頻率。
 - 直營／連盟門市需設定 `StoreId`、`StoreType`，並透過 `BackgroundSyncIntervalMinutes` 控制排程週期（預設 60 分鐘）。
-- 直營／連盟門市會啟動 `StoreSyncBackgroundService`，自動每小時更新 `store_sync_states` 與統計尚未同步的紀錄數量，做為監控與排程觸發依據。
+- 直營／連盟門市會啟動 `StoreSyncBackgroundService`，定期補齊 `sync_logs` 的 `SourceServer`、`StoreType` 欄位並統計待同步筆數，為後續上傳中央 API 做準備。
+- `store_sync_states` 僅由中央伺服器在同步成功後更新，門市端不再直接寫入該表，避免狀態錯亂。
 - 中央伺服器角色則不會啟動該背景工作，僅保留 API 與資料整合功能。
 
 ```json
@@ -118,7 +119,8 @@
   "ServerRole": "DirectStore",
   "StoreId": "STORE-001",
   "StoreType": "Direct",
-  "BackgroundSyncIntervalMinutes": 60
+  "BackgroundSyncIntervalMinutes": 60,
+  "BackgroundSyncBatchSize": 100
 }
 ```
 
