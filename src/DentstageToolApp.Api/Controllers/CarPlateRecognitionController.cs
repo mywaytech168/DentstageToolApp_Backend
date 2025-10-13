@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.CarPlates;
+using DentstageToolApp.Api.Models.CarPlates;
 using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;

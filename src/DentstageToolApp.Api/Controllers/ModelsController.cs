@@ -4,7 +4,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Models;
+using DentstageToolApp.Api.Models.VehicleModels;
 using DentstageToolApp.Api.Services.Model;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;

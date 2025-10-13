@@ -1,4 +1,4 @@
-using DentstageToolApp.Api.Quotations;
+using DentstageToolApp.Api.Models.Quotations;
 using System.Threading;
 using System.Threading.Tasks;
 

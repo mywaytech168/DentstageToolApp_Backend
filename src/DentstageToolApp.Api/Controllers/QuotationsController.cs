@@ -1,4 +1,4 @@
-using DentstageToolApp.Api.Quotations;
+using DentstageToolApp.Api.Models.Quotations;
 using DentstageToolApp.Api.Services.Quotation;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;

@@ -3,7 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using DentstageToolApp.Api.BackgroundJobs;
-using DentstageToolApp.Api.Options;
+using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Infrastructure.Database;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;

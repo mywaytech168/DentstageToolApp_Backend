@@ -1,4 +1,4 @@
-using DentstageToolApp.Api.Auth;
+using DentstageToolApp.Api.Models.Auth;
 
 namespace DentstageToolApp.Api.Services.Auth;
 
