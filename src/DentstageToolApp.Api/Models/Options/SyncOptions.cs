@@ -1,3 +1,4 @@
+using System;
 using DentstageToolApp.Api.Models.Sync;
 
 namespace DentstageToolApp.Api.Models.Options;
@@ -23,6 +24,21 @@ public class SyncOptions
     public string? StoreType { get; set; }
 
     /// <summary>
+    /// 目前伺服器對外可辨識的 IP，中央可用來建立 store_sync_states 的來源資訊。
+    /// </summary>
+    public string? ServerIp { get; set; }
+
+    /// <summary>
+    /// 同步通訊管道，可選擇 Http 或 RabbitMq 佇列。
+    /// </summary>
+    public string Transport { get; set; } = SyncTransportModes.Http;
+
+    /// <summary>
+    /// RabbitMQ 佇列設定，僅在 Transport 為 RabbitMq 時使用。
+    /// </summary>
+    public SyncQueueOptions Queue { get; set; } = new();
+
+    /// <summary>
     /// 背景同步的排程間隔（分鐘），預設為 60 分鐘執行一次。
     /// </summary>
     public int BackgroundSyncIntervalMinutes { get; set; } = 60;
@@ -41,4 +57,50 @@ public class SyncOptions
     /// 判斷目前設定是否為門市角色（直營或連盟）。
     /// </summary>
     public bool IsStoreRole => SyncServerRoles.IsStoreRole(ServerRole);
+
+    /// <summary>
+    /// 判斷是否使用訊息佇列作為同步通訊方式。
+    /// </summary>
+    public bool UseMessageQueue => string.Equals(Transport, SyncTransportModes.RabbitMq, StringComparison.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// 定義 RabbitMQ 相關連線與佇列設定。
+/// </summary>
+public class SyncQueueOptions
+{
+    /// <summary>
+    /// RabbitMQ 主機位置。
+    /// </summary>
+    public string? HostName { get; set; }
+
+    /// <summary>
+    /// RabbitMQ Virtual Host 名稱。
+    /// </summary>
+    public string? VirtualHost { get; set; }
+
+    /// <summary>
+    /// RabbitMQ 帳號。
+    /// </summary>
+    public string? UserName { get; set; }
+
+    /// <summary>
+    /// RabbitMQ 密碼。
+    /// </summary>
+    public string? Password { get; set; }
+
+    /// <summary>
+    /// 用於上傳同步請求的佇列名稱。
+    /// </summary>
+    public string? RequestQueue { get; set; }
+
+    /// <summary>
+    /// 取得中央回應資料時使用的佇列名稱。
+    /// </summary>
+    public string? ResponseQueue { get; set; }
+
+    /// <summary>
+    /// 等待回應的逾時秒數，預設 30 秒。
+    /// </summary>
+    public int TimeoutSeconds { get; set; } = 30;
 }

@@ -26,21 +26,22 @@
 | ---- | ---- | -------- |
 | `orders` | 儲存工單主檔，並提供 `ModificationTimestamp` 做差異判斷 | `OrderUid`, `StoreUid`, `Status`, `Amount`, `ModificationTimestamp` |
 | `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
-| `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
+| `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `ServerRole`, `ServerIp`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
 
 - 由應用程式層的 `DentstageToolAppContext` 在 `SaveChanges` / `SaveChangesAsync` 進行追蹤，將所有新增、更新、刪除的實體轉換為 `sync_logs`，完全取代資料庫 Trigger。
-- `store_sync_states` 由中央伺服器在同步成功後更新。
+- 中央伺服器會在同步成功後更新 `store_sync_states`，並同時寫入 `ServerRole` 與 `ServerIp` 區分中央或門市來源。
+- 若中央無法從連線取得 IP，可讓門市在請求內帶入 `serverIp` 欄位供紀錄使用。
 
 ## 同步流程
 1. **分店上傳**
    - 定期查詢 `sync_logs` 中 `Synced = 0` 的異動資料。
    - 打包成 JSON （包含 `StoreId`、`TableName`、`Action`、`Payload` 等）送至中央 API。
-   - 中央伺服器依照 Action 進行 Upsert 或刪除，再寫入中央 `sync_logs` 做稽核。
+   - 中央伺服器依照 Action 進行 Upsert 或刪除，再寫入中央 `sync_logs` 做稽核，並更新 `store_sync_states` 的伺服器角色、IP 與最後上傳時間。
    - 回傳成功後，分店將該批 `Synced` 設為 1。
 
 2. **中央下發**
    - 分店呼叫 API 並帶入 `LastSyncTime`。
-   - 中央伺服器查詢 `orders.ModificationTimestamp > LastSyncTime` 的資料。
+   - 中央伺服器查詢 `orders.ModificationTimestamp > LastSyncTime` 的資料，同步更新 `store_sync_states` 的伺服器角色、IP 與最後下載時間。
    - 回傳差異資料與新的 `LastSyncTime`，分店再以 Upsert 更新本地資料。
    - 若需要分批，可透過 `PageSize`/`LastCursor` 控制。
 
@@ -56,7 +57,7 @@
 ## API 設計
 | Method | Path | 說明 |
 | ------ | ---- | ---- |
-| `POST /api/sync/upload` | 分店上傳差異，包含新增、更新、刪除異動清單，需帶入 `storeType`。 |
+| `POST /api/sync/upload` | 分店上傳差異，包含新增、更新、刪除異動清單，需帶入 `storeType`、`serverRole`，並建議附帶 `serverIp`。 |
 | `GET /api/sync/changes` | 分店下載差異，依照 `storeId`、`storeType` 與 `lastSyncTime` 回傳最新資料。 |
 
 ### 上傳範例
@@ -64,6 +65,8 @@
 {
   "storeId": "STORE-001",
   "storeType": "Direct",
+  "serverRole": "DirectStore",
+  "serverIp": "10.1.10.5",
   "changes": [
     {
       "tableName": "orders",
@@ -88,6 +91,7 @@
 {
   "storeId": "STORE-001",
   "storeType": "Direct",
+  "serverRole": "DirectStore",
   "lastSyncTime": "2024-04-15T10:30:00Z",
   "orders": [
     {
@@ -109,7 +113,8 @@
 
 ## 組態與背景排程實作
 - `appsettings.json` 新增 `Sync` 區段，用於辨識目前執行個體的角色（中央、直營、連盟）與背景同步頻率。
-- 直營／連盟門市需設定 `StoreId`、`StoreType`，並透過 `BackgroundSyncIntervalMinutes` 控制排程週期（預設 60 分鐘）。
+- 直營／連盟門市需設定 `StoreId`、`StoreType` 與 `ServerRole`，並透過 `BackgroundSyncIntervalMinutes` 控制排程週期（預設 60 分鐘）。
+- 若採 RabbitMQ 佇列進行同步，可於 `Sync.Queue` 區段填入主機、佇列與帳密資訊，中央會於啟動時檢核設定完整性。
 - 直營／連盟門市會啟動 `StoreSyncBackgroundService`，定期補齊 `sync_logs` 的 `SourceServer`、`StoreType` 欄位並統計待同步筆數，為後續上傳中央 API 做準備。
 - `store_sync_states` 僅由中央伺服器在同步成功後更新，門市端不再直接寫入該表，避免狀態錯亂。
 - 中央伺服器角色則不會啟動該背景工作，僅保留 API 與資料整合功能。
@@ -126,10 +131,27 @@
   "ServerRole": "DirectStore",
   "StoreId": "STORE-001",
   "StoreType": "Direct",
+  "ServerIp": "10.1.10.5",
+  "Transport": "RabbitMq",
   "BackgroundSyncIntervalMinutes": 60,
-  "BackgroundSyncBatchSize": 100
+  "BackgroundSyncBatchSize": 100,
+  "Queue": {
+    "HostName": "mq.internal", 
+    "VirtualHost": "/dentstage",
+    "UserName": "sync-user",
+    "Password": "sync-password",
+    "RequestQueue": "dentstage.sync.upload",
+    "ResponseQueue": "dentstage.sync.download",
+    "TimeoutSeconds": 30
+  }
 }
 ```
+
+## 訊息佇列通訊建議
+- 若門市與中央的 HTTP 連線品質不佳，可切換 `Sync.Transport` 為 `RabbitMq`，採用 RabbitMQ RPC Pattern 將同步請求封裝為訊息。
+- `Queue.RequestQueue` 用於門市上傳差異資料，中央處理完畢後再將回應寫入 `Queue.ResponseQueue`，門市端依據 CorrelationId 取回結果。
+- 當 `Sync.Transport` 設為 `RabbitMq` 時，系統會檢查佇列設定是否完整，避免啟動後才發現缺少主機或佇列名稱。
+- 佇列傳輸仍需遵守 `sync_logs` 與 `store_sync_states` 的欄位規格，中央在寫入資料時會同步更新伺服器角色與 IP。
 
 ## 程式結構建議
 - `LocalDbService`：負責讀寫本地 MySQL 與 `sync_log`。

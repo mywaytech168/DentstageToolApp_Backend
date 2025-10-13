@@ -46,7 +46,9 @@ public class SyncController : ControllerBase
 
         try
         {
-            var result = await _syncService.ProcessUploadAsync(request, cancellationToken);
+            // ---------- 取得實際來源 IP，搭配請求內的 ServerRole 保存到同步狀態 ----------
+            var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var result = await _syncService.ProcessUploadAsync(request, remoteIp, cancellationToken);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -75,7 +77,9 @@ public class SyncController : ControllerBase
                 return BadRequest("StoreType 不可為空白。");
             }
 
-            var response = await _syncService.GetUpdatesAsync(query.StoreId, query.StoreType, query.LastSyncTime, query.PageSize, cancellationToken);
+            // ---------- 將來源伺服器角色與 IP 傳遞給服務層，供中央更新 store_sync_states ----------
+            var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var response = await _syncService.GetUpdatesAsync(query.StoreId, query.StoreType, query.LastSyncTime, query.PageSize, query.ServerRole, remoteIp, cancellationToken);
             return Ok(response);
         }
         catch (ArgumentException ex)

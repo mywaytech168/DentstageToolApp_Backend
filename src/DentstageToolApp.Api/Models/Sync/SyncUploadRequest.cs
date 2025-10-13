@@ -20,6 +20,16 @@ public class SyncUploadRequest
     public string StoreType { get; set; } = null!;
 
     /// <summary>
+    /// 門市伺服器角色（DirectStore、AllianceStore），用來建立 store_sync_states 的來源分類。
+    /// </summary>
+    public string? ServerRole { get; set; }
+
+    /// <summary>
+    /// 門市伺服器對外 IP，若中央無法從連線取得可由門市自行填入。
+    /// </summary>
+    public string? ServerIp { get; set; }
+
+    /// <summary>
     /// 異動清單。
     /// </summary>
     public IList<SyncChangeDto> Changes { get; set; } = new List<SyncChangeDto>();

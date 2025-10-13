@@ -23,6 +23,16 @@ public class StoreSyncState
     public string StoreType { get; set; } = null!;
 
     /// <summary>
+    /// 伺服器角色（中央或門市），方便中央端快速辨識來源屬性。
+    /// </summary>
+    public string? ServerRole { get; set; }
+
+    /// <summary>
+    /// 最近一次通訊時紀錄的伺服器 IP，利於排查網路連線。
+    /// </summary>
+    public string? ServerIp { get; set; }
+
+    /// <summary>
     /// 最後一次上傳完成時間。
     /// </summary>
     public DateTime? LastUploadTime { get; set; }

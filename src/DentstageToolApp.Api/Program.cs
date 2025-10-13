@@ -136,6 +136,7 @@ if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessD
 
 var syncOptions = builder.Configuration.GetSection("Sync").Get<SyncOptions>() ?? new SyncOptions();
 var normalizedRole = syncOptions.NormalizedServerRole;
+syncOptions.Transport = SyncTransportModes.Normalize(syncOptions.Transport);
 if (string.IsNullOrWhiteSpace(normalizedRole))
 {
     throw new InvalidOperationException("未設定 Sync.ServerRole，請於 appsettings.json 指定 Central、DirectStore 或 AllianceStore。");
@@ -149,6 +150,20 @@ if (!string.Equals(normalizedRole, SyncServerRoles.CentralServer, StringComparis
 if (syncOptions.IsStoreRole && (string.IsNullOrWhiteSpace(syncOptions.StoreId) || string.IsNullOrWhiteSpace(syncOptions.StoreType)))
 {
     throw new InvalidOperationException("伺服器角色為門市時，必須設定 Sync.StoreId 與 Sync.StoreType。");
+}
+
+if (syncOptions.UseMessageQueue)
+{
+    var queueOptions = syncOptions.Queue ?? new SyncQueueOptions();
+    if (string.IsNullOrWhiteSpace(queueOptions.HostName))
+    {
+        throw new InvalidOperationException("Sync.Transport 設為 RabbitMq 時，必須設定 Sync.Queue.HostName。");
+    }
+
+    if (string.IsNullOrWhiteSpace(queueOptions.RequestQueue) || string.IsNullOrWhiteSpace(queueOptions.ResponseQueue))
+    {
+        throw new InvalidOperationException("Sync.Transport 設為 RabbitMq 時，需設定 Sync.Queue.RequestQueue 與 Sync.Queue.ResponseQueue。");
+    }
 }
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));

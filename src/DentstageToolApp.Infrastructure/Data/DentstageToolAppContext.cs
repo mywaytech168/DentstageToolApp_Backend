@@ -992,6 +992,10 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreType)
             .IsRequired()
             .HasMaxLength(50);
+        entity.Property(e => e.ServerRole)
+            .HasMaxLength(50);
+        entity.Property(e => e.ServerIp)
+            .HasMaxLength(100);
         entity.Property(e => e.LastCursor)
             .HasMaxLength(100);
         entity.Property(e => e.LastUploadTime)
