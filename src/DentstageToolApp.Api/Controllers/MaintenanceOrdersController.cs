@@ -3,7 +3,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.MaintenanceOrders;
+using DentstageToolApp.Api.Models.MaintenanceOrders;
 using DentstageToolApp.Api.Services.MaintenanceOrder;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;

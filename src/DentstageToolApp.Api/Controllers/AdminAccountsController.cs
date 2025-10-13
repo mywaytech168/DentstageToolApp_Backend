@@ -1,7 +1,7 @@
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Admin;
+using DentstageToolApp.Api.Models.Admin;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Http;

@@ -1,4 +1,4 @@
-using DentstageToolApp.Api.Quotations;
+using DentstageToolApp.Api.Models.Quotations;
 using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;

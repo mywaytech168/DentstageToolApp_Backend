@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Stores;
+using DentstageToolApp.Api.Models.Stores;
 
 namespace DentstageToolApp.Api.Services.Store;
 

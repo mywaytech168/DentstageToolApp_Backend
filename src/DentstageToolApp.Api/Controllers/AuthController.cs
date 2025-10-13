@@ -1,7 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
-using DentstageToolApp.Api.Auth;
+using DentstageToolApp.Api.Models.Auth;
 using DentstageToolApp.Api.Services.Auth;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;

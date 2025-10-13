@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Photos;
+using DentstageToolApp.Api.Models.Photos;
 using Microsoft.AspNetCore.Http;
 
 namespace DentstageToolApp.Api.Services.Photo;
