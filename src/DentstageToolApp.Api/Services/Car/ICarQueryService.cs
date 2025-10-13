@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Cars;
+using DentstageToolApp.Api.Models.Cars;
 
 namespace DentstageToolApp.Api.Services.Car;
 

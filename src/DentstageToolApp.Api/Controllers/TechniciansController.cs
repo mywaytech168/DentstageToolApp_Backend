@@ -4,7 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using DentstageToolApp.Api.Technicians;
+using DentstageToolApp.Api.Models.Technicians;
 using DentstageToolApp.Api.Services.Technician;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;

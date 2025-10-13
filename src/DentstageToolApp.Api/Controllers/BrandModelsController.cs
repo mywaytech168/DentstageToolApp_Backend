@@ -2,7 +2,7 @@ using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.BrandModels;
+using DentstageToolApp.Api.Models.BrandModels;
 using DentstageToolApp.Api.Services.BrandModels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;

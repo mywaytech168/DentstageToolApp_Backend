@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.BrandModels;
+using DentstageToolApp.Api.Models.BrandModels;
 
 namespace DentstageToolApp.Api.Services.BrandModels;
 
