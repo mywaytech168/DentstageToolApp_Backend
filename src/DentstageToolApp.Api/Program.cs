@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Models.Options;
+using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Api.Infrastructure.Database;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
@@ -120,6 +121,7 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
 builder.Services.Configure<PhotoStorageOptions>(builder.Configuration.GetSection("PhotoStorage"));
+builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection("Sync"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
@@ -130,6 +132,23 @@ var tesseractOptions = builder.Configuration.GetSection("TesseractOcr").Get<Tess
 if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessDataPath))
 {
     throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
+}
+
+var syncOptions = builder.Configuration.GetSection("Sync").Get<SyncOptions>() ?? new SyncOptions();
+var normalizedRole = syncOptions.NormalizedServerRole;
+if (string.IsNullOrWhiteSpace(normalizedRole))
+{
+    throw new InvalidOperationException("未設定 Sync.ServerRole，請於 appsettings.json 指定 Central、DirectStore 或 AllianceStore。");
+}
+
+if (!string.Equals(normalizedRole, SyncServerRoles.CentralServer, StringComparison.Ordinal) && !syncOptions.IsStoreRole)
+{
+    throw new InvalidOperationException($"不支援的 Sync.ServerRole 設定：{syncOptions.ServerRole}");
+}
+
+if (syncOptions.IsStoreRole && (string.IsNullOrWhiteSpace(syncOptions.StoreId) || string.IsNullOrWhiteSpace(syncOptions.StoreType)))
+{
+    throw new InvalidOperationException("伺服器角色為門市時，必須設定 Sync.StoreId 與 Sync.StoreType。");
 }
 
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));
@@ -179,6 +198,11 @@ builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+if (syncOptions.IsStoreRole)
+{
+    // ---------- 直營或連盟門市背景同步排程 ----------
+    builder.Services.AddHostedService<StoreSyncBackgroundService>();
+}
 
 var app = builder.Build();
 
