@@ -14,6 +14,11 @@ public class SyncDownloadResponse
     public string StoreId { get; set; } = null!;
 
     /// <summary>
+    /// 門市型態（直營店、連盟店），用於辨識同步流程。
+    /// </summary>
+    public string StoreType { get; set; } = null!;
+
+    /// <summary>
     /// 本次回傳資料的伺服器時間，用於更新門市的 LastSyncTime。
     /// </summary>
     public DateTime ServerTime { get; set; }
@@ -33,6 +38,11 @@ public class SyncDownloadQuery
     /// 門市識別碼。
     /// </summary>
     public string StoreId { get; set; } = null!;
+
+    /// <summary>
+    /// 門市型態（Direct、Franchise 等）。
+    /// </summary>
+    public string StoreType { get; set; } = null!;
 
     /// <summary>
     /// 上次同步時間，若為 null 代表全量下載。

@@ -4,6 +4,7 @@
 - 以中央伺服器資料庫為最終真實來源，負責整合直營店與連盟店資料。
 - 分店透過固定排程上傳差異資料，中央伺服器再回傳最新資料給各分店。
 - 核心差異判斷依據 `updated_at`（或對應欄位）以及 `sync_log` 紀錄，避免整批覆蓋。
+- 所有同步請求需帶入 `storeId` 與 `storeType`，確保直營與連盟門市的差異流程都能在同一套介面中管理。
 
 ```text
                  上傳差異                  下發更新
@@ -24,8 +25,8 @@
 | 表格 | 目的 | 關鍵欄位 |
 | ---- | ---- | -------- |
 | `orders` | 儲存工單主檔，並提供 `ModificationTimestamp` 做差異判斷 | `OrderUid`, `StoreUid`, `Status`, `Amount`, `ModificationTimestamp` |
-| `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `Synced` |
-| `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
+| `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
+| `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
 
 - 透過 Trigger 或應用程式，在 `orders`（或其他目標資料表）異動時插入一筆 `sync_logs`。
 - `store_sync_states` 由中央伺服器在同步成功後更新。
@@ -47,16 +48,22 @@
    - 採「中央優先」策略：若中央資料較新，直接覆寫分店。
    - 若需更進階的版本管理，可延伸 `Version` 欄位或精確比對 `ModificationTimestamp`。
 
+### 直營與連盟同步整合重點
+- 以 `storeType` 區分直營（Direct）與連盟（Franchise）門市，全部走相同 API 與資料流程。
+- 中央資料庫會針對每一組 `storeId + storeType` 建立同步狀態，避免不同型態的門市互相覆寫游標。
+- `sync_logs` 會記錄 `storeType`，方便排查是由哪一類型門市上傳或需要下發。
+
 ## API 設計
 | Method | Path | 說明 |
 | ------ | ---- | ---- |
-| `POST /api/sync/upload` | 分店上傳差異，包含新增、更新、刪除異動清單。 |
-| `GET /api/sync/changes` | 分店下載差異，依照 `storeId` 與 `lastSyncTime` 回傳最新資料。 |
+| `POST /api/sync/upload` | 分店上傳差異，包含新增、更新、刪除異動清單，需帶入 `storeType`。 |
+| `GET /api/sync/changes` | 分店下載差異，依照 `storeId`、`storeType` 與 `lastSyncTime` 回傳最新資料。 |
 
 ### 上傳範例
 ```json
 {
   "storeId": "STORE-001",
+  "storeType": "Direct",
   "changes": [
     {
       "tableName": "orders",
@@ -80,6 +87,7 @@
 ```json
 {
   "storeId": "STORE-001",
+  "storeType": "Direct",
   "lastSyncTime": "2024-04-15T10:30:00Z",
   "orders": [
     {

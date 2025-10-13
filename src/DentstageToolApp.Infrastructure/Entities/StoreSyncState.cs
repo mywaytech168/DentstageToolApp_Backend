@@ -18,6 +18,11 @@ public class StoreSyncState
     public string StoreId { get; set; } = null!;
 
     /// <summary>
+    /// 門市型態（Direct、Franchise 等），用來區分同步流程歸屬。
+    /// </summary>
+    public string StoreType { get; set; } = null!;
+
+    /// <summary>
     /// 最後一次上傳完成時間。
     /// </summary>
     public DateTime? LastUploadTime { get; set; }

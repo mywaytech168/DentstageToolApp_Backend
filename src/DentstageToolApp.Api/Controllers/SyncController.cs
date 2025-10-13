@@ -39,6 +39,11 @@ public class SyncController : ControllerBase
             return BadRequest("請提供同步請求資料。");
         }
 
+        if (string.IsNullOrWhiteSpace(request.StoreType))
+        {
+            return BadRequest("StoreType 不可為空白。");
+        }
+
         try
         {
             var result = await _syncService.ProcessUploadAsync(request, cancellationToken);
@@ -65,7 +70,12 @@ public class SyncController : ControllerBase
 
         try
         {
-            var response = await _syncService.GetUpdatesAsync(query.StoreId, query.LastSyncTime, query.PageSize, cancellationToken);
+            if (string.IsNullOrWhiteSpace(query.StoreType))
+            {
+                return BadRequest("StoreType 不可為空白。");
+            }
+
+            var response = await _syncService.GetUpdatesAsync(query.StoreId, query.StoreType, query.LastSyncTime, query.PageSize, cancellationToken);
             return Ok(response);
         }
         catch (ArgumentException ex)
