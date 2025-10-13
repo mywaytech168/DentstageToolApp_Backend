@@ -152,6 +152,11 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<StoreSyncState> StoreSyncStates => Set<StoreSyncState>();
 
     /// <summary>
+    /// 同步機碼設定資料集，用於依機碼取得伺服器角色與門市資訊。
+    /// </summary>
+    public virtual DbSet<SyncMachineProfile> SyncMachineProfiles => Set<SyncMachineProfile>();
+
+    /// <summary>
     /// 建立資料模型對應設定。
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -173,6 +178,7 @@ public class DentstageToolAppContext : DbContext
         ConfigureRefreshToken(modelBuilder);
         ConfigureSyncLog(modelBuilder);
         ConfigureStoreSyncState(modelBuilder);
+        ConfigureSyncMachineProfile(modelBuilder);
     }
 
     /// <summary>
@@ -1007,6 +1013,33 @@ public class DentstageToolAppContext : DbContext
     }
 
     /// <summary>
+    /// 設定同步機碼資料表欄位與索引。
+    /// </summary>
+    private static void ConfigureSyncMachineProfile(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<SyncMachineProfile>();
+        entity.ToTable("SyncMachineProfiles");
+        entity.HasKey(e => e.MachineKey);
+        entity.Property(e => e.MachineKey)
+            .IsRequired()
+            .HasMaxLength(150);
+        entity.Property(e => e.ServerRole)
+            .IsRequired()
+            .HasMaxLength(50);
+        entity.Property(e => e.StoreId)
+            .HasMaxLength(100);
+        entity.Property(e => e.StoreType)
+            .HasMaxLength(50);
+        entity.Property(e => e.Remark)
+            .HasMaxLength(255);
+        entity.Property(e => e.UpdatedAt)
+            .HasColumnType("datetime");
+        entity.Property(e => e.IsActive)
+            .HasColumnType("bit");
+        entity.HasIndex(e => new { e.ServerRole, e.IsActive });
+    }
+
+    /// <summary>
     /// 將目前追蹤的資料異動轉換為同步紀錄，由應用程式層統一插入 SyncLogs。
     /// </summary>
     private void AppendSyncLogs()
@@ -1015,7 +1048,7 @@ public class DentstageToolAppContext : DbContext
         var trackedEntries = ChangeTracker
             .Entries()
             .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-            .Where(entry => entry.Entity is not SyncLog && entry.Entity is not StoreSyncState)
+            .Where(entry => entry.Entity is not SyncLog && entry.Entity is not StoreSyncState && entry.Entity is not SyncMachineProfile)
             .ToList();
 
         if (trackedEntries.Count == 0)
