@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,12 +13,57 @@ namespace DentstageToolApp.Infrastructure.Data;
 /// </summary>
 public class DentstageToolAppContext : DbContext
 {
+    private string? _syncLogSourceServer;
+    private string? _syncLogStoreType;
+
     /// <summary>
     /// 建構子，用於注入 DbContext 選項。
     /// </summary>
     public DentstageToolAppContext(DbContextOptions<DentstageToolAppContext> options)
         : base(options)
     {
+    }
+
+    /// <summary>
+    /// 變更儲存前自動產生同步紀錄，並呼叫同步版 SaveChanges。
+    /// </summary>
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        return SaveChangesAsync(true, cancellationToken);
+    }
+
+    /// <summary>
+    /// 變更儲存前自動產生同步紀錄，於應用程式層取代資料庫 Trigger。
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        AppendSyncLogs();
+        try
+        {
+            return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        }
+        finally
+        {
+            ClearSyncLogMetadata();
+        }
+    }
+
+    /// <summary>
+    /// 設定同步紀錄的門市與來源資訊，讓呼叫者可於同一交易中補齊欄位。
+    /// </summary>
+    public void SetSyncLogMetadata(string? sourceServer, string? storeType)
+    {
+        _syncLogSourceServer = sourceServer;
+        _syncLogStoreType = storeType;
+    }
+
+    /// <summary>
+    /// 清除暫存的同步紀錄門市資訊，避免影響下一次交易。
+    /// </summary>
+    public void ClearSyncLogMetadata()
+    {
+        _syncLogSourceServer = null;
+        _syncLogStoreType = null;
     }
 
     /// <summary>
@@ -950,5 +1000,80 @@ public class DentstageToolAppContext : DbContext
             .HasColumnType("datetime");
         entity.HasIndex(e => new { e.StoreId, e.StoreType })
             .IsUnique();
+    }
+
+    /// <summary>
+    /// 將目前追蹤的資料異動轉換為同步紀錄，由應用程式層統一插入 SyncLogs。
+    /// </summary>
+    private void AppendSyncLogs()
+    {
+        // ---------- 只針對新增、更新、刪除的實體產生同步紀錄 ----------
+        var trackedEntries = ChangeTracker
+            .Entries()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Where(entry => entry.Entity is not SyncLog && entry.Entity is not StoreSyncState)
+            .ToList();
+
+        if (trackedEntries.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var logs = new List<SyncLog>();
+
+        foreach (var entry in trackedEntries)
+        {
+            // ---------- 若無實質異動則略過，避免產生多餘紀錄 ----------
+            if (entry.State == EntityState.Modified && !entry.Properties.Any(property => property.IsModified))
+            {
+                continue;
+            }
+
+            var tableName = entry.Metadata.GetTableName();
+            if (string.IsNullOrWhiteSpace(tableName))
+            {
+                tableName = entry.Entity.GetType().Name;
+            }
+
+            var keyValues = entry.Properties
+                .Where(property => property.Metadata.IsPrimaryKey())
+                .Select(property =>
+                {
+                    var value = entry.State == EntityState.Deleted ? property.OriginalValue : property.CurrentValue;
+                    return value?.ToString() ?? string.Empty;
+                })
+                .ToArray();
+
+            if (keyValues.Length == 0)
+            {
+                continue;
+            }
+
+            var recordId = string.Join(",", keyValues);
+            var action = entry.State switch
+            {
+                EntityState.Added => "INSERT",
+                EntityState.Deleted => "DELETE",
+                _ => "UPDATE"
+            };
+
+            logs.Add(new SyncLog
+            {
+                TableName = tableName,
+                RecordId = recordId,
+                Action = action,
+                UpdatedAt = now,
+                SourceServer = _syncLogSourceServer,
+                StoreType = _syncLogStoreType,
+                Synced = false
+            });
+        }
+
+        if (logs.Count > 0)
+        {
+            // ---------- 集中新增同步紀錄，避免於迴圈中觸發追蹤狀態變化 ----------
+            SyncLogs.AddRange(logs);
+        }
     }
 }
