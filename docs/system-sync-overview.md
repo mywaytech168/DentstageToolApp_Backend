@@ -28,7 +28,7 @@
 | `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
 | `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
 
-- 透過 `db_docs/sync_logs_triggers.sql` 建立 Trigger，於所有業務資料表的新增／修改／刪除時自動插入 `sync_logs`，確保差異來源一致。
+- 由應用程式層的 `DentstageToolAppContext` 在 `SaveChanges` / `SaveChangesAsync` 進行追蹤，將所有新增、更新、刪除的實體轉換為 `sync_logs`，完全取代資料庫 Trigger。
 - `store_sync_states` 由中央伺服器在同步成功後更新。
 
 ## 同步流程
@@ -113,6 +113,13 @@
 - 直營／連盟門市會啟動 `StoreSyncBackgroundService`，定期補齊 `sync_logs` 的 `SourceServer`、`StoreType` 欄位並統計待同步筆數，為後續上傳中央 API 做準備。
 - `store_sync_states` 僅由中央伺服器在同步成功後更新，門市端不再直接寫入該表，避免狀態錯亂。
 - 中央伺服器角色則不會啟動該背景工作，僅保留 API 與資料整合功能。
+
+### 應用程式層同步紀錄流程
+1. 每當 API 或背景工作透過 EF Core 儲存資料時，`DentstageToolAppContext` 會掃描追蹤中的變更實體。
+2. 系統將每筆異動轉為 `SyncLog`（包含資料表、鍵值、動作別與時間）。
+3. 若同步流程提供門市編號與型態（例如中央處理上傳時呼叫 `SetSyncLogMetadata`），會自動帶入 `SourceServer`、`StoreType`。
+4. 門市背景排程會補齊仍缺少的來源資訊並統計待同步筆數。
+5. 異動完成後即有對應 `sync_logs` 可供上傳或稽核，無需倚賴資料庫 Trigger。
 
 ```json
 "Sync": {

@@ -111,6 +111,7 @@ public class SyncService : ISyncService
 
         storeState.StoreType = request.StoreType;
         storeState.LastUploadTime = now;
+        _dbContext.SetSyncLogMetadata(request.StoreId, request.StoreType);
         await _dbContext.SaveChangesAsync(cancellationToken);
         return result;
     }
@@ -226,16 +227,6 @@ public class SyncService : ISyncService
                 throw new InvalidOperationException($"不支援的同步動作：{action}");
         }
 
-        _dbContext.SyncLogs.Add(new SyncLog
-        {
-            TableName = "Orders",
-            RecordId = orderDto?.OrderUid ?? change.RecordId,
-            Action = action,
-            UpdatedAt = change.UpdatedAt ?? orderDto?.ModificationTimestamp ?? processTime,
-            SourceServer = storeId,
-            StoreType = storeType,
-            Synced = true
-        });
     }
 
     /// <summary>
