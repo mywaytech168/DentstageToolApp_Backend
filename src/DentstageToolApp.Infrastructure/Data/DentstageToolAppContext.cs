@@ -921,9 +921,12 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.SourceServer)
             .IsRequired()
             .HasMaxLength(50);
+        entity.Property(e => e.StoreType)
+            .IsRequired()
+            .HasMaxLength(50);
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("datetime");
-        entity.HasIndex(e => new { e.TableName, e.UpdatedAt });
+        entity.HasIndex(e => new { e.TableName, e.StoreType, e.UpdatedAt });
         entity.HasIndex(e => e.Synced);
     }
 
@@ -938,13 +941,16 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreId)
             .IsRequired()
             .HasMaxLength(50);
+        entity.Property(e => e.StoreType)
+            .IsRequired()
+            .HasMaxLength(50);
         entity.Property(e => e.LastCursor)
             .HasMaxLength(100);
         entity.Property(e => e.LastUploadTime)
             .HasColumnType("datetime");
         entity.Property(e => e.LastDownloadTime)
             .HasColumnType("datetime");
-        entity.HasIndex(e => e.StoreId)
+        entity.HasIndex(e => new { e.StoreId, e.StoreType })
             .IsUnique();
     }
 }

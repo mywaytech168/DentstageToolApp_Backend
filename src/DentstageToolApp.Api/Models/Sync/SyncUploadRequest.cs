@@ -15,6 +15,11 @@ public class SyncUploadRequest
     public string StoreId { get; set; } = null!;
 
     /// <summary>
+    /// 門市型態（直營店 Direct、連盟店 Franchise 等）。
+    /// </summary>
+    public string StoreType { get; set; } = null!;
+
+    /// <summary>
     /// 異動清單。
     /// </summary>
     public IList<SyncChangeDto> Changes { get; set; } = new List<SyncChangeDto>();

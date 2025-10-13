@@ -47,9 +47,24 @@ public class SyncService : ISyncService
             throw new ArgumentException("StoreId 不可為空白。", nameof(request));
         }
 
+        if (string.IsNullOrWhiteSpace(request.StoreType))
+        {
+            throw new ArgumentException("StoreType 不可為空白。", nameof(request));
+        }
+
         var result = new SyncUploadResult();
         var now = DateTime.UtcNow;
-        var storeState = await EnsureStoreStateAsync(request.StoreId, cancellationToken);
+        var storeState = await EnsureStoreStateAsync(request.StoreId, request.StoreType, cancellationToken);
+
+        if (request.Changes is null || request.Changes.Count == 0)
+        {
+            // ---------- 無異動時提早回應 ----------
+            _logger.LogInformation("StoreId {StoreId} 於 {Time} 呼叫同步上傳，但無任何異動紀錄。", request.StoreId, now);
+            storeState.StoreType = request.StoreType;
+            storeState.LastUploadTime = now;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return result;
+        }
 
         foreach (var change in request.Changes)
         {
@@ -83,7 +98,7 @@ public class SyncService : ISyncService
 
             try
             {
-                await ProcessOrderChangeAsync(action, change, request.StoreId, now, cancellationToken);
+                await ProcessOrderChangeAsync(action, change, request.StoreId, request.StoreType, now, cancellationToken);
                 result.ProcessedCount++;
             }
             catch (Exception ex)
@@ -94,17 +109,23 @@ public class SyncService : ISyncService
             }
         }
 
+        storeState.StoreType = request.StoreType;
         storeState.LastUploadTime = now;
         await _dbContext.SaveChangesAsync(cancellationToken);
         return result;
     }
 
     /// <inheritdoc />
-    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, DateTime? lastSyncTime, int pageSize, CancellationToken cancellationToken)
+    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(storeId))
         {
             throw new ArgumentException("StoreId 不可為空白。", nameof(storeId));
+        }
+
+        if (string.IsNullOrWhiteSpace(storeType))
+        {
+            throw new ArgumentException("StoreType 不可為空白。", nameof(storeType));
         }
 
         if (pageSize <= 0)
@@ -139,13 +160,15 @@ public class SyncService : ISyncService
             })
             .ToListAsync(cancellationToken);
 
-        var storeState = await EnsureStoreStateAsync(storeId, cancellationToken);
+        var storeState = await EnsureStoreStateAsync(storeId, storeType, cancellationToken);
+        storeState.StoreType = storeType;
         storeState.LastDownloadTime = now;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new SyncDownloadResponse
         {
             StoreId = storeId,
+            StoreType = storeType,
             ServerTime = now,
             Orders = orders
         };
@@ -154,7 +177,7 @@ public class SyncService : ISyncService
     /// <summary>
     /// 處理工單資料的同步行為。
     /// </summary>
-    private async Task ProcessOrderChangeAsync(string action, SyncChangeDto change, string storeId, DateTime processTime, CancellationToken cancellationToken)
+    private async Task ProcessOrderChangeAsync(string action, SyncChangeDto change, string storeId, string storeType, DateTime processTime, CancellationToken cancellationToken)
     {
         OrderSyncDto? orderDto = null;
         if (!string.Equals(action, "DELETE", StringComparison.Ordinal))
@@ -210,6 +233,7 @@ public class SyncService : ISyncService
             Action = action,
             UpdatedAt = change.UpdatedAt ?? orderDto?.ModificationTimestamp ?? processTime,
             SourceServer = storeId,
+            StoreType = storeType,
             Synced = true
         });
     }
@@ -235,11 +259,11 @@ public class SyncService : ISyncService
     }
 
     /// <summary>
-    /// 確保門市同步狀態存在，若無則建立。
+    /// 確保門市同步狀態存在，若無則依門市型態建立一筆獨立資料。
     /// </summary>
-    private async Task<StoreSyncState> EnsureStoreStateAsync(string storeId, CancellationToken cancellationToken)
+    private async Task<StoreSyncState> EnsureStoreStateAsync(string storeId, string storeType, CancellationToken cancellationToken)
     {
-        var storeState = await _dbContext.StoreSyncStates.FirstOrDefaultAsync(x => x.StoreId == storeId, cancellationToken);
+        var storeState = await _dbContext.StoreSyncStates.FirstOrDefaultAsync(x => x.StoreId == storeId && x.StoreType == storeType, cancellationToken);
         if (storeState is not null)
         {
             return storeState;
@@ -248,6 +272,7 @@ public class SyncService : ISyncService
         storeState = new StoreSyncState
         {
             StoreId = storeId,
+            StoreType = storeType,
             LastUploadTime = null,
             LastDownloadTime = null
         };

@@ -38,6 +38,11 @@ public class SyncLog
     public string SourceServer { get; set; } = null!;
 
     /// <summary>
+    /// 門市型態（直營店或連盟店），協助區分同步流程。
+    /// </summary>
+    public string StoreType { get; set; } = null!;
+
+    /// <summary>
     /// 是否已同步至目標端。
     /// </summary>
     public bool Synced { get; set; }
