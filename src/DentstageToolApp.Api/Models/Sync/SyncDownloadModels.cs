@@ -45,6 +45,11 @@ public class SyncDownloadQuery
     public string StoreType { get; set; } = null!;
 
     /// <summary>
+    /// 門市伺服器角色（DirectStore、AllianceStore），可協助中央更新伺服器屬性。
+    /// </summary>
+    public string? ServerRole { get; set; }
+
+    /// <summary>
     /// 上次同步時間，若為 null 代表全量下載。
     /// </summary>
     public DateTime? LastSyncTime { get; set; }

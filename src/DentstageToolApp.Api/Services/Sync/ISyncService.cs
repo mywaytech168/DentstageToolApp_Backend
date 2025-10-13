@@ -13,7 +13,7 @@ public interface ISyncService
     /// <summary>
     /// 處理門市上傳的差異資料。
     /// </summary>
-    Task<SyncUploadResult> ProcessUploadAsync(SyncUploadRequest request, CancellationToken cancellationToken);
+    Task<SyncUploadResult> ProcessUploadAsync(SyncUploadRequest request, string? remoteIpAddress, CancellationToken cancellationToken);
 
     /// <summary>
     /// 取得門市需要更新的差異資料。
@@ -23,5 +23,5 @@ public interface ISyncService
     /// <param name="lastSyncTime">最後一次成功同步時間。</param>
     /// <param name="pageSize">單次同步的最大筆數。</param>
     /// <param name="cancellationToken">取消作業的通知權杖。</param>
-    Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, CancellationToken cancellationToken);
+    Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken);
 }

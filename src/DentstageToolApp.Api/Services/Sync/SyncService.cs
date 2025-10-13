@@ -34,7 +34,7 @@ public class SyncService : ISyncService
     }
 
     /// <inheritdoc />
-    public async Task<SyncUploadResult> ProcessUploadAsync(SyncUploadRequest request, CancellationToken cancellationToken)
+    public async Task<SyncUploadResult> ProcessUploadAsync(SyncUploadRequest request, string? remoteIpAddress, CancellationToken cancellationToken)
     {
         if (request is null)
         {
@@ -54,13 +54,20 @@ public class SyncService : ISyncService
 
         var result = new SyncUploadResult();
         var now = DateTime.UtcNow;
-        var storeState = await EnsureStoreStateAsync(request.StoreId, request.StoreType, cancellationToken);
+        var normalizedRole = SyncServerRoles.Normalize(request.ServerRole ?? request.StoreType);
+        var resolvedIp = string.IsNullOrWhiteSpace(remoteIpAddress) ? request.ServerIp : remoteIpAddress;
+        var storeState = await EnsureStoreStateAsync(request.StoreId, request.StoreType, normalizedRole, resolvedIp, cancellationToken);
 
         if (request.Changes is null || request.Changes.Count == 0)
         {
             // ---------- 無異動時提早回應 ----------
             _logger.LogInformation("StoreId {StoreId} 於 {Time} 呼叫同步上傳，但無任何異動紀錄。", request.StoreId, now);
             storeState.StoreType = request.StoreType;
+            storeState.ServerRole = normalizedRole;
+            if (!string.IsNullOrWhiteSpace(resolvedIp))
+            {
+                storeState.ServerIp = resolvedIp;
+            }
             storeState.LastUploadTime = now;
             await _dbContext.SaveChangesAsync(cancellationToken);
             return result;
@@ -110,6 +117,11 @@ public class SyncService : ISyncService
         }
 
         storeState.StoreType = request.StoreType;
+        storeState.ServerRole = normalizedRole;
+        if (!string.IsNullOrWhiteSpace(resolvedIp))
+        {
+            storeState.ServerIp = resolvedIp;
+        }
         storeState.LastUploadTime = now;
         _dbContext.SetSyncLogMetadata(request.StoreId, request.StoreType);
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -117,7 +129,7 @@ public class SyncService : ISyncService
     }
 
     /// <inheritdoc />
-    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, CancellationToken cancellationToken)
+    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(storeId))
         {
@@ -161,8 +173,15 @@ public class SyncService : ISyncService
             })
             .ToListAsync(cancellationToken);
 
-        var storeState = await EnsureStoreStateAsync(storeId, storeType, cancellationToken);
+        var normalizedRole = SyncServerRoles.Normalize(remoteServerRole ?? storeType);
+        var resolvedIp = remoteIpAddress;
+        var storeState = await EnsureStoreStateAsync(storeId, storeType, normalizedRole, resolvedIp, cancellationToken);
         storeState.StoreType = storeType;
+        storeState.ServerRole = normalizedRole;
+        if (!string.IsNullOrWhiteSpace(resolvedIp))
+        {
+            storeState.ServerIp = resolvedIp;
+        }
         storeState.LastDownloadTime = now;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -252,11 +271,21 @@ public class SyncService : ISyncService
     /// <summary>
     /// 確保門市同步狀態存在，若無則依門市型態建立一筆獨立資料。
     /// </summary>
-    private async Task<StoreSyncState> EnsureStoreStateAsync(string storeId, string storeType, CancellationToken cancellationToken)
+    private async Task<StoreSyncState> EnsureStoreStateAsync(string storeId, string storeType, string? serverRole, string? serverIp, CancellationToken cancellationToken)
     {
         var storeState = await _dbContext.StoreSyncStates.FirstOrDefaultAsync(x => x.StoreId == storeId && x.StoreType == storeType, cancellationToken);
         if (storeState is not null)
         {
+            if (!string.IsNullOrWhiteSpace(serverRole))
+            {
+                storeState.ServerRole = serverRole;
+            }
+
+            if (!string.IsNullOrWhiteSpace(serverIp))
+            {
+                storeState.ServerIp = serverIp;
+            }
+
             return storeState;
         }
 
@@ -264,6 +293,8 @@ public class SyncService : ISyncService
         {
             StoreId = storeId,
             StoreType = storeType,
+            ServerRole = serverRole,
+            ServerIp = serverIp,
             LastUploadTime = null,
             LastDownloadTime = null
         };
