@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Photos;
+using DentstageToolApp.Api.Models.Photos;
 using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Api.Services.Quotation;
 using Microsoft.AspNetCore.Authorization;

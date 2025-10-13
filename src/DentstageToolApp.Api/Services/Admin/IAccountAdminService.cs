@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Admin;
+using DentstageToolApp.Api.Models.Admin;
 
 namespace DentstageToolApp.Api.Services.Admin;
 

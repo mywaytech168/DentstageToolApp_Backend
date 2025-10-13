@@ -4,7 +4,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Brands;
+using DentstageToolApp.Api.Models.Brands;
 using DentstageToolApp.Api.Services.Brand;
 using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;

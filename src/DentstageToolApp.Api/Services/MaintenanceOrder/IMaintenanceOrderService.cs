@@ -1,6 +1,6 @@
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.MaintenanceOrders;
+using DentstageToolApp.Api.Models.MaintenanceOrders;
 
 namespace DentstageToolApp.Api.Services.MaintenanceOrder;
 
