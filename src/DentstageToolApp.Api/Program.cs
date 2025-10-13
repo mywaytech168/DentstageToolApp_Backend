@@ -19,6 +19,7 @@ using DentstageToolApp.Api.Services.Technician;
 using DentstageToolApp.Api.Services.Customer;
 using DentstageToolApp.Api.Services.ServiceCategory;
 using DentstageToolApp.Api.Services.Store;
+using DentstageToolApp.Api.Services.Sync;
 using DentstageToolApp.Api.Swagger;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -175,6 +176,7 @@ builder.Services.AddScoped<IServiceCategoryQueryService, ServiceCategoryQuerySer
 builder.Services.AddScoped<IStoreManagementService, StoreManagementService>();
 builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
+builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 

@@ -92,6 +92,16 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     /// <summary>
+    /// 同步紀錄資料集。
+    /// </summary>
+    public virtual DbSet<SyncLog> SyncLogs => Set<SyncLog>();
+
+    /// <summary>
+    /// 門市同步狀態資料集。
+    /// </summary>
+    public virtual DbSet<StoreSyncState> StoreSyncStates => Set<StoreSyncState>();
+
+    /// <summary>
     /// 建立資料模型對應設定。
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -111,6 +121,8 @@ public class DentstageToolAppContext : DbContext
         ConfigureUserAccount(modelBuilder);
         ConfigureDeviceRegistration(modelBuilder);
         ConfigureRefreshToken(modelBuilder);
+        ConfigureSyncLog(modelBuilder);
+        ConfigureStoreSyncState(modelBuilder);
     }
 
     /// <summary>
@@ -887,5 +899,52 @@ public class DentstageToolAppContext : DbContext
             .WithMany(p => p.BlackLists)
             .HasForeignKey(d => d.CustomerUid)
             .HasConstraintName("FK_BlackLists_Customers");
+    }
+
+    /// <summary>
+    /// 設定同步紀錄資料表欄位與索引。
+    /// </summary>
+    private static void ConfigureSyncLog(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<SyncLog>();
+        entity.ToTable("SyncLogs");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.TableName)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.RecordId)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.Action)
+            .IsRequired()
+            .HasMaxLength(20);
+        entity.Property(e => e.SourceServer)
+            .IsRequired()
+            .HasMaxLength(50);
+        entity.Property(e => e.UpdatedAt)
+            .HasColumnType("datetime");
+        entity.HasIndex(e => new { e.TableName, e.UpdatedAt });
+        entity.HasIndex(e => e.Synced);
+    }
+
+    /// <summary>
+    /// 設定門市同步狀態資料表欄位與索引。
+    /// </summary>
+    private static void ConfigureStoreSyncState(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<StoreSyncState>();
+        entity.ToTable("StoreSyncStates");
+        entity.HasKey(e => e.Id);
+        entity.Property(e => e.StoreId)
+            .IsRequired()
+            .HasMaxLength(50);
+        entity.Property(e => e.LastCursor)
+            .HasMaxLength(100);
+        entity.Property(e => e.LastUploadTime)
+            .HasColumnType("datetime");
+        entity.Property(e => e.LastDownloadTime)
+            .HasColumnType("datetime");
+        entity.HasIndex(e => e.StoreId)
+            .IsUnique();
     }
 }
