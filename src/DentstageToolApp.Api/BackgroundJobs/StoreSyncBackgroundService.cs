@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Infrastructure.Data;
+using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -18,6 +21,8 @@ namespace DentstageToolApp.Api.BackgroundJobs;
 /// </summary>
 public class StoreSyncBackgroundService : BackgroundService
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<StoreSyncBackgroundService> _logger;
     private readonly SyncOptions _syncOptions;
@@ -47,9 +52,9 @@ public class StoreSyncBackgroundService : BackgroundService
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(_syncOptions.StoreId) || string.IsNullOrWhiteSpace(_syncOptions.StoreType))
+        if (!_syncOptions.HasResolvedMachineProfile)
         {
-            _logger.LogWarning("伺服器角色為門市，但缺少 StoreId 或 StoreType 設定，請補齊設定後再啟動服務。");
+            _logger.LogWarning("伺服器角色為門市，但尚未透過同步機碼補齊 StoreId/StoreType 設定，請確認 SyncMachineProfiles。");
             return;
         }
 
@@ -85,9 +90,32 @@ public class StoreSyncBackgroundService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
 
-            // ---------- 準備門市識別資訊，供同步紀錄補齊使用 ----------
-            var storeId = _syncOptions.StoreId ?? _syncOptions.NormalizedServerRole ?? "UNKNOWN";
-            var storeType = _syncOptions.StoreType ?? _syncOptions.NormalizedServerRole ?? "UNKNOWN";
+            SyncMachineProfile? machineProfile = null;
+            if (!string.IsNullOrWhiteSpace(_syncOptions.MachineKey))
+            {
+                machineProfile = await dbContext.SyncMachineProfiles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(profile => profile.MachineKey == _syncOptions.MachineKey && profile.IsActive, cancellationToken);
+
+                if (machineProfile is null)
+                {
+                    _logger.LogWarning("找不到同步機碼 {MachineKey} 對應的設定，停止本次背景同步。", _syncOptions.MachineKey);
+                    return;
+                }
+
+                // ---------- 若資料庫設定已更新，立即同步到記憶體中的選項 ----------
+                _syncOptions.ApplyMachineProfile(machineProfile.ServerRole, machineProfile.StoreId, machineProfile.StoreType);
+            }
+
+            var storeId = _syncOptions.StoreId ?? machineProfile?.StoreId ?? "UNKNOWN";
+            var storeType = _syncOptions.StoreType ?? machineProfile?.StoreType ?? "UNKNOWN";
+            var serverRole = _syncOptions.NormalizedServerRole;
+
+            if (!SyncServerRoles.IsStoreRole(serverRole))
+            {
+                _logger.LogInformation("同步機碼設定顯示目前角色為 {Role}，略過門市同步流程。", serverRole);
+                return;
+            }
 
             // ---------- 補齊待同步紀錄的來源資訊 ----------
             var batchSize = _syncOptions.BackgroundSyncBatchSize <= 0 ? 100 : _syncOptions.BackgroundSyncBatchSize;
@@ -97,37 +125,115 @@ public class StoreSyncBackgroundService : BackgroundService
                 .Take(batchSize)
                 .ToListAsync(cancellationToken);
 
+            if (pendingLogs.Count == 0)
+            {
+                _logger.LogInformation("門市同步排程執行完畢，目前無待同步資料。StoreId: {StoreId}", storeId);
+                return;
+            }
+
+            var changes = new List<SyncChangeDto>();
+
             foreach (var log in pendingLogs)
             {
                 if (string.IsNullOrWhiteSpace(log.SourceServer))
                 {
-                    // 透過設定檔補齊來源伺服器，讓中央可辨識門市來源
                     log.SourceServer = storeId;
                 }
 
                 if (string.IsNullOrWhiteSpace(log.StoreType))
                 {
-                    // 透過設定檔補齊門市型態，中央可依類型決定處理邏輯
                     log.StoreType = storeType;
                 }
+
+                var change = new SyncChangeDto
+                {
+                    TableName = log.TableName,
+                    Action = log.Action,
+                    RecordId = log.RecordId,
+                    UpdatedAt = log.UpdatedAt
+                };
+
+                if (!string.Equals(log.Action, "DELETE", StringComparison.OrdinalIgnoreCase))
+                {
+                    var payload = await BuildChangePayloadAsync(dbContext, log, cancellationToken);
+                    if (payload.HasValue)
+                    {
+                        change.Payload = payload.Value;
+                    }
+                    else
+                    {
+                        _logger.LogWarning("同步紀錄 {Id} 缺少對應資料內容，將以純 metadata 上傳。", log.Id);
+                    }
+                }
+
+                changes.Add(change);
             }
 
-            if (pendingLogs.Count > 0)
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            var uploadRequest = new SyncUploadRequest
             {
-                await dbContext.SaveChangesAsync(cancellationToken);
+                StoreId = storeId,
+                StoreType = storeType,
+                ServerRole = serverRole,
+                ServerIp = _syncOptions.ServerIp,
+                Changes = changes
+            };
+
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                var preview = JsonSerializer.Serialize(uploadRequest, SerializerOptions);
+                _logger.LogDebug("門市同步預覽：{Preview}", preview);
             }
 
             var pendingCount = await dbContext.SyncLogs.CountAsync(log => !log.Synced, cancellationToken);
 
             _logger.LogInformation(
-                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 未同步筆數: {PendingCount}",
+                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 準備上傳筆數: {Prepared}, 未同步總筆數: {PendingCount}",
                 storeId,
                 storeType,
+                changes.Count,
                 pendingCount);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "門市同步排程執行失敗，StoreId: {StoreId}, StoreType: {StoreType}", _syncOptions.StoreId, _syncOptions.StoreType);
         }
+    }
+
+    /// <summary>
+    /// 依據同步紀錄產生對應的資料內容，支援 orders 表的差異打包。
+    /// </summary>
+    private static async Task<JsonElement?> BuildChangePayloadAsync(DentstageToolAppContext dbContext, SyncLog log, CancellationToken cancellationToken)
+    {
+        if (string.Equals(log.TableName, "orders", StringComparison.OrdinalIgnoreCase))
+        {
+            var order = await dbContext.Orders
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entity => entity.OrderUid == log.RecordId, cancellationToken);
+
+            if (order is null)
+            {
+                return null;
+            }
+
+            var dto = new OrderSyncDto
+            {
+                OrderUid = order.OrderUid,
+                OrderNo = order.OrderNo,
+                StoreUid = order.StoreUid,
+                Amount = order.Amount,
+                Status = order.Status,
+                CreationTimestamp = order.CreationTimestamp,
+                ModificationTimestamp = order.ModificationTimestamp,
+                QuatationUid = order.QuatationUid,
+                CreatedBy = order.CreatedBy,
+                ModifiedBy = order.ModifiedBy
+            };
+
+            return JsonSerializer.SerializeToElement(dto, SerializerOptions);
+        }
+
+        return null;
     }
 }

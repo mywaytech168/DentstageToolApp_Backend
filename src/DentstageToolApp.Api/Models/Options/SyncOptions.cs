@@ -14,6 +14,11 @@ public class SyncOptions
     public string? ServerRole { get; set; }
 
     /// <summary>
+    /// 同步機碼，啟動時會透過此機碼向資料庫查詢伺服器角色與門市資訊。
+    /// </summary>
+    public string? MachineKey { get; set; }
+
+    /// <summary>
     /// 門市識別碼，僅在直營或連盟門市角色時需要設定。
     /// </summary>
     public string? StoreId { get; set; }
@@ -49,6 +54,28 @@ public class SyncOptions
     public int BackgroundSyncBatchSize { get; set; } = 100;
 
     /// <summary>
+    /// 判斷是否已透過機碼解析出必要的門市資訊。
+    /// </summary>
+    public bool HasResolvedMachineProfile
+    {
+        get
+        {
+            var role = NormalizedServerRole;
+            if (string.IsNullOrWhiteSpace(role))
+            {
+                return false;
+            }
+
+            if (string.Equals(role, SyncServerRoles.CentralServer, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(StoreId) && !string.IsNullOrWhiteSpace(StoreType);
+        }
+    }
+
+    /// <summary>
     /// 將伺服器角色轉換為既定常數，避免大小寫造成判斷差異。
     /// </summary>
     public string NormalizedServerRole => SyncServerRoles.Normalize(ServerRole);
@@ -62,6 +89,27 @@ public class SyncOptions
     /// 判斷是否使用訊息佇列作為同步通訊方式。
     /// </summary>
     public bool UseMessageQueue => string.Equals(Transport, SyncTransportModes.RabbitMq, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 以資料庫查詢結果套用同步機碼設定，補齊伺服器角色與門市資訊。
+    /// </summary>
+    public void ApplyMachineProfile(string? serverRole, string? storeId, string? storeType)
+    {
+        if (!string.IsNullOrWhiteSpace(serverRole))
+        {
+            ServerRole = serverRole;
+        }
+
+        if (!string.IsNullOrWhiteSpace(storeId))
+        {
+            StoreId = storeId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(storeType))
+        {
+            StoreType = storeType;
+        }
+    }
 }
 
 /// <summary>

@@ -27,10 +27,13 @@
 | `orders` | 儲存工單主檔，並提供 `ModificationTimestamp` 做差異判斷 | `OrderUid`, `StoreUid`, `Status`, `Amount`, `ModificationTimestamp` |
 | `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
 | `store_sync_states` | 紀錄門市最後同步狀態，便於中央下發差異時快速查詢 | `StoreId`, `StoreType`, `ServerRole`, `ServerIp`, `LastUploadTime`, `LastDownloadTime`, `LastCursor` |
+| `sync_machine_profiles` | 以同步機碼管理伺服器角色與門市資訊 | `MachineKey`, `ServerRole`, `StoreId`, `StoreType`, `IsActive`, `UpdatedAt` |
 
 - 由應用程式層的 `DentstageToolAppContext` 在 `SaveChanges` / `SaveChangesAsync` 進行追蹤，將所有新增、更新、刪除的實體轉換為 `sync_logs`，完全取代資料庫 Trigger。
 - 中央伺服器會在同步成功後更新 `store_sync_states`，並同時寫入 `ServerRole` 與 `ServerIp` 區分中央或門市來源。
 - 若中央無法從連線取得 IP，可讓門市在請求內帶入 `serverIp` 欄位供紀錄使用。
+- `sync_machine_profiles` 由營運單位預先建立（以「裝置機碼」為索引），程式啟動時只需在設定檔指定 `MachineKey` 即可載入伺服器角色與門市資料。
+- 使用者登入與背景排程都會依據 `MachineKey` 查詢 `sync_machine_profiles`，JWT Token 與 `SyncUploadRequest` 會自動帶入 `serverRole`、`storeId`、`storeType`。
 
 ## 同步流程
 1. **分店上傳**
@@ -40,7 +43,7 @@
    - 回傳成功後，分店將該批 `Synced` 設為 1。
 
 2. **中央下發**
-   - 分店呼叫 API 並帶入 `LastSyncTime`。
+   - 分店呼叫 API 並帶入 `StoreId`、`StoreType` 與 `LastSyncTime`（皆可由 `sync_machine_profiles` 推導）。
    - 中央伺服器查詢 `orders.ModificationTimestamp > LastSyncTime` 的資料，同步更新 `store_sync_states` 的伺服器角色、IP 與最後下載時間。
    - 回傳差異資料與新的 `LastSyncTime`，分店再以 Upsert 更新本地資料。
    - 若需要分批，可透過 `PageSize`/`LastCursor` 控制。
@@ -112,22 +115,23 @@
 - **Sync Log 清理**：每日或每週清除已同步且超過保留期的紀錄。
 
 ## 組態與背景排程實作
-- `appsettings.json` 新增 `Sync` 區段，用於辨識目前執行個體的角色（中央、直營、連盟）與背景同步頻率。
-- 直營／連盟門市需設定 `StoreId`、`StoreType` 與 `ServerRole`，並透過 `BackgroundSyncIntervalMinutes` 控制排程週期（預設 60 分鐘）。
+- `appsettings.json` 新增 `Sync` 區段，通常只需設定 `MachineKey`、`ServerIp` 與排程參數，系統會自動查詢 `sync_machine_profiles` 補齊角色與門市資訊。
+- 若因特殊情境無法使用機碼，也可於設定檔直接填入 `ServerRole`、`StoreId`、`StoreType` 作為備援，背景服務會以設定值為優先。
 - 若採 RabbitMQ 佇列進行同步，可於 `Sync.Queue` 區段填入主機、佇列與帳密資訊，中央會於啟動時檢核設定完整性。
-- 直營／連盟門市會啟動 `StoreSyncBackgroundService`，定期補齊 `sync_logs` 的 `SourceServer`、`StoreType` 欄位並統計待同步筆數，為後續上傳中央 API 做準備。
+- 直營／連盟門市會啟動 `StoreSyncBackgroundService`，每次排程都會重新讀取 `sync_machine_profiles`，補齊 `sync_logs` 欄位並產生待上傳的 `SyncUploadRequest`。
 - `store_sync_states` 僅由中央伺服器在同步成功後更新，門市端不再直接寫入該表，避免狀態錯亂。
-- 中央伺服器角色則不會啟動該背景工作，僅保留 API 與資料整合功能。
+- 中央伺服器角色仍不會啟動該背景工作，僅保留 API 與資料整合功能。
 
 ### 應用程式層同步紀錄流程
 1. 每當 API 或背景工作透過 EF Core 儲存資料時，`DentstageToolAppContext` 會掃描追蹤中的變更實體。
 2. 系統將每筆異動轉為 `SyncLog`（包含資料表、鍵值、動作別與時間）。
-3. 若同步流程提供門市編號與型態（例如中央處理上傳時呼叫 `SetSyncLogMetadata`），會自動帶入 `SourceServer`、`StoreType`。
+3. 若同步流程提供門市編號與型態（例如中央處理上傳時呼叫 `SetSyncLogMetadata` 或門市端依 `sync_machine_profiles` 取得資訊），會自動帶入 `SourceServer`、`StoreType`。
 4. 門市背景排程會補齊仍缺少的來源資訊並統計待同步筆數。
 5. 異動完成後即有對應 `sync_logs` 可供上傳或稽核，無需倚賴資料庫 Trigger。
 
 ```json
 "Sync": {
+  "MachineKey": "DIRECT-STORE-001",
   "ServerRole": "DirectStore",
   "StoreId": "STORE-001",
   "StoreType": "Direct",

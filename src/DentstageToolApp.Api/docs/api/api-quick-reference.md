@@ -10,7 +10,7 @@
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
-| POST | `/api/auth/login` | 以裝置機碼登入取得 Access/Refresh Token。 | Body 採 JSON，對應 `LoginRequest`。 |
+| POST | `/api/auth/login` | 以裝置機碼登入取得 Access/Refresh Token，並回傳門市資訊。 | Body 採 JSON，對應 `LoginRequest`。 |
 | POST | `/api/auth/token/refresh` | 使用 Refresh Token 換發新的權杖。 | Body 採 JSON，對應 `RefreshTokenRequest`。 |
 | GET | `/api/auth/info` | 查詢目前登入者資訊。 | 需攜帶權杖。 |
 
@@ -24,6 +24,7 @@ Content-Type: application/json
 }
 ```
 - `deviceKey`：裝置機碼，長度上限 150。 【F:src/DentstageToolApp.Api/Auth/LoginRequest.cs†L5-L15】
+- 回應會附帶 `storeId`、`storeType` 與 `serverRole` 欄位，來源取自 `sync_machine_profiles`。
 
 **Refresh Token 請求範例**
 ```http

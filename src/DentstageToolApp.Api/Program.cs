@@ -28,6 +28,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -121,7 +123,6 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
 builder.Services.Configure<PhotoStorageOptions>(builder.Configuration.GetSection("PhotoStorage"));
-builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection("Sync"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
@@ -134,23 +135,42 @@ if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessD
     throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
 }
 
-var syncOptions = builder.Configuration.GetSection("Sync").Get<SyncOptions>() ?? new SyncOptions();
-var normalizedRole = syncOptions.NormalizedServerRole;
+var syncOptionsSection = builder.Configuration.GetSection("Sync");
+var syncOptions = new SyncOptions();
+syncOptionsSection.Bind(syncOptions);
 syncOptions.Transport = SyncTransportModes.Normalize(syncOptions.Transport);
+
+if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
+{
+    // ---------- 透過同步機碼向資料庫查詢實際角色與門市設定 ----------
+    using var tempProvider = builder.Services.BuildServiceProvider();
+    await using var scope = tempProvider.CreateAsyncScope();
+    var syncDbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
+    var machineProfile = await syncDbContext.SyncMachineProfiles
+        .AsNoTracking()
+        .FirstOrDefaultAsync(profile => profile.MachineKey == syncOptions.MachineKey && profile.IsActive);
+
+    if (machineProfile is null)
+    {
+        throw new InvalidOperationException($"找不到同步機碼 {syncOptions.MachineKey} 對應的啟用設定，請先於 SyncMachineProfiles 建立資料。");
+    }
+
+    syncOptions.ApplyMachineProfile(machineProfile.ServerRole, machineProfile.StoreId, machineProfile.StoreType);
+}
+
+var normalizedRole = syncOptions.NormalizedServerRole;
 if (string.IsNullOrWhiteSpace(normalizedRole))
 {
-    throw new InvalidOperationException("未設定 Sync.ServerRole，請於 appsettings.json 指定 Central、DirectStore 或 AllianceStore。");
+    throw new InvalidOperationException("請設定 Sync.MachineKey 或 Sync.ServerRole，以便辨識中央或門市角色。");
 }
 
-if (!string.Equals(normalizedRole, SyncServerRoles.CentralServer, StringComparison.Ordinal) && !syncOptions.IsStoreRole)
+if (!syncOptions.HasResolvedMachineProfile)
 {
-    throw new InvalidOperationException($"不支援的 Sync.ServerRole 設定：{syncOptions.ServerRole}");
+    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 SyncMachineProfiles 是否填寫 StoreId 與 StoreType。");
 }
 
-if (syncOptions.IsStoreRole && (string.IsNullOrWhiteSpace(syncOptions.StoreId) || string.IsNullOrWhiteSpace(syncOptions.StoreType)))
-{
-    throw new InvalidOperationException("伺服器角色為門市時，必須設定 Sync.StoreId 與 Sync.StoreType。");
-}
+builder.Services.AddSingleton(syncOptions);
+builder.Services.AddSingleton<IOptions<SyncOptions>>(Options.Create(syncOptions));
 
 if (syncOptions.UseMessageQueue)
 {
