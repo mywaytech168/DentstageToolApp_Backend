@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text;
 using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Models.Options;
+using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Api.Infrastructure.Database;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
@@ -19,6 +20,7 @@ using DentstageToolApp.Api.Services.Technician;
 using DentstageToolApp.Api.Services.Customer;
 using DentstageToolApp.Api.Services.ServiceCategory;
 using DentstageToolApp.Api.Services.Store;
+using DentstageToolApp.Api.Services.Sync;
 using DentstageToolApp.Api.Swagger;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -26,6 +28,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -131,6 +135,57 @@ if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessD
     throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
 }
 
+var syncOptionsSection = builder.Configuration.GetSection("Sync");
+var syncOptions = new SyncOptions();
+syncOptionsSection.Bind(syncOptions);
+syncOptions.Transport = SyncTransportModes.Normalize(syncOptions.Transport);
+
+if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
+{
+    // ---------- 透過同步機碼向資料庫查詢實際角色與門市設定 ----------
+    using var tempProvider = builder.Services.BuildServiceProvider();
+    await using var scope = tempProvider.CreateAsyncScope();
+    var syncDbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
+    var machineProfile = await syncDbContext.SyncMachineProfiles
+        .AsNoTracking()
+        .FirstOrDefaultAsync(profile => profile.MachineKey == syncOptions.MachineKey && profile.IsActive);
+
+    if (machineProfile is null)
+    {
+        throw new InvalidOperationException($"找不到同步機碼 {syncOptions.MachineKey} 對應的啟用設定，請先於 SyncMachineProfiles 建立資料。");
+    }
+
+    syncOptions.ApplyMachineProfile(machineProfile.ServerRole, machineProfile.StoreId, machineProfile.StoreType);
+}
+
+var normalizedRole = syncOptions.NormalizedServerRole;
+if (string.IsNullOrWhiteSpace(normalizedRole))
+{
+    throw new InvalidOperationException("請設定 Sync.MachineKey 或 Sync.ServerRole，以便辨識中央或門市角色。");
+}
+
+if (!syncOptions.HasResolvedMachineProfile)
+{
+    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 SyncMachineProfiles 是否填寫 StoreId 與 StoreType。");
+}
+
+builder.Services.AddSingleton(syncOptions);
+builder.Services.AddSingleton<IOptions<SyncOptions>>(Options.Create(syncOptions));
+
+if (syncOptions.UseMessageQueue)
+{
+    var queueOptions = syncOptions.Queue ?? new SyncQueueOptions();
+    if (string.IsNullOrWhiteSpace(queueOptions.HostName))
+    {
+        throw new InvalidOperationException("Sync.Transport 設為 RabbitMq 時，必須設定 Sync.Queue.HostName。");
+    }
+
+    if (string.IsNullOrWhiteSpace(queueOptions.RequestQueue) || string.IsNullOrWhiteSpace(queueOptions.ResponseQueue))
+    {
+        throw new InvalidOperationException("Sync.Transport 設為 RabbitMq 時，需設定 Sync.Queue.RequestQueue 與 Sync.Queue.ResponseQueue。");
+    }
+}
+
 var signingKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret));
 
 builder.Services
@@ -175,8 +230,14 @@ builder.Services.AddScoped<IServiceCategoryQueryService, ServiceCategoryQuerySer
 builder.Services.AddScoped<IStoreManagementService, StoreManagementService>();
 builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
+builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+if (syncOptions.IsStoreRole)
+{
+    // ---------- 直營或連盟門市背景同步排程 ----------
+    builder.Services.AddHostedService<StoreSyncBackgroundService>();
+}
 
 var app = builder.Build();
 

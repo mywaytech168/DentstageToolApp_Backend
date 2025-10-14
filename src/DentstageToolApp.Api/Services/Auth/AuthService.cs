@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net;
@@ -84,7 +85,13 @@ public class AuthService : IAuthService
         var accessTokenExpireAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
         var refreshTokenExpireAt = now.AddDays(_jwtOptions.RefreshTokenDays);
 
-        var accessToken = GenerateAccessToken(user, device, now, accessTokenExpireAt);
+        var machineProfile = await ResolveMachineProfileAsync(device.DeviceKey, cancellationToken);
+        if (machineProfile is null)
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "找不到對應的同步機碼設定，請聯絡系統管理員建立 SyncMachineProfile。");
+        }
+
+        var accessToken = GenerateAccessToken(user, device, machineProfile, now, accessTokenExpireAt);
         var refreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);
 
         user.LastLoginAt = now;
@@ -109,7 +116,10 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName,
             Role = user.Role,
             DeviceStatus = device.Status,
-            Message = "登入成功，已發放新的權杖。"
+            Message = "登入成功，已發放新的權杖。",
+            StoreId = machineProfile.StoreId,
+            StoreType = machineProfile.StoreType,
+            ServerRole = machineProfile.ServerRole
         };
     }
 
@@ -166,7 +176,13 @@ public class AuthService : IAuthService
         var accessTokenExpireAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
         var refreshTokenExpireAt = now.AddDays(_jwtOptions.RefreshTokenDays);
 
-        var accessToken = GenerateAccessToken(user, device, now, accessTokenExpireAt);
+        var machineProfile = await ResolveMachineProfileAsync(device.DeviceKey, cancellationToken);
+        if (machineProfile is null)
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "找不到對應的同步機碼設定，請聯絡系統管理員建立 SyncMachineProfile。");
+        }
+
+        var accessToken = GenerateAccessToken(user, device, machineProfile, now, accessTokenExpireAt);
         var newRefreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);
 
         device.LastSignInAt = now;
@@ -188,7 +204,10 @@ public class AuthService : IAuthService
             DisplayName = user.DisplayName,
             Role = user.Role,
             DeviceStatus = device.Status,
-            Message = "已更新權杖。"
+            Message = "已更新權杖。",
+            StoreId = machineProfile.StoreId,
+            StoreType = machineProfile.StoreType,
+            ServerRole = machineProfile.ServerRole
         };
     }
 
@@ -225,7 +244,7 @@ public class AuthService : IAuthService
     /// <summary>
     /// 產生 Access Token，並設定必要的 Claims。
     /// </summary>
-    private string GenerateAccessToken(UserAccount user, DeviceRegistration device, DateTime generatedAt, DateTime expireAt)
+    private string GenerateAccessToken(UserAccount user, DeviceRegistration device, SyncMachineProfile machineProfile, DateTime generatedAt, DateTime expireAt)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Secret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -236,12 +255,28 @@ public class AuthService : IAuthService
             new(JwtRegisteredClaimNames.Sub, user.UserUid),
             new(JwtRegisteredClaimNames.UniqueName, user.UserUid),
             new("displayName", user.DisplayName ?? string.Empty),
-            new("device", device.DeviceRegistrationUid)
+            new("device", device.DeviceRegistrationUid),
+            new("machineKey", device.DeviceKey)
         };
 
         if (!string.IsNullOrWhiteSpace(user.Role))
         {
             claims.Add(new Claim(ClaimTypes.Role, user.Role));
+        }
+
+        if (!string.IsNullOrWhiteSpace(machineProfile.ServerRole))
+        {
+            claims.Add(new Claim("serverRole", machineProfile.ServerRole));
+        }
+
+        if (!string.IsNullOrWhiteSpace(machineProfile.StoreId))
+        {
+            claims.Add(new Claim("storeId", machineProfile.StoreId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(machineProfile.StoreType))
+        {
+            claims.Add(new Claim("storeType", machineProfile.StoreType));
         }
 
         var token = new JwtSecurityToken(
@@ -303,5 +338,20 @@ public class AuthService : IAuthService
         }
 
         _context.RefreshTokens.RemoveRange(expiredTokens);
+    }
+
+    /// <summary>
+    /// 依據裝置機碼查詢同步機碼設定，取得伺服器角色與門市資訊。
+    /// </summary>
+    private async Task<SyncMachineProfile?> ResolveMachineProfileAsync(string deviceKey, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(deviceKey))
+        {
+            return null;
+        }
+
+        return await _context.SyncMachineProfiles
+            .AsNoTracking()
+            .FirstOrDefaultAsync(profile => profile.MachineKey == deviceKey && profile.IsActive, cancellationToken);
     }
 }
