@@ -169,6 +169,14 @@ if (!syncOptions.HasResolvedMachineProfile)
     throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 SyncMachineProfiles 是否填寫 StoreId 與 StoreType。");
 }
 
+if (syncOptions.IsStoreRole && string.Equals(syncOptions.Transport, SyncTransportModes.Http, StringComparison.OrdinalIgnoreCase))
+{
+    if (string.IsNullOrWhiteSpace(syncOptions.CentralApiBaseUrl))
+    {
+        throw new InvalidOperationException("門市環境需設定 Sync.CentralApiBaseUrl，才能呼叫中央同步 API。");
+    }
+}
+
 builder.Services.AddSingleton(syncOptions);
 builder.Services.AddSingleton<IOptions<SyncOptions>>(Options.Create(syncOptions));
 
@@ -232,11 +240,19 @@ builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
+builder.Services.AddHttpClient<IRemoteSyncApiClient, RemoteSyncApiClient>(client =>
+{
+    if (!string.IsNullOrWhiteSpace(syncOptions.CentralApiBaseUrl))
+    {
+        client.BaseAddress = new Uri(syncOptions.CentralApiBaseUrl, UriKind.Absolute);
+    }
+});
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
 if (syncOptions.IsStoreRole)
 {
     // ---------- 直營或連盟門市背景同步排程 ----------
     builder.Services.AddHostedService<StoreSyncBackgroundService>();
+    builder.Services.AddHostedService<CentralDispatchBackgroundService>();
 }
 
 var app = builder.Build();
