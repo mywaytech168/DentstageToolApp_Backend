@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Models.Sync;
+using DentstageToolApp.Api.Services.Sync;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -26,18 +27,21 @@ public class StoreSyncBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<StoreSyncBackgroundService> _logger;
     private readonly SyncOptions _syncOptions;
+    private readonly IRemoteSyncApiClient _remoteSyncApiClient;
 
     /// <summary>
     /// 建構子，注入必要的相依物件。
     /// </summary>
     public StoreSyncBackgroundService(
         IServiceScopeFactory scopeFactory,
+        IRemoteSyncApiClient remoteSyncApiClient,
         IOptions<SyncOptions> syncOptions,
         ILogger<StoreSyncBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _syncOptions = syncOptions.Value ?? throw new ArgumentNullException(nameof(syncOptions));
+        _remoteSyncApiClient = remoteSyncApiClient;
     }
 
     /// <summary>
@@ -186,19 +190,80 @@ public class StoreSyncBackgroundService : BackgroundService
                 _logger.LogDebug("門市同步預覽：{Preview}", preview);
             }
 
+            var uploadResult = await _remoteSyncApiClient.UploadChangesAsync(uploadRequest, cancellationToken);
+            if (uploadResult is null)
+            {
+                _logger.LogWarning("呼叫中央伺服器同步上傳 API 失敗，StoreId: {StoreId}, StoreType: {StoreType}", storeId, storeType);
+                return;
+            }
+
+            foreach (var log in pendingLogs)
+            {
+                log.Synced = true;
+            }
+
+            var storeState = await dbContext.StoreSyncStates
+                .FirstOrDefaultAsync(state => state.StoreId == storeId && state.StoreType == storeType, cancellationToken);
+
+            if (storeState is null)
+            {
+                storeState = new StoreSyncState
+                {
+                    StoreId = storeId,
+                    StoreType = storeType
+                };
+
+                dbContext.StoreSyncStates.Add(storeState);
+            }
+
+            storeState.ServerRole = serverRole;
+            if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
+            {
+                storeState.ServerIp = _syncOptions.ServerIp;
+            }
+
+            storeState.LastUploadTime = DateTime.UtcNow;
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await MarkStoreStateLogsAsSyncedAsync(dbContext, cancellationToken);
+
             var pendingCount = await dbContext.SyncLogs.CountAsync(log => !log.Synced, cancellationToken);
 
             _logger.LogInformation(
-                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 準備上傳筆數: {Prepared}, 未同步總筆數: {PendingCount}",
+                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 上傳筆數: {Processed}, 忽略筆數: {Ignored}, 未同步總筆數: {PendingCount}",
                 storeId,
                 storeType,
-                changes.Count,
+                uploadResult.ProcessedCount,
+                uploadResult.IgnoredCount,
                 pendingCount);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "門市同步排程執行失敗，StoreId: {StoreId}, StoreType: {StoreType}", _syncOptions.StoreId, _syncOptions.StoreType);
         }
+    }
+
+    /// <summary>
+    /// 將同步狀態相關的同步紀錄標記為已處理，避免重複上傳。
+    /// </summary>
+    private static async Task MarkStoreStateLogsAsSyncedAsync(DentstageToolAppContext dbContext, CancellationToken cancellationToken)
+    {
+        var stateLogs = await dbContext.SyncLogs
+            .Where(log => !log.Synced && string.Equals(log.TableName, "store_sync_states", StringComparison.OrdinalIgnoreCase))
+            .ToListAsync(cancellationToken);
+
+        if (stateLogs.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var log in stateLogs)
+        {
+            log.Synced = true;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
