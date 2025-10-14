@@ -135,20 +135,37 @@ public class StoreSyncBackgroundService : BackgroundService
                 return;
             }
 
-            var changes = new List<SyncChangeDto>();
+            var metadataUpdated = false;
 
             foreach (var log in pendingLogs)
             {
+                // ---------- 逐筆補齊來源伺服器與門市類型 ----------
                 if (string.IsNullOrWhiteSpace(log.SourceServer))
                 {
                     log.SourceServer = storeId;
+                    metadataUpdated = true;
                 }
 
                 if (string.IsNullOrWhiteSpace(log.StoreType))
                 {
                     log.StoreType = storeType;
+                    metadataUpdated = true;
                 }
+            }
 
+            if (metadataUpdated)
+            {
+                // ---------- 先保存補齊後的欄位，避免上傳失敗時資訊遺失 ----------
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+
+            var totalProcessed = 0;
+            var totalIgnored = 0;
+            var failureCount = 0;
+            var hasSuccessfulUpload = false;
+
+            foreach (var log in pendingLogs)
+            {
                 var change = new SyncChangeDto
                 {
                     TableName = log.TableName,
@@ -166,40 +183,56 @@ public class StoreSyncBackgroundService : BackgroundService
                     }
                     else
                     {
+                        // ---------- 若查無內容，仍送出 metadata 供中央判斷 ----------
                         _logger.LogWarning("同步紀錄 {Id} 缺少對應資料內容，將以純 metadata 上傳。", log.Id);
                     }
                 }
 
-                changes.Add(change);
+                var singleRequest = new SyncUploadRequest
+                {
+                    StoreId = storeId,
+                    StoreType = storeType,
+                    ServerRole = serverRole,
+                    ServerIp = _syncOptions.ServerIp,
+                    Changes = new List<SyncChangeDto> { change }
+                };
+
+                if (_logger.IsEnabled(LogLevel.Debug))
+                {
+                    var preview = JsonSerializer.Serialize(singleRequest, SerializerOptions);
+                    _logger.LogDebug("門市同步逐筆預覽：{Preview}", preview);
+                }
+
+                try
+                {
+                    // ---------- 逐筆呼叫中央 API，確保單筆成功才會標記同步 ----------
+                    var uploadResult = await _remoteSyncApiClient.UploadChangesAsync(singleRequest, cancellationToken);
+                    if (uploadResult is null)
+                    {
+                        failureCount++;
+                        _logger.LogWarning("中央同步 API 回傳空值，保留同步紀錄 {Id} 以便下次重試。", log.Id);
+                        continue;
+                    }
+
+                    log.Synced = true;
+                    await dbContext.SaveChangesAsync(cancellationToken);
+
+                    totalProcessed += uploadResult.ProcessedCount;
+                    totalIgnored += uploadResult.IgnoredCount;
+                    hasSuccessfulUpload = true;
+                }
+                catch (Exception ex)
+                {
+                    // ---------- 保留未標記同步的紀錄，下次週期將再次嘗試 ----------
+                    failureCount++;
+                    _logger.LogError(ex, "上傳同步紀錄 {Id} 失敗，將於下次排程重試。", log.Id);
+                }
             }
 
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            var uploadRequest = new SyncUploadRequest
+            if (!hasSuccessfulUpload)
             {
-                StoreId = storeId,
-                StoreType = storeType,
-                ServerRole = serverRole,
-                ServerIp = _syncOptions.ServerIp,
-                Changes = changes
-            };
-
-            if (_logger.IsEnabled(LogLevel.Debug))
-            {
-                var preview = JsonSerializer.Serialize(uploadRequest, SerializerOptions);
-                _logger.LogDebug("門市同步預覽：{Preview}", preview);
-            }
-
-            var uploadResult = await _remoteSyncApiClient.UploadChangesAsync(uploadRequest, cancellationToken);
-            if (uploadResult is null)
-            {
-                _logger.LogWarning("呼叫中央伺服器同步上傳 API 失敗，StoreId: {StoreId}, StoreType: {StoreType}", storeId, storeType);
+                _logger.LogWarning("門市同步排程未成功上傳任何資料，StoreId: {StoreId}, StoreType: {StoreType}, 失敗筆數: {FailureCount}", storeId, storeType, failureCount);
                 return;
-            }
-
-            foreach (var log in pendingLogs)
-            {
-                log.Synced = true;
             }
 
             var storeState = await dbContext.StoreSyncStates
@@ -231,11 +264,12 @@ public class StoreSyncBackgroundService : BackgroundService
             var pendingCount = await dbContext.SyncLogs.CountAsync(log => !log.Synced, cancellationToken);
 
             _logger.LogInformation(
-                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 上傳筆數: {Processed}, 忽略筆數: {Ignored}, 未同步總筆數: {PendingCount}",
+                "完成門市同步排程，StoreId: {StoreId}, StoreType: {StoreType}, 成功筆數: {Processed}, 忽略筆數: {Ignored}, 失敗筆數: {FailureCount}, 未同步總筆數: {PendingCount}",
                 storeId,
                 storeType,
-                uploadResult.ProcessedCount,
-                uploadResult.IgnoredCount,
+                totalProcessed,
+                totalIgnored,
+                failureCount,
                 pendingCount);
         }
         catch (Exception ex)
