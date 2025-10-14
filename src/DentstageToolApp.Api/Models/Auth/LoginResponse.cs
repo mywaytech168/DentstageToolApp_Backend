@@ -44,4 +44,19 @@ public class LoginResponse
     /// 服務端提示訊息，可供前端顯示或除錯。
     /// </summary>
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 若為門市端登入，回傳對應的門市識別碼。
+    /// </summary>
+    public string? StoreId { get; set; }
+
+    /// <summary>
+    /// 若為門市端登入，回傳門市型態（Direct、Franchise 等）。
+    /// </summary>
+    public string? StoreType { get; set; }
+
+    /// <summary>
+    /// 對應的伺服器角色，方便前端決定同步排程或功能權限。
+    /// </summary>
+    public string? ServerRole { get; set; }
 }
