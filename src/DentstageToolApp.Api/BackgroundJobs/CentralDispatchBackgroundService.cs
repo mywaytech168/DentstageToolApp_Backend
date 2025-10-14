@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Options;
@@ -8,6 +11,7 @@ using DentstageToolApp.Api.Services.Sync;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -20,6 +24,11 @@ namespace DentstageToolApp.Api.BackgroundJobs;
 /// </summary>
 public class CentralDispatchBackgroundService : BackgroundService
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IRemoteSyncApiClient _remoteSyncApiClient;
     private readonly ILogger<CentralDispatchBackgroundService> _logger;
@@ -122,7 +131,8 @@ public class CentralDispatchBackgroundService : BackgroundService
             // ---------- 先標記所有後續異動為中央來源，方便同步紀錄辨識 ----------
             dbContext.SetSyncLogMetadata(SyncServerRoles.CentralServer, storeType);
 
-            if (response.Orders.Count == 0)
+            var changes = response.Changes ?? new List<SyncChangeDto>();
+            if (changes.Count == 0 && response.Orders.Count == 0)
             {
                 await UpdateStoreStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, cancellationToken);
                 await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
@@ -130,36 +140,129 @@ public class CentralDispatchBackgroundService : BackgroundService
                 return;
             }
 
-            foreach (var orderDto in response.Orders)
+            if (changes.Count > 0)
             {
-                var order = await dbContext.Orders
-                    .FirstOrDefaultAsync(entity => entity.OrderUid == orderDto.OrderUid, cancellationToken);
-
-                if (order is null)
+                foreach (var change in changes)
                 {
-                    order = new Order
-                    {
-                        OrderUid = orderDto.OrderUid
-                    };
-
-                    dbContext.Orders.Add(order);
+                    await ApplyChangeAsync(dbContext, change, cancellationToken);
                 }
+            }
+            else
+            {
+                // ---------- 若中央尚未提供通用異動格式，沿用舊有工單流程 ----------
+                foreach (var orderDto in response.Orders)
+                {
+                    var order = await dbContext.Orders
+                        .FirstOrDefaultAsync(entity => entity.OrderUid == orderDto.OrderUid, cancellationToken);
 
-                ApplyOrderSyncData(order, orderDto);
+                    if (order is null)
+                    {
+                        order = new Order
+                        {
+                            OrderUid = orderDto.OrderUid
+                        };
+
+                        dbContext.Orders.Add(order);
+                    }
+
+                    ApplyOrderSyncData(order, orderDto);
+                }
             }
 
             await UpdateStoreStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, cancellationToken);
 
             await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
 
+            var processedCount = changes.Count > 0 ? changes.Count : response.Orders.Count;
             _logger.LogInformation(
                 "中央下發背景工作完成，StoreId: {StoreId}, 同步筆數: {Count}",
                 storeId,
-                response.Orders.Count);
+                processedCount);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "中央下發背景工作執行失敗，StoreId: {StoreId}, StoreType: {StoreType}", _syncOptions.StoreId, _syncOptions.StoreType);
+        }
+    }
+
+    /// <summary>
+    /// 依中央回傳的異動資訊更新本地資料庫，支援新增、更新與刪除。
+    /// </summary>
+    private async Task ApplyChangeAsync(DentstageToolAppContext dbContext, SyncChangeDto change, CancellationToken cancellationToken)
+    {
+        var action = change.Action?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            _logger.LogWarning("中央下發資料缺少動作類型，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return;
+        }
+
+        var entityType = TryResolveEntityType(dbContext, change.TableName);
+        if (entityType is null)
+        {
+            _logger.LogWarning("找不到資料表 {Table} 對應的實體，略過中央下發。", change.TableName);
+            return;
+        }
+
+        if (!TryParseKeyValues(entityType, change.RecordId, out var keyValues))
+        {
+            _logger.LogWarning("解析中央下發紀錄主鍵失敗，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return;
+        }
+
+        switch (action)
+        {
+            case "INSERT":
+            case "UPDATE":
+            case "UPSERT":
+                if (change.Payload is null)
+                {
+                    _logger.LogWarning("中央下發 {Action} 異動缺少 Payload，Table: {Table}, RecordId: {RecordId}", action, change.TableName, change.RecordId);
+                    return;
+                }
+
+                object? payloadEntity;
+                try
+                {
+                    payloadEntity = change.Payload.Value.Deserialize(entityType.ClrType, SerializerOptions);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "中央下發 Payload 反序列化失敗，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return;
+                }
+
+                if (payloadEntity is null)
+                {
+                    _logger.LogWarning("中央下發 Payload 反序列化結果為空，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return;
+                }
+
+                var existedEntity = await dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (existedEntity is null)
+                {
+                    // ---------- 找不到舊資料時改為新增 ----------
+                    dbContext.Add(payloadEntity);
+                }
+                else
+                {
+                    dbContext.Entry(existedEntity).CurrentValues.SetValues(payloadEntity);
+                }
+
+                break;
+
+            case "DELETE":
+                var entity = await dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (entity is not null)
+                {
+                    dbContext.Remove(entity);
+                }
+
+                break;
+
+            default:
+                _logger.LogWarning("中央下發資料包含未支援的動作：{Action}", action);
+                break;
         }
     }
 
@@ -233,5 +336,91 @@ public class CentralDispatchBackgroundService : BackgroundService
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 嘗試解析同步紀錄的主鍵內容，回傳實際型別陣列供查詢使用。
+    /// </summary>
+    private bool TryParseKeyValues(IEntityType entityType, string? recordId, out object?[] keyValues)
+    {
+        keyValues = Array.Empty<object?>();
+        var primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null || primaryKey.Properties.Count == 0)
+        {
+            return false;
+        }
+
+        var segments = (recordId ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        if (segments.Length != primaryKey.Properties.Count)
+        {
+            return false;
+        }
+
+        keyValues = new object?[segments.Length];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            try
+            {
+                keyValues[index] = ConvertKeyValue(segments[index], primaryKey.Properties[index].ClrType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "中央下發主鍵值轉換失敗，Table: {Table}, Property: {Property}, Value: {Value}",
+                    entityType.GetTableName(),
+                    primaryKey.Properties[index].Name,
+                    segments[index]);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 依資料表名稱尋找對應的實體資訊。
+    /// </summary>
+    private static IEntityType? TryResolveEntityType(DentstageToolAppContext dbContext, string tableName)
+    {
+        return dbContext.Model
+            .GetEntityTypes()
+            .FirstOrDefault(type => string.Equals(type.GetTableName(), tableName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// 將文字型主鍵值轉換為資料模型所需的實際型別。
+    /// </summary>
+    private static object? ConvertKeyValue(string rawValue, Type targetType)
+    {
+        var nullableType = Nullable.GetUnderlyingType(targetType);
+        var actualType = nullableType ?? targetType;
+
+        if (actualType == typeof(string))
+        {
+            return rawValue;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return nullableType is null ? Activator.CreateInstance(actualType) : null;
+        }
+
+        if (actualType == typeof(Guid))
+        {
+            return Guid.Parse(rawValue);
+        }
+
+        if (actualType == typeof(DateTime))
+        {
+            return DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        }
+
+        if (actualType.IsEnum)
+        {
+            return Enum.Parse(actualType, rawValue, ignoreCase: true);
+        }
+
+        return Convert.ChangeType(rawValue, actualType, CultureInfo.InvariantCulture);
     }
 }
