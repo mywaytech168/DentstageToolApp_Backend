@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.NetworkInformation;
@@ -66,40 +66,24 @@ namespace DentstageToolApp.Api.Infrastructure.System
         }
 
         /// <summary>
-        /// 以機器名稱、作業系統描述與主要網路卡 MAC 位址產生 SHA256 指紋。
+        /// 透過 CPU ID、主機板序號與主要網卡 MAC 位址產生 SHA256 指紋。
         /// </summary>
         /// <returns>以十六進位大寫呈現的硬體指紋；若無法計算則回傳 null。</returns>
         private static string? GenerateHardwareFingerprint()
         {
             try
             {
-                var identifiers = new List<string>();
+                // 依據作業系統取得 CPU ID 與主機板序號；若取不到則回傳 (unknown)
+                var cpuId = GetCpuId() ?? "(unknown)";
+                var baseboardId = GetBaseboardId() ?? "(unknown)";
 
-                // 收集機器名稱與作業系統描述，作為最基本的識別資訊
-                identifiers.Add(Environment.MachineName);
-                identifiers.Add(RuntimeInformation.OSDescription);
+                // 過濾虛擬網卡後取得主要乙太網路卡 MAC；若取不到則使用 (no mac)
+                var ethernetMac = GetPrimaryEthernetMac() ?? "(no mac)";
 
-                // 選擇第一張可用網卡的 MAC 位址，提升跨平台穩定性
-                var macAddress = NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(nic => nic.OperationalStatus == OperationalStatus.Up)
-                    .Where(nic => nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-                    .Select(nic => nic.GetPhysicalAddress()?.ToString())
-                    .FirstOrDefault(address => !string.IsNullOrWhiteSpace(address));
-
-                if (!string.IsNullOrWhiteSpace(macAddress))
-                {
-                    identifiers.Add(macAddress);
-                }
-
-                var rawFingerprint = string.Join("|", identifiers.Where(item => !string.IsNullOrWhiteSpace(item)));
-                if (string.IsNullOrWhiteSpace(rawFingerprint))
-                {
-                    return null;
-                }
-
-                // 採用 SHA256 產生固定長度指紋，避免直接暴露硬體資訊
+                // 參考 Python 實作，將三段資訊組合後進行雜湊
+                var raw = string.Join("_", new[] { cpuId, baseboardId, ethernetMac });
                 using var sha256 = SHA256.Create();
-                var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawFingerprint));
+                var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(raw));
                 return Convert.ToHexString(hashBytes);
             }
             catch
@@ -107,6 +91,204 @@ namespace DentstageToolApp.Api.Infrastructure.System
                 // 若因權限或硬體存取失敗，直接忽略並回傳 null 交由呼叫端決策
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 取得 CPU Processor ID，依照作業系統呼叫對應指令。
+        /// </summary>
+        private static string? GetCpuId()
+        {
+            // ---------- Windows 平台 ----------
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var command = "Get-CimInstance Win32_Processor | Select-Object -ExpandProperty ProcessorId";
+                return ReadProcessOutput("powershell", $"-Command \"{command}\"");
+            }
+
+            // ---------- Linux 平台 ----------
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                // 優先使用 dmidecode 提供的 Processor ID
+                var dmidecodeResult = ReadProcessOutput("dmidecode", "-t processor");
+                if (!string.IsNullOrWhiteSpace(dmidecodeResult))
+                {
+                    var cpuLine = dmidecodeResult.Split('\n')
+                        .FirstOrDefault(line => line.Contains("ID:"));
+                    if (!string.IsNullOrWhiteSpace(cpuLine))
+                    {
+                        return cpuLine.Split(':').Last().Trim();
+                    }
+                }
+
+                // Fallback：從 /proc/cpuinfo 尋找 Serial 或 ID 欄位
+                if (File.Exists("/proc/cpuinfo"))
+                {
+                    foreach (var line in File.ReadLines("/proc/cpuinfo"))
+                    {
+                        if (line.Contains("Serial") || line.Contains("ID"))
+                        {
+                            var parts = line.Split(':');
+                            if (parts.Length == 2)
+                            {
+                                return parts[1].Trim();
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---------- macOS 平台 ----------
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            {
+                var brand = ReadProcessOutput("sysctl", "-n machdep.cpu.brand_string");
+                if (!string.IsNullOrWhiteSpace(brand))
+                {
+                    return brand.Trim();
+                }
+
+                return RuntimeInformation.OSDescription;
+            }
+
+            // 其他系統以機器名稱作為保底識別資訊
+            return Environment.MachineName;
+        }
+
+        /// <summary>
+        /// 取得主機板序號，依作業系統呼叫相容指令。
+        /// </summary>
+        private static string? GetBaseboardId()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                var command = "Get-WmiObject Win32_BaseBoard | Select-Object -ExpandProperty SerialNumber";
+                return ReadProcessOutput("powershell", $"-Command \"{command}\"");
+            }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            {
+                var dmidecodeResult = ReadProcessOutput("dmidecode", "-t baseboard");
+                if (!string.IsNullOrWhiteSpace(dmidecodeResult))
+                {
+                    var serialLine = dmidecodeResult.Split('\n')
+                        .FirstOrDefault(line => line.Contains("Serial Number:"));
+                    if (!string.IsNullOrWhiteSpace(serialLine))
+                    {
+                        return serialLine.Split(':').Last().Trim();
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 取得主要的實體乙太網路卡 MAC 位址。
+        /// </summary>
+        private static string? GetPrimaryEthernetMac()
+        {
+            var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.OperationalStatus == OperationalStatus.Up)
+                .Where(nic => nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .OrderByDescending(nic => nic.Speed)
+                .ToList();
+
+            foreach (var nic in interfaces)
+            {
+                // 過濾虛擬或隧道型網卡，模擬 Python 中排除 docker / tun 等介面
+                if (IsVirtualInterface(nic))
+                {
+                    continue;
+                }
+
+                var address = nic.GetPhysicalAddress()?.ToString();
+                if (!string.IsNullOrWhiteSpace(address) && address != "000000000000")
+                {
+                    return FormatMacAddress(address);
+                }
+            }
+
+            // 若所有網卡皆無法使用，退而求其次選擇第一張非迴圈網卡
+            var fallback = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(nic => nic.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .Select(nic => nic.GetPhysicalAddress()?.ToString())
+                .FirstOrDefault(mac => !string.IsNullOrWhiteSpace(mac) && mac != "000000000000");
+
+            return fallback != null ? FormatMacAddress(fallback) : null;
+        }
+
+        /// <summary>
+        /// 判斷網卡是否屬於虛擬或隧道型態。
+        /// </summary>
+        private static bool IsVirtualInterface(NetworkInterface nic)
+        {
+            var name = nic.Name?.ToLowerInvariant() ?? string.Empty;
+            if (name.StartsWith("lo") || name.StartsWith("docker") || name.StartsWith("veth") ||
+                name.StartsWith("br-") || name.StartsWith("vmnet") || name.StartsWith("virbr") ||
+                name.StartsWith("tun") || name.StartsWith("tap"))
+            {
+                return true;
+            }
+
+            return nic.Description?.ToLowerInvariant().Contains("virtual") == true;
+        }
+
+        /// <summary>
+        /// 格式化 MAC 位址為以冒號分隔的小寫形式，利於除錯對應。
+        /// </summary>
+        private static string FormatMacAddress(string mac)
+        {
+            var cleaned = mac.Replace("-", string.Empty).Replace(":", string.Empty);
+            if (cleaned.Length != 12)
+            {
+                return mac.ToLowerInvariant();
+            }
+
+            var segments = Enumerable.Range(0, 6)
+                .Select(i => cleaned.Substring(i * 2, 2).ToLowerInvariant());
+            return string.Join(":", segments);
+        }
+
+        /// <summary>
+        /// 以統一方式呼叫外部指令並回傳輸出內容。
+        /// </summary>
+        private static string? ReadProcessOutput(string fileName, string arguments)
+        {
+            try
+            {
+                var outputEncoding = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? Encoding.Unicode
+                    : Encoding.UTF8;
+
+                using var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = fileName,
+                        Arguments = arguments,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        StandardOutputEncoding = outputEncoding,
+                        StandardErrorEncoding = outputEncoding
+                    }
+                };
+
+                process.Start();
+                var output = process.StandardOutput.ReadToEnd();
+                process.WaitForExit(3000);
+
+                if (!string.IsNullOrWhiteSpace(output))
+                {
+                    return output.Trim();
+                }
+            }
+            catch
+            {
+                // 指令可能不存在或缺少權限，忽略並回傳 null
+            }
+
+            return null;
         }
     }
 }
