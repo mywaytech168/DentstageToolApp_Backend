@@ -155,16 +155,29 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
     using var tempProvider = builder.Services.BuildServiceProvider();
     await using var scope = tempProvider.CreateAsyncScope();
     var syncDbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
-    var machineProfile = await syncDbContext.SyncMachineProfiles
+    // ---------- 以裝置註冊綁定同步設定，避免額外維護機碼對應表 ----------
+    var deviceRegistration = await syncDbContext.DeviceRegistrations
         .AsNoTracking()
-        .FirstOrDefaultAsync(profile => profile.MachineKey == syncOptions.MachineKey && profile.IsActive);
+        .Include(registration => registration.UserAccount)
+        .FirstOrDefaultAsync(registration => registration.DeviceKey == syncOptions.MachineKey);
 
-    if (machineProfile is null)
+    if (deviceRegistration is null)
     {
-        throw new InvalidOperationException($"找不到同步機碼 {syncOptions.MachineKey} 對應的啟用設定，請先於 SyncMachineProfiles 建立資料。");
+        throw new InvalidOperationException($"找不到同步機碼 {syncOptions.MachineKey} 對應的裝置註冊資料，請確認 DeviceRegistrations 是否已建立該筆機碼。");
     }
 
-    syncOptions.ApplyMachineProfile(machineProfile.ServerRole, machineProfile.StoreId, machineProfile.StoreType);
+    if (deviceRegistration.UserAccount is null)
+    {
+        throw new InvalidOperationException("裝置註冊缺少對應的使用者帳號，無法推導伺服器角色，請確認 DeviceRegistrations.UserUID 設定是否正確。");
+    }
+
+    if (string.IsNullOrWhiteSpace(deviceRegistration.UserAccount.ServerRole))
+    {
+        throw new InvalidOperationException("使用者帳號尚未設定 ServerRole 欄位，無法判斷中央或門市角色，請至 UserAccounts 補齊資料。");
+    }
+
+    // 使用者 UID 即為門市識別碼，角色欄位對應門市型態，統一由 SyncOptions 儲存供後續背景任務使用
+    syncOptions.ApplyMachineProfile(deviceRegistration.UserAccount.ServerRole, deviceRegistration.UserAccount.UserUid, deviceRegistration.UserAccount.Role);
 }
 
 var normalizedRole = syncOptions.NormalizedServerRole;
@@ -175,7 +188,7 @@ if (string.IsNullOrWhiteSpace(normalizedRole))
 
 if (!syncOptions.HasResolvedMachineProfile)
 {
-    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 SyncMachineProfiles 是否填寫 StoreId 與 StoreType。");
+    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 UserAccounts.Role 是否已設定門市型態。");
 }
 
 if (syncOptions.IsStoreRole && string.Equals(syncOptions.Transport, SyncTransportModes.Http, StringComparison.OrdinalIgnoreCase))

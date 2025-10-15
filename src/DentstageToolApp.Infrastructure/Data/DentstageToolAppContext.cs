@@ -237,6 +237,7 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.ModifiedBy).HasMaxLength(50);
         entity.Property(e => e.DisplayName).HasMaxLength(100);
         entity.Property(e => e.Role).HasMaxLength(50);
+        entity.Property(e => e.ServerRole).HasMaxLength(50);
         entity.HasMany(e => e.DeviceRegistrations)
             .WithOne(e => e.UserAccount)
             .HasForeignKey(e => e.UserUid)

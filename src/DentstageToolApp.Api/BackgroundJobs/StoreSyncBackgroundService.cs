@@ -58,7 +58,7 @@ public class StoreSyncBackgroundService : BackgroundService
 
         if (!_syncOptions.HasResolvedMachineProfile)
         {
-            _logger.LogWarning("伺服器角色為門市，但尚未透過同步機碼補齊 StoreId/StoreType 設定，請確認 SyncMachineProfiles。");
+            _logger.LogWarning("伺服器角色為門市，但尚未透過同步機碼補齊 StoreId/StoreType 設定，請確認 UserAccounts 是否已設定 ServerRole 與 Role。");
             return;
         }
 
@@ -94,25 +94,41 @@ public class StoreSyncBackgroundService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var dbContext = scope.ServiceProvider.GetRequiredService<DentstageToolAppContext>();
 
-            SyncMachineProfile? machineProfile = null;
+            UserAccount? machineAccount = null;
             if (!string.IsNullOrWhiteSpace(_syncOptions.MachineKey))
             {
-                machineProfile = await dbContext.SyncMachineProfiles
+                // ---------- 改以裝置註冊與使用者資料解析同步機碼 ----------
+                var deviceRegistration = await dbContext.DeviceRegistrations
                     .AsNoTracking()
-                    .FirstOrDefaultAsync(profile => profile.MachineKey == _syncOptions.MachineKey && profile.IsActive, cancellationToken);
+                    .Include(registration => registration.UserAccount)
+                    .FirstOrDefaultAsync(registration => registration.DeviceKey == _syncOptions.MachineKey, cancellationToken);
 
-                if (machineProfile is null)
+                if (deviceRegistration is null)
                 {
-                    _logger.LogWarning("找不到同步機碼 {MachineKey} 對應的設定，停止本次背景同步。", _syncOptions.MachineKey);
+                    _logger.LogWarning("找不到同步機碼 {MachineKey} 對應的裝置註冊資料，停止本次背景同步。", _syncOptions.MachineKey);
                     return;
                 }
 
-                // ---------- 若資料庫設定已更新，立即同步到記憶體中的選項 ----------
-                _syncOptions.ApplyMachineProfile(machineProfile.ServerRole, machineProfile.StoreId, machineProfile.StoreType);
+                if (deviceRegistration.UserAccount is null)
+                {
+                    _logger.LogWarning("裝置註冊 {RegistrationUid} 缺少對應的使用者帳號，請確認 DeviceRegistrations.UserUID 設定。", deviceRegistration.DeviceRegistrationUid);
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(deviceRegistration.UserAccount.ServerRole))
+                {
+                    _logger.LogWarning("使用者帳號 {UserUid} 尚未設定 ServerRole，無法判斷同步角色。", deviceRegistration.UserAccount.UserUid);
+                    return;
+                }
+
+                machineAccount = deviceRegistration.UserAccount;
+
+                // ---------- 若資料庫設定更新，立即同步到記憶體中的選項 ----------
+                _syncOptions.ApplyMachineProfile(machineAccount.ServerRole, machineAccount.UserUid, machineAccount.Role);
             }
 
-            var storeId = _syncOptions.StoreId ?? machineProfile?.StoreId ?? "UNKNOWN";
-            var storeType = _syncOptions.StoreType ?? machineProfile?.StoreType ?? "UNKNOWN";
+            var storeId = _syncOptions.StoreId ?? machineAccount?.UserUid ?? "UNKNOWN";
+            var storeType = _syncOptions.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
             var serverRole = _syncOptions.NormalizedServerRole;
 
             if (!SyncServerRoles.IsStoreRole(serverRole))
