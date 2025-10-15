@@ -6,6 +6,8 @@ using System.Net.NetworkInformation;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System;
+using System.Globalization;
 
 namespace DentstageToolApp.Api.Infrastructure.System
 {
@@ -255,8 +257,11 @@ namespace DentstageToolApp.Api.Infrastructure.System
         {
             try
             {
+                // ✅ 註冊 Big5 / Shift-JIS / Latin1 等 code page
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
                 var outputEncoding = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    ? Encoding.Unicode
+                    ? Encoding.GetEncoding(950) // ✅ Big5
                     : Encoding.UTF8;
 
                 using var process = new Process
@@ -283,9 +288,9 @@ namespace DentstageToolApp.Api.Infrastructure.System
                     return output.Trim();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-                // 指令可能不存在或缺少權限，忽略並回傳 null
+                Console.Error.WriteLine($"[ReadProcessOutput] 發生錯誤：{ex}");
             }
 
             return null;
