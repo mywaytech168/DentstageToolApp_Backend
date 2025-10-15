@@ -63,7 +63,7 @@ public class CentralDispatchBackgroundService : BackgroundService
 
         if (!_syncOptions.HasResolvedMachineProfile)
         {
-            _logger.LogWarning("缺少門市識別資訊，無法啟動中央下發背景工作，請確認 SyncMachineProfiles 設定。");
+            _logger.LogWarning("缺少門市識別資訊，無法啟動中央下發背景工作，請確認 UserAccounts 是否已設定 ServerRole 與 Role。");
             return;
         }
 

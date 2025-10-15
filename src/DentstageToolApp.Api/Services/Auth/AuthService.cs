@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DentstageToolApp.Api.Models.Auth;
 using DentstageToolApp.Api.Models.Options;
+using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -85,13 +86,25 @@ public class AuthService : IAuthService
         var accessTokenExpireAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
         var refreshTokenExpireAt = now.AddDays(_jwtOptions.RefreshTokenDays);
 
-        var machineProfile = await ResolveMachineProfileAsync(device.DeviceKey, cancellationToken);
-        if (machineProfile is null)
+        if (string.IsNullOrWhiteSpace(user.ServerRole))
         {
-            throw new AuthException(HttpStatusCode.Forbidden, "找不到對應的同步機碼設定，請聯絡系統管理員建立 SyncMachineProfile。");
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號尚未設定 ServerRole 欄位，請聯絡管理員於 UserAccounts 補齊中央或門市角色。");
         }
 
-        var accessToken = GenerateAccessToken(user, device, machineProfile, now, accessTokenExpireAt);
+        var normalizedServerRole = SyncServerRoles.Normalize(user.ServerRole);
+        if (string.IsNullOrWhiteSpace(normalizedServerRole))
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 Central、Direct 或 Franchise。");
+        }
+        if (SyncServerRoles.IsStoreRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
+        }
+
+        var storeId = user.UserUid;
+        var storeType = user.Role;
+
+        var accessToken = GenerateAccessToken(user, device, normalizedServerRole, storeId, storeType, now, accessTokenExpireAt);
         var refreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);
 
         user.LastLoginAt = now;
@@ -117,9 +130,9 @@ public class AuthService : IAuthService
             Role = user.Role,
             DeviceStatus = device.Status,
             Message = "登入成功，已發放新的權杖。",
-            StoreId = machineProfile.StoreId,
-            StoreType = machineProfile.StoreType,
-            ServerRole = machineProfile.ServerRole
+            StoreId = storeId,
+            StoreType = storeType,
+            ServerRole = normalizedServerRole
         };
     }
 
@@ -176,13 +189,26 @@ public class AuthService : IAuthService
         var accessTokenExpireAt = now.AddMinutes(_jwtOptions.AccessTokenMinutes);
         var refreshTokenExpireAt = now.AddDays(_jwtOptions.RefreshTokenDays);
 
-        var machineProfile = await ResolveMachineProfileAsync(device.DeviceKey, cancellationToken);
-        if (machineProfile is null)
+        if (string.IsNullOrWhiteSpace(user.ServerRole))
         {
-            throw new AuthException(HttpStatusCode.Forbidden, "找不到對應的同步機碼設定，請聯絡系統管理員建立 SyncMachineProfile。");
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號尚未設定 ServerRole 欄位，請聯絡管理員於 UserAccounts 補齊中央或門市角色。");
         }
 
-        var accessToken = GenerateAccessToken(user, device, machineProfile, now, accessTokenExpireAt);
+        var normalizedServerRole = SyncServerRoles.Normalize(user.ServerRole);
+        if (string.IsNullOrWhiteSpace(normalizedServerRole))
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 Central、Direct 或 Franchise。");
+        }
+
+        if (SyncServerRoles.IsStoreRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        {
+            throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
+        }
+
+        var storeId = user.UserUid;
+        var storeType = user.Role;
+
+        var accessToken = GenerateAccessToken(user, device, normalizedServerRole, storeId, storeType, now, accessTokenExpireAt);
         var newRefreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);
 
         device.LastSignInAt = now;
@@ -205,9 +231,9 @@ public class AuthService : IAuthService
             Role = user.Role,
             DeviceStatus = device.Status,
             Message = "已更新權杖。",
-            StoreId = machineProfile.StoreId,
-            StoreType = machineProfile.StoreType,
-            ServerRole = machineProfile.ServerRole
+            StoreId = storeId,
+            StoreType = storeType,
+            ServerRole = normalizedServerRole
         };
     }
 
@@ -244,7 +270,7 @@ public class AuthService : IAuthService
     /// <summary>
     /// 產生 Access Token，並設定必要的 Claims。
     /// </summary>
-    private string GenerateAccessToken(UserAccount user, DeviceRegistration device, SyncMachineProfile machineProfile, DateTime generatedAt, DateTime expireAt)
+    private string GenerateAccessToken(UserAccount user, DeviceRegistration device, string? serverRole, string? storeId, string? storeType, DateTime generatedAt, DateTime expireAt)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOptions.Secret));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
@@ -264,19 +290,19 @@ public class AuthService : IAuthService
             claims.Add(new Claim(ClaimTypes.Role, user.Role));
         }
 
-        if (!string.IsNullOrWhiteSpace(machineProfile.ServerRole))
+        if (!string.IsNullOrWhiteSpace(serverRole))
         {
-            claims.Add(new Claim("serverRole", machineProfile.ServerRole));
+            claims.Add(new Claim("serverRole", serverRole));
         }
 
-        if (!string.IsNullOrWhiteSpace(machineProfile.StoreId))
+        if (!string.IsNullOrWhiteSpace(storeId))
         {
-            claims.Add(new Claim("storeId", machineProfile.StoreId));
+            claims.Add(new Claim("storeId", storeId));
         }
 
-        if (!string.IsNullOrWhiteSpace(machineProfile.StoreType))
+        if (!string.IsNullOrWhiteSpace(storeType))
         {
-            claims.Add(new Claim("storeType", machineProfile.StoreType));
+            claims.Add(new Claim("storeType", storeType));
         }
 
         var token = new JwtSecurityToken(
@@ -340,18 +366,4 @@ public class AuthService : IAuthService
         _context.RefreshTokens.RemoveRange(expiredTokens);
     }
 
-    /// <summary>
-    /// 依據裝置機碼查詢同步機碼設定，取得伺服器角色與門市資訊。
-    /// </summary>
-    private async Task<SyncMachineProfile?> ResolveMachineProfileAsync(string deviceKey, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(deviceKey))
-        {
-            return null;
-        }
-
-        return await _context.SyncMachineProfiles
-            .AsNoTracking()
-            .FirstOrDefaultAsync(profile => profile.MachineKey == deviceKey && profile.IsActive, cancellationToken);
-    }
 }
