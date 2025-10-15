@@ -274,7 +274,6 @@ if (syncOptions.IsStoreRole)
 {
     // ---------- 直營或連盟門市背景同步排程 ----------
     builder.Services.AddHostedService<StoreSyncBackgroundService>();
-    builder.Services.AddHostedService<CentralDispatchBackgroundService>();
 }
 
 var app = builder.Build();
