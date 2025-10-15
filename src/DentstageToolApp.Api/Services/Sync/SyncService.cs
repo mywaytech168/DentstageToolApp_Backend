@@ -264,6 +264,21 @@ public class SyncService : ISyncService
             return change;
         }
 
+        if (!string.IsNullOrWhiteSpace(log.Payload))
+        {
+            try
+            {
+                // ---------- 優先採用同步紀錄儲存的 Payload，避免資料已刪除時取不到內容 ----------
+                using var document = JsonDocument.Parse(log.Payload);
+                change.Payload = document.RootElement.Clone();
+                return change;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "同步紀錄 Payload 解析失敗，Table: {Table}, RecordId: {RecordId}", log.TableName, log.RecordId);
+            }
+        }
+
         var payload = await TryBuildPayloadAsync(log, cancellationToken);
         if (payload.HasValue)
         {

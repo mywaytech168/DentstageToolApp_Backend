@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace DentstageToolApp.Infrastructure.Data;
 
@@ -15,6 +17,10 @@ public class DentstageToolAppContext : DbContext
 {
     private string? _syncLogSourceServer;
     private string? _syncLogStoreType;
+    private static readonly JsonSerializerOptions SyncLogSerializerOptions = new(JsonSerializerDefaults.Web)
+    {
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+    };
 
     /// <summary>
     /// 建構子，用於注入 DbContext 選項。
@@ -978,6 +984,8 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(50);
         entity.Property(e => e.StoreType)
             .HasMaxLength(50);
+        entity.Property(e => e.Payload)
+            .HasColumnType("longtext");
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("datetime");
         entity.HasIndex(e => new { e.TableName, e.StoreType, e.UpdatedAt });
@@ -1095,6 +1103,26 @@ public class DentstageToolAppContext : DbContext
                 _ => "UPDATE"
             };
 
+            string? payloadJson = null;
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                // ---------- 針對新增與更新行為保存最新欄位快照，便於後續同步還原異動 ----------
+                var snapshot = BuildPropertySnapshot(entry, useOriginalValues: false);
+                if (snapshot.Count > 0)
+                {
+                    payloadJson = JsonSerializer.Serialize(snapshot, SyncLogSerializerOptions);
+                }
+            }
+            else if (entry.State == EntityState.Deleted)
+            {
+                // ---------- 刪除行為保留原始欄位資料，有助於除錯與需要時重建 ----------
+                var snapshot = BuildPropertySnapshot(entry, useOriginalValues: true);
+                if (snapshot.Count > 0)
+                {
+                    payloadJson = JsonSerializer.Serialize(snapshot, SyncLogSerializerOptions);
+                }
+            }
+
             logs.Add(new SyncLog
             {
                 TableName = tableName,
@@ -1103,7 +1131,8 @@ public class DentstageToolAppContext : DbContext
                 UpdatedAt = now,
                 SourceServer = _syncLogSourceServer,
                 StoreType = _syncLogStoreType,
-                Synced = false
+                Synced = false,
+                Payload = payloadJson
             });
         }
 
@@ -1112,5 +1141,22 @@ public class DentstageToolAppContext : DbContext
             // ---------- 集中新增同步紀錄，避免於迴圈中觸發追蹤狀態變化 ----------
             SyncLogs.AddRange(logs);
         }
+    }
+
+    /// <summary>
+    /// 建立同步紀錄所需的欄位快照，支援原始或目前數值。
+    /// </summary>
+    private static Dictionary<string, object?> BuildPropertySnapshot(EntityEntry entry, bool useOriginalValues)
+    {
+        var snapshot = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var property in entry.Properties)
+        {
+            // ---------- 以欄位名稱為鍵保存數值，保留 null 供 JSON 序列化使用 ----------
+            var value = useOriginalValues ? property.OriginalValue : property.CurrentValue;
+            snapshot[property.Metadata.Name] = value;
+        }
+
+        return snapshot;
     }
 }
