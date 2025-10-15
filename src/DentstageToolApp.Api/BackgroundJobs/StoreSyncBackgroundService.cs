@@ -303,8 +303,25 @@ public class StoreSyncBackgroundService : BackgroundService
     /// <summary>
     /// 依據同步紀錄產生對應的資料內容，支援 orders 表的差異打包。
     /// </summary>
-    private static async Task<JsonElement?> BuildChangePayloadAsync(DentstageToolAppContext dbContext, SyncLog log, CancellationToken cancellationToken)
+    private async Task<JsonElement?> BuildChangePayloadAsync(
+        DentstageToolAppContext dbContext,
+        SyncLog log,
+        CancellationToken cancellationToken)
     {
+        if (!string.IsNullOrWhiteSpace(log.Payload))
+        {
+            try
+            {
+                // ---------- 優先使用同步紀錄保存的 Payload，確保資料刪除後仍能上傳 ----------
+                using var document = JsonDocument.Parse(log.Payload);
+                return document.RootElement.Clone();
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "同步紀錄 {Id} 的 Payload 格式錯誤，改以資料庫內容補齊。", log.Id);
+            }
+        }
+
         if (string.Equals(log.TableName, "orders", StringComparison.OrdinalIgnoreCase))
         {
             var order = await dbContext.Orders
