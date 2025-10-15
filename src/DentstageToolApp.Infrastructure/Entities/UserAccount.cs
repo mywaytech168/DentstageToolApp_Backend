@@ -44,6 +44,11 @@ public class UserAccount
     public string? Role { get; set; }
 
     /// <summary>
+    /// 伺服器角色設定，用於判斷帳號屬於中央或門市環境。
+    /// </summary>
+    public string? ServerRole { get; set; }
+
+    /// <summary>
     /// 帳號是否啟用中，若為 False 代表無法登入。
     /// </summary>
     public bool IsActive { get; set; } = true;

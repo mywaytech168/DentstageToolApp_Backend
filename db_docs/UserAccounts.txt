@@ -6,6 +6,7 @@ CREATE TABLE UserAccounts (
     UserUID               VARCHAR(100) PRIMARY KEY,
     DisplayName           VARCHAR(100),
     Role                  VARCHAR(50),
+    ServerRole            VARCHAR(50),
     IsActive              TINYINT(1) NOT NULL DEFAULT 1,
     LastLoginAt           DATETIME
 );

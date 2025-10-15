@@ -39,6 +39,11 @@ public class SyncOptions
     public string Transport { get; set; } = SyncTransportModes.Http;
 
     /// <summary>
+    /// 中央伺服器 API 根網址，背景排程會透過此網址呼叫同步端點。
+    /// </summary>
+    public string? CentralApiBaseUrl { get; set; }
+
+    /// <summary>
     /// RabbitMQ 佇列設定，僅在 Transport 為 RabbitMq 時使用。
     /// </summary>
     public SyncQueueOptions Queue { get; set; } = new();
