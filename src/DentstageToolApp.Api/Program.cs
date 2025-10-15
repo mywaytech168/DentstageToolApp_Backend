@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 using DentstageToolApp.Api.BackgroundJobs;
@@ -178,6 +179,35 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
 
     // 使用者 UID 即為門市識別碼，角色欄位對應門市型態，統一由 SyncOptions 儲存供後續背景任務使用
     syncOptions.ApplyMachineProfile(deviceRegistration.UserAccount.ServerRole, deviceRegistration.UserAccount.UserUid, deviceRegistration.UserAccount.Role);
+
+    // ---------- 查詢中央伺服器帳號，取得對外同步 IP ----------
+    var centralCandidates = await syncDbContext.UserAccounts
+        .AsNoTracking()
+        .Where(account => !string.IsNullOrWhiteSpace(account.ServerRole))
+        .ToListAsync();
+
+    var centralAccounts = centralCandidates
+        .Where(account => string.Equals(SyncServerRoles.Normalize(account.ServerRole), SyncServerRoles.CentralServer, StringComparison.Ordinal))
+        .ToList();
+
+    if (centralAccounts.Count == 0)
+    {
+        throw new InvalidOperationException("找不到 ServerRole = Central 的中央伺服器帳號，請於 UserAccounts 建立中央環境設定。");
+    }
+
+    if (centralAccounts.Count > 1)
+    {
+        throw new InvalidOperationException("偵測到多筆 ServerRole = Central 的帳號，請確認僅保留單一中央伺服器設定避免同步混亂。");
+    }
+
+    var centralAccount = centralAccounts[0];
+    if (string.IsNullOrWhiteSpace(centralAccount.ServerIp))
+    {
+        throw new InvalidOperationException("中央伺服器帳號缺少 ServerIp 欄位設定，請於 UserAccounts.ServerIp 填寫中央對外 IP。");
+    }
+
+    // ---------- 將中央伺服器 IP 存入同步選項，後續背景任務可用來建立中央連線 ----------
+    syncOptions.CentralServerIp = centralAccount.ServerIp;
 }
 
 var normalizedRole = syncOptions.NormalizedServerRole;
