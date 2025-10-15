@@ -6,6 +6,7 @@ using DentstageToolApp.Api.BackgroundJobs;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Api.Infrastructure.Database;
+using DentstageToolApp.Api.Infrastructure.System;
 using DentstageToolApp.Api.Services.Admin;
 using DentstageToolApp.Api.Services.Auth;
 using DentstageToolApp.Api.Services.BrandModels;
@@ -139,6 +140,14 @@ var syncOptionsSection = builder.Configuration.GetSection("Sync");
 var syncOptions = new SyncOptions();
 syncOptionsSection.Bind(syncOptions);
 syncOptions.Transport = SyncTransportModes.Normalize(syncOptions.Transport);
+
+// ---------- 解析本機同步機碼 ----------
+// 依序由環境變數、外部檔案與硬體指紋推導同步機碼，避免每台機器都得手動調整設定
+syncOptions.MachineKey = LocalMachineKeyResolver.ResolveMachineKey(syncOptions.MachineKey, builder.Environment.ContentRootPath);
+if (string.IsNullOrWhiteSpace(syncOptions.MachineKey))
+{
+    throw new InvalidOperationException("無法由本機環境推導同步機碼，請確認環境變數、機碼檔案或硬體資訊設定。");
+}
 
 if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
 {
