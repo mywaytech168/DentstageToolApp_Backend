@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -7,6 +9,7 @@ using DentstageToolApp.Api.Models.Sync;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.Logging;
 
 namespace DentstageToolApp.Api.Services.Sync;
@@ -146,32 +149,68 @@ public class SyncService : ISyncService
             pageSize = 100;
         }
 
-        var now = DateTime.UtcNow;
-        var query = _dbContext.Orders.AsNoTracking().Where(order => order.StoreUid == storeId);
+        var serverTime = DateTime.UtcNow;
+
+        // ---------- 依同步紀錄判斷需要下發的異動 ----------
+        var logsQuery = _dbContext.SyncLogs
+            .AsNoTracking()
+            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || string.Equals(log.StoreType, storeType, StringComparison.OrdinalIgnoreCase));
 
         if (lastSyncTime.HasValue)
         {
-            query = query.Where(order => order.ModificationTimestamp == null || order.ModificationTimestamp > lastSyncTime.Value);
+            // ---------- 僅取回上次同步後新增的異動 ----------
+            logsQuery = logsQuery.Where(log => log.UpdatedAt > lastSyncTime.Value);
         }
 
-        var orders = await query
-            .OrderBy(order => order.ModificationTimestamp ?? order.CreationTimestamp ?? now)
-            .ThenBy(order => order.OrderUid)
+        var pendingLogs = await logsQuery
+            .OrderBy(log => log.UpdatedAt)
+            .ThenBy(log => log.Id)
             .Take(pageSize)
-            .Select(order => new OrderSyncDto
-            {
-                OrderUid = order.OrderUid,
-                OrderNo = order.OrderNo,
-                StoreUid = order.StoreUid,
-                Amount = order.Amount,
-                Status = order.Status,
-                CreationTimestamp = order.CreationTimestamp,
-                ModificationTimestamp = order.ModificationTimestamp,
-                QuatationUid = order.QuatationUid,
-                CreatedBy = order.CreatedBy,
-                ModifiedBy = order.ModifiedBy
-            })
             .ToListAsync(cancellationToken);
+
+        var changes = new List<SyncChangeDto>(pendingLogs.Count);
+        foreach (var log in pendingLogs)
+        {
+            var change = await BuildChangeDtoAsync(log, cancellationToken);
+            if (change is not null)
+            {
+                changes.Add(change);
+            }
+        }
+
+        // ---------- 將工單異動轉換為舊有回應格式，維持相容性 ----------
+        var orders = new List<OrderSyncDto>();
+        foreach (var change in changes)
+        {
+            if (!string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (string.Equals(change.Action, "DELETE", StringComparison.OrdinalIgnoreCase))
+            {
+                // ---------- 刪除操作僅保留在通用變更清單中 ----------
+                continue;
+            }
+
+            if (change.Payload is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var order = change.Payload.Value.Deserialize<OrderSyncDto>(SerializerOptions);
+                if (order is not null)
+                {
+                    orders.Add(order);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "解析工單同步 Payload 失敗，RecordId: {RecordId}", change.RecordId);
+            }
+        }
 
         var normalizedRole = SyncServerRoles.Normalize(remoteServerRole ?? storeType);
         var resolvedIp = remoteIpAddress;
@@ -182,16 +221,180 @@ public class SyncService : ISyncService
         {
             storeState.ServerIp = resolvedIp;
         }
-        storeState.LastDownloadTime = now;
+        storeState.LastDownloadTime = serverTime;
+        if (pendingLogs.Count > 0)
+        {
+            // ---------- 以最後一筆同步紀錄的識別碼作為游標，方便除錯與後續延伸分頁 ----------
+            storeState.LastCursor = pendingLogs[^1].Id.ToString(CultureInfo.InvariantCulture);
+        }
+
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         return new SyncDownloadResponse
         {
             StoreId = storeId,
             StoreType = storeType,
-            ServerTime = now,
+            ServerTime = serverTime,
+            Changes = changes,
             Orders = orders
         };
+    }
+
+    /// <summary>
+    /// 依同步紀錄建立回傳給門市的差異資料。
+    /// </summary>
+    private async Task<SyncChangeDto?> BuildChangeDtoAsync(SyncLog log, CancellationToken cancellationToken)
+    {
+        var action = log.Action?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            return null;
+        }
+
+        var change = new SyncChangeDto
+        {
+            TableName = log.TableName,
+            Action = action,
+            RecordId = log.RecordId,
+            UpdatedAt = log.UpdatedAt
+        };
+
+        if (string.Equals(action, "DELETE", StringComparison.Ordinal))
+        {
+            return change;
+        }
+
+        if (!string.IsNullOrWhiteSpace(log.Payload))
+        {
+            try
+            {
+                // ---------- 優先採用同步紀錄儲存的 Payload，避免資料已刪除時取不到內容 ----------
+                using var document = JsonDocument.Parse(log.Payload);
+                change.Payload = document.RootElement.Clone();
+                return change;
+            }
+            catch (JsonException ex)
+            {
+                _logger.LogWarning(ex, "同步紀錄 Payload 解析失敗，Table: {Table}, RecordId: {RecordId}", log.TableName, log.RecordId);
+            }
+        }
+
+        var payload = await TryBuildPayloadAsync(log, cancellationToken);
+        if (payload.HasValue)
+        {
+            change.Payload = payload.Value;
+        }
+
+        return change;
+    }
+
+    /// <summary>
+    /// 嘗試取得指定同步紀錄對應的實體內容，並序列化為 JSON。若資料不存在則回傳 null。
+    /// </summary>
+    private async Task<JsonElement?> TryBuildPayloadAsync(SyncLog log, CancellationToken cancellationToken)
+    {
+        var entityType = TryResolveEntityType(log.TableName);
+        if (entityType is null)
+        {
+            _logger.LogWarning("找不到資料表 {Table} 對應的實體，無法建立同步 Payload。", log.TableName);
+            return null;
+        }
+
+        var primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null || primaryKey.Properties.Count == 0)
+        {
+            _logger.LogWarning("資料表 {Table} 缺少主鍵設定，無法生成同步 Payload。", log.TableName);
+            return null;
+        }
+
+        var keySegments = (log.RecordId ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        if (keySegments.Length != primaryKey.Properties.Count)
+        {
+            _logger.LogWarning(
+                "資料表 {Table} 的主鍵組數與同步紀錄不相符，RecordId: {RecordId}",
+                log.TableName,
+                log.RecordId);
+            return null;
+        }
+
+        var keyValues = new object?[keySegments.Length];
+        for (var index = 0; index < keySegments.Length; index++)
+        {
+            var property = primaryKey.Properties[index];
+            try
+            {
+                keyValues[index] = ConvertKeyValue(keySegments[index], property.ClrType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "同步紀錄主鍵轉換失敗，Table: {Table}, Property: {Property}, Value: {Value}",
+                    log.TableName,
+                    property.Name,
+                    keySegments[index]);
+                return null;
+            }
+        }
+
+        var entity = await _dbContext.FindAsync(entityType.ClrType, keyValues);
+        if (entity is null)
+        {
+            _logger.LogWarning(
+                "同步紀錄指向的資料不存在，可能已被刪除。Table: {Table}, RecordId: {RecordId}",
+                log.TableName,
+                log.RecordId);
+            return null;
+        }
+
+        // ---------- 以實體型別序列化為 JsonElement，讓門市直接反序列化使用 ----------
+        return JsonSerializer.SerializeToElement(entity, entityType.ClrType, SerializerOptions);
+    }
+
+    /// <summary>
+    /// 嘗試由資料表名稱尋找對應的實體描述資訊。
+    /// </summary>
+    private IEntityType? TryResolveEntityType(string tableName)
+    {
+        return _dbContext.Model
+            .GetEntityTypes()
+            .FirstOrDefault(type => string.Equals(type.GetTableName(), tableName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// 將同步紀錄內的主鍵字串轉換為實際型別，支援常見的整數、GUID 與日期格式。
+    /// </summary>
+    private static object? ConvertKeyValue(string rawValue, Type targetType)
+    {
+        var nullableType = Nullable.GetUnderlyingType(targetType);
+        var actualType = nullableType ?? targetType;
+
+        if (actualType == typeof(string))
+        {
+            return rawValue;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return nullableType is null ? Activator.CreateInstance(actualType) : null;
+        }
+
+        if (actualType == typeof(Guid))
+        {
+            return Guid.Parse(rawValue);
+        }
+
+        if (actualType == typeof(DateTime))
+        {
+            return DateTime.Parse(rawValue, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+        }
+
+        if (actualType.IsEnum)
+        {
+            return Enum.Parse(actualType, rawValue, ignoreCase: true);
+        }
+
+        return Convert.ChangeType(rawValue, actualType, CultureInfo.InvariantCulture);
     }
 
     /// <summary>

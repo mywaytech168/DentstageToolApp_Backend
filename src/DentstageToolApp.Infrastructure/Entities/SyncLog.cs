@@ -46,4 +46,9 @@ public class SyncLog
     /// 是否已同步至目標端。
     /// </summary>
     public bool Synced { get; set; }
+
+    /// <summary>
+    /// 異動時的資料內容，以 JSON 字串保存供同步流程重建 Payload。
+    /// </summary>
+    public string? Payload { get; set; }
 }
