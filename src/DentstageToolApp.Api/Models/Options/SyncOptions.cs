@@ -44,6 +44,11 @@ public class SyncOptions
     public string? CentralApiBaseUrl { get; set; }
 
     /// <summary>
+    /// 由資料庫推導出的中央伺服器 IP，門市可用來動態判斷連線設定。
+    /// </summary>
+    public string? CentralServerIp { get; set; }
+
+    /// <summary>
     /// RabbitMQ 佇列設定，僅在 Transport 為 RabbitMq 時使用。
     /// </summary>
     public SyncQueueOptions Queue { get; set; } = new();
