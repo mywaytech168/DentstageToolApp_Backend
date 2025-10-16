@@ -49,6 +49,11 @@ public class UserAccount
     public string? ServerRole { get; set; }
 
     /// <summary>
+    /// 伺服器對外可連線的 IP，中央伺服器將供門市同步服務使用。
+    /// </summary>
+    public string? ServerIp { get; set; }
+
+    /// <summary>
     /// 帳號是否啟用中，若為 False 代表無法登入。
     /// </summary>
     public bool IsActive { get; set; } = true;

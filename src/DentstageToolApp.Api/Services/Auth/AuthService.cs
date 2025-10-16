@@ -94,9 +94,9 @@ public class AuthService : IAuthService
         var normalizedServerRole = SyncServerRoles.Normalize(user.ServerRole);
         if (string.IsNullOrWhiteSpace(normalizedServerRole))
         {
-            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 Central、Direct 或 Franchise。");
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
-        if (SyncServerRoles.IsStoreRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }
@@ -197,10 +197,10 @@ public class AuthService : IAuthService
         var normalizedServerRole = SyncServerRoles.Normalize(user.ServerRole);
         if (string.IsNullOrWhiteSpace(normalizedServerRole))
         {
-            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 Central、Direct 或 Franchise。");
+            throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
 
-        if (SyncServerRoles.IsStoreRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }

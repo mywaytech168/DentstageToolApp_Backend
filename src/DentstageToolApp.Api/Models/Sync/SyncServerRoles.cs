@@ -10,30 +10,57 @@ public static class SyncServerRoles
     /// <summary>
     /// 中央伺服器角色常數。
     /// </summary>
-    public const string CentralServer = "Central";
+    public const string CentralServer = "中央";
 
     /// <summary>
     /// 直營門市角色常數。
     /// </summary>
-    public const string DirectStore = "DirectStore";
+    public const string DirectStore = "直營";
 
     /// <summary>
     /// 連盟門市角色常數。
     /// </summary>
-    public const string AllianceStore = "AllianceStore";
+    public const string AllianceStore = "連盟";
 
     /// <summary>
-    /// 檢查指定角色是否屬於門市（直營或連盟）。
+    /// 檢查指定角色是否為同步流程支援的角色（中央或任一門市）。
     /// </summary>
     public static bool IsStoreRole(string? role)
     {
-        if (string.IsNullOrWhiteSpace(role))
+        var normalized = Normalize(role);
+        if (string.IsNullOrWhiteSpace(normalized))
         {
             return false;
         }
 
-        return string.Equals(role, DirectStore, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(role, AllianceStore, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(normalized, CentralServer, StringComparison.Ordinal)
+            || string.Equals(normalized, DirectStore, StringComparison.Ordinal)
+            || string.Equals(normalized, AllianceStore, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 檢查指定角色是否為門市角色（直營或連盟）。
+    /// </summary>
+    public static bool IsBranchRole(string? role)
+    {
+        var normalized = Normalize(role);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return false;
+        }
+
+        return string.Equals(normalized, DirectStore, StringComparison.Ordinal)
+            || string.Equals(normalized, AllianceStore, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 檢查指定角色是否為中央伺服器角色。
+    /// </summary>
+    public static bool IsCentralRole(string? role)
+    {
+        var normalized = Normalize(role);
+        return !string.IsNullOrWhiteSpace(normalized)
+            && string.Equals(normalized, CentralServer, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -46,17 +73,22 @@ public static class SyncServerRoles
             return string.Empty;
         }
 
-        if (string.Equals(role, CentralServer, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(role, CentralServer, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Central", StringComparison.OrdinalIgnoreCase))
         {
             return CentralServer;
         }
 
-        if (string.Equals(role, DirectStore, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(role, DirectStore, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "DirectStore", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Direct", StringComparison.OrdinalIgnoreCase))
         {
             return DirectStore;
         }
 
-        if (string.Equals(role, AllianceStore, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(role, AllianceStore, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "AllianceStore", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(role, "Alliance", StringComparison.OrdinalIgnoreCase))
         {
             return AllianceStore;
         }
