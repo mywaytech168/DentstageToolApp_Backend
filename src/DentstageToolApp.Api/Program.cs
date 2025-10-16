@@ -192,12 +192,12 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
 
     if (centralAccounts.Count == 0)
     {
-        throw new InvalidOperationException("找不到 ServerRole = Central 的中央伺服器帳號，請於 UserAccounts 建立中央環境設定。");
+        throw new InvalidOperationException("找不到 ServerRole = 中央 的中央伺服器帳號，請於 UserAccounts 建立中央環境設定。");
     }
 
     if (centralAccounts.Count > 1)
     {
-        throw new InvalidOperationException("偵測到多筆 ServerRole = Central 的帳號，請確認僅保留單一中央伺服器設定避免同步混亂。");
+        throw new InvalidOperationException("偵測到多筆 ServerRole = 中央 的帳號，請確認僅保留單一中央伺服器設定避免同步混亂。");
     }
 
     var centralAccount = centralAccounts[0];
@@ -221,7 +221,7 @@ if (!syncOptions.HasResolvedMachineProfile)
     throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 UserAccounts.Role 是否已設定門市型態。");
 }
 
-if (syncOptions.IsStoreRole && string.Equals(syncOptions.Transport, SyncTransportModes.Http, StringComparison.OrdinalIgnoreCase))
+if (syncOptions.IsBranchRole && string.Equals(syncOptions.Transport, SyncTransportModes.Http, StringComparison.OrdinalIgnoreCase))
 {
     if (string.IsNullOrWhiteSpace(syncOptions.CentralApiBaseUrl))
     {
@@ -300,7 +300,7 @@ builder.Services.AddHttpClient<IRemoteSyncApiClient, RemoteSyncApiClient>(client
     }
 });
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
-if (syncOptions.IsStoreRole)
+if (syncOptions.IsBranchRole)
 {
     // ---------- 直營或連盟門市背景同步排程 ----------
     builder.Services.AddHostedService<StoreSyncBackgroundService>();

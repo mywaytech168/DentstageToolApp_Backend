@@ -56,7 +56,7 @@ public class StoreSyncBackgroundService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var normalizedRole = _syncOptions.NormalizedServerRole;
-        if (!SyncServerRoles.IsStoreRole(normalizedRole))
+        if (!SyncServerRoles.IsBranchRole(normalizedRole))
         {
             _logger.LogInformation("目前伺服器角色為 {Role}，不需啟動門市同步背景工作。", string.IsNullOrWhiteSpace(normalizedRole) ? "未設定" : normalizedRole);
             return;
@@ -141,7 +141,7 @@ public class StoreSyncBackgroundService : BackgroundService
             var storeType = _syncOptions.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
             var serverRole = _syncOptions.NormalizedServerRole;
 
-            if (!SyncServerRoles.IsStoreRole(serverRole))
+            if (!SyncServerRoles.IsBranchRole(serverRole))
             {
                 _logger.LogInformation("同步機碼設定顯示目前角色為 {Role}，略過門市同步流程。", serverRole);
                 return;
@@ -609,7 +609,8 @@ public class StoreSyncBackgroundService : BackgroundService
     private static async Task MarkCentralLogsAsSyncedAsync(DentstageToolAppContext dbContext, CancellationToken cancellationToken)
     {
         var centralLogs = await dbContext.SyncLogs
-            .Where(log => !log.Synced && string.Equals(log.SourceServer, SyncServerRoles.CentralServer, StringComparison.Ordinal))
+            .Where(log => !log.Synced && (log.SourceServer == SyncServerRoles.CentralServer
+                || log.SourceServer == "Central"))
             .ToListAsync(cancellationToken);
 
         if (centralLogs.Count == 0)
