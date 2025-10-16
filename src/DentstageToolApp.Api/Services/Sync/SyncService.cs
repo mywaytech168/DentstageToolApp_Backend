@@ -132,8 +132,8 @@ public class SyncService : ISyncService
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs
-            .AsNoTracking()
-            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || string.Equals(log.StoreType, storeType, StringComparison.OrdinalIgnoreCase));
+            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || string.Equals(log.StoreType, storeType, StringComparison.OrdinalIgnoreCase))
+            .Where(log => !log.Synced);
 
         if (lastSyncTime.HasValue)
         {
@@ -146,6 +146,15 @@ public class SyncService : ISyncService
             .ThenBy(log => log.Id)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
+
+        if (pendingLogs.Count > 0)
+        {
+            // ---------- 將已下發的紀錄標示為已同步，避免重複傳送 ----------
+            foreach (var log in pendingLogs)
+            {
+                log.Synced = true;
+            }
+        }
 
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
         foreach (var log in pendingLogs)
