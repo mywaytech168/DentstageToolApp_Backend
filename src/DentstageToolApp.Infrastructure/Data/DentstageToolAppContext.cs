@@ -17,6 +17,7 @@ public class DentstageToolAppContext : DbContext
 {
     private string? _syncLogSourceServer;
     private string? _syncLogStoreType;
+    private bool _suppressSyncLogAppend;
     private static readonly JsonSerializerOptions SyncLogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
         DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
@@ -43,7 +44,10 @@ public class DentstageToolAppContext : DbContext
     /// </summary>
     public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
-        AppendSyncLogs();
+        if (!_suppressSyncLogAppend)
+        {
+            AppendSyncLogs();
+        }
         try
         {
             return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
@@ -70,6 +74,22 @@ public class DentstageToolAppContext : DbContext
     {
         _syncLogSourceServer = null;
         _syncLogStoreType = null;
+    }
+
+    /// <summary>
+    /// 停用自動產生同步紀錄的機制，讓中央可直接採用分店傳入的 Sync Log。
+    /// </summary>
+    public void DisableSyncLogAutoAppend()
+    {
+        _suppressSyncLogAppend = true;
+    }
+
+    /// <summary>
+    /// 重新開啟自動產生同步紀錄的機制，恢復預設行為。
+    /// </summary>
+    public void EnableSyncLogAutoAppend()
+    {
+        _suppressSyncLogAppend = false;
     }
 
     /// <summary>

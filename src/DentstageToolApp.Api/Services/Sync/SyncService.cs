@@ -76,37 +76,54 @@ public class SyncService : ISyncService
             return result;
         }
 
-        foreach (var change in request.Changes)
+        var syncLogs = new List<SyncLog>();
+        _dbContext.DisableSyncLogAutoAppend();
+        try
         {
-            try
+            foreach (var change in request.Changes)
             {
-                var processed = await ProcessChangeAsync(change, request.StoreId, request.StoreType, now, cancellationToken);
-                if (processed)
+                try
                 {
-                    result.ProcessedCount++;
+                    var processed = await ProcessChangeAsync(change, request.StoreId, request.StoreType, now, cancellationToken);
+                    if (processed)
+                    {
+                        result.ProcessedCount++;
+                        syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now));
+                    }
+                    else
+                    {
+                        result.IgnoredCount++;
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
+                    // ---------- 錯誤紀錄 ----------
+                    _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, change.RecordId);
                     result.IgnoredCount++;
                 }
             }
-            catch (Exception ex)
-            {
-                // ---------- 錯誤紀錄 ----------
-                _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, change.RecordId);
-                result.IgnoredCount++;
-            }
-        }
 
-        storeState.StoreType = request.StoreType;
-        storeState.ServerRole = normalizedRole;
-        if (!string.IsNullOrWhiteSpace(resolvedIp))
-        {
-            storeState.ServerIp = resolvedIp;
+            if (syncLogs.Count > 0)
+            {
+                // ---------- 直接儲存分店上傳的同步紀錄，供其他端比對差異 ----------
+                await _dbContext.SyncLogs.AddRangeAsync(syncLogs, cancellationToken);
+            }
+
+            storeState.StoreType = request.StoreType;
+            storeState.ServerRole = normalizedRole;
+            if (!string.IsNullOrWhiteSpace(resolvedIp))
+            {
+                storeState.ServerIp = resolvedIp;
+            }
+            storeState.LastUploadTime = now;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        storeState.LastUploadTime = now;
-        _dbContext.SetSyncLogMetadata(request.StoreId, request.StoreType);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        finally
+        {
+            // ---------- 無論成功或失敗都恢復自動產生 Sync Log 的機制 ----------
+            _dbContext.EnableSyncLogAutoAppend();
+        }
         return result;
     }
 
@@ -274,6 +291,28 @@ public class SyncService : ISyncService
         }
 
         return change;
+    }
+
+    /// <summary>
+    /// 將分店上傳的同步異動轉換為中央儲存的 Sync Log。
+    /// </summary>
+    private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime)
+    {
+        var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
+        var updatedAt = change.UpdatedAt ?? fallbackTime;
+        var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        return new SyncLog
+        {
+            TableName = change.TableName,
+            RecordId = change.RecordId,
+            Action = action,
+            UpdatedAt = updatedAt,
+            SourceServer = storeId,
+            StoreType = storeType,
+            Synced = false,
+            Payload = payload
+        };
     }
 
     /// <summary>
