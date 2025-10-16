@@ -78,38 +78,17 @@ public class SyncService : ISyncService
 
         foreach (var change in request.Changes)
         {
-            if (!string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
-            {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            var action = change.Action?.Trim().ToUpperInvariant();
-            if (string.IsNullOrWhiteSpace(action))
-            {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(change.RecordId))
-            {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            if (change.Payload is null || change.Payload.Value.ValueKind == JsonValueKind.Null || change.Payload.Value.ValueKind == JsonValueKind.Undefined)
-            {
-                if (!string.Equals(action, "DELETE", StringComparison.Ordinal))
-                {
-                    result.IgnoredCount++;
-                    continue;
-                }
-            }
-
             try
             {
-                await ProcessOrderChangeAsync(action, change, request.StoreId, request.StoreType, now, cancellationToken);
-                result.ProcessedCount++;
+                var processed = await ProcessChangeAsync(change, request.StoreId, request.StoreType, now, cancellationToken);
+                if (processed)
+                {
+                    result.ProcessedCount++;
+                }
+                else
+                {
+                    result.IgnoredCount++;
+                }
             }
             catch (Exception ex)
             {
@@ -449,6 +428,157 @@ public class SyncService : ISyncService
                 throw new InvalidOperationException($"不支援的同步動作：{action}");
         }
 
+    }
+
+    /// <summary>
+    /// 依據通用同步資料套用至對應資料表，回傳是否成功處理。
+    /// </summary>
+    private async Task<bool> ProcessChangeAsync(
+        SyncChangeDto change,
+        string storeId,
+        string storeType,
+        DateTime processTime,
+        CancellationToken cancellationToken)
+    {
+        // ---------- 驗證基本欄位，避免 Null 造成例外 ----------
+        if (string.IsNullOrWhiteSpace(change.TableName))
+        {
+            _logger.LogWarning("同步資料缺少 TableName，RecordId: {RecordId}", change.RecordId);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(change.RecordId))
+        {
+            _logger.LogWarning("同步資料缺少 RecordId，Table: {Table}", change.TableName);
+            return false;
+        }
+
+        var action = change.Action?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            _logger.LogWarning("同步資料缺少 Action，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        // ---------- 工單維持原有特殊邏輯 ----------
+        if (string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
+        {
+            if (change.Payload is null || change.Payload.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                if (!string.Equals(action, "DELETE", StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("工單同步缺少 Payload，RecordId: {RecordId}", change.RecordId);
+                    return false;
+                }
+            }
+
+            await ProcessOrderChangeAsync(action, change, storeId, storeType, processTime, cancellationToken);
+            return true;
+        }
+
+        var entityType = TryResolveEntityType(change.TableName);
+        if (entityType is null)
+        {
+            _logger.LogWarning("找不到資料表 {Table} 對應的實體，RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        if (!TryParseKeyValues(entityType, change.RecordId, out var keyValues))
+        {
+            _logger.LogWarning("無法解析同步資料主鍵，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        switch (action)
+        {
+            case "INSERT":
+            case "UPDATE":
+            case "UPSERT":
+                if (change.Payload is null || change.Payload.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                {
+                    _logger.LogWarning("同步 {Action} 異動缺少 Payload，Table: {Table}, RecordId: {RecordId}", action, change.TableName, change.RecordId);
+                    return false;
+                }
+
+                object? payloadEntity;
+                try
+                {
+                    payloadEntity = change.Payload.Value.Deserialize(entityType.ClrType, SerializerOptions);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "同步 Payload 反序列化失敗，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return false;
+                }
+
+                if (payloadEntity is null)
+                {
+                    _logger.LogWarning("同步 Payload 解析後為空，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return false;
+                }
+
+                var existedEntity = await _dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (existedEntity is null)
+                {
+                    // ---------- 找不到舊資料時直接新增，確保中央資料完整 ----------
+                    _dbContext.Add(payloadEntity);
+                }
+                else
+                {
+                    // ---------- 使用 EF Core 套用欄位，避免逐一指定造成遺漏 ----------
+                    _dbContext.Entry(existedEntity).CurrentValues.SetValues(payloadEntity);
+                }
+
+                return true;
+
+            case "DELETE":
+                var entity = await _dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (entity is not null)
+                {
+                    // ---------- 找到資料才進行刪除，避免多餘例外 ----------
+                    _dbContext.Remove(entity);
+                }
+
+                return true;
+
+            default:
+                _logger.LogWarning("同步資料包含未支援動作 {Action}，Table: {Table}", action, change.TableName);
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// 解析同步紀錄的主鍵字串為實際型別陣列。
+    /// </summary>
+    private static bool TryParseKeyValues(IEntityType entityType, string? recordId, out object?[] keyValues)
+    {
+        keyValues = Array.Empty<object?>();
+        var primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null || primaryKey.Properties.Count == 0)
+        {
+            return false;
+        }
+
+        var segments = (recordId ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        if (segments.Length != primaryKey.Properties.Count)
+        {
+            return false;
+        }
+
+        keyValues = new object?[segments.Length];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            try
+            {
+                keyValues[index] = ConvertKeyValue(segments[index], primaryKey.Properties[index].ClrType);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
