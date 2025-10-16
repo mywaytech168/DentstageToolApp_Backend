@@ -91,7 +91,7 @@ public class SyncOptions
     public string NormalizedServerRole => SyncServerRoles.Normalize(ServerRole);
 
     /// <summary>
-    /// 判斷目前設定是否為同步支援角色（中央或門市）。
+    /// 判斷目前設定是否為同步支援角色（中央或分店）。
     /// </summary>
     public bool IsStoreRole => SyncServerRoles.IsStoreRole(ServerRole);
 
@@ -99,6 +99,11 @@ public class SyncOptions
     /// 判斷目前設定是否為門市角色（直營或連盟）。
     /// </summary>
     public bool IsBranchRole => SyncServerRoles.IsBranchRole(ServerRole);
+
+    /// <summary>
+    /// 判斷目前設定是否為中央角色
+    /// </summary>
+    public bool IsCentralRole => SyncServerRoles.IsCentralRole(ServerRole);
 
     /// <summary>
     /// 判斷是否使用訊息佇列作為同步通訊方式。

@@ -15,12 +15,12 @@ public static class SyncServerRoles
     /// <summary>
     /// 直營門市角色常數。
     /// </summary>
-    public const string DirectStore = "直營";
+    public const string DirectStore = "直營店";
 
     /// <summary>
-    /// 連盟門市角色常數。
+    /// 加盟門市角色常數。
     /// </summary>
-    public const string AllianceStore = "連盟";
+    public const string AllianceStore = "加盟店";
 
     /// <summary>
     /// 檢查指定角色是否為同步流程支援的角色（中央或任一門市）。

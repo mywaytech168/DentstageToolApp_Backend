@@ -208,6 +208,7 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
 
     // ---------- 將中央伺服器 IP 存入同步選項，後續背景任務可用來建立中央連線 ----------
     syncOptions.CentralServerIp = centralAccount.ServerIp;
+    syncOptions.CentralApiBaseUrl = $"http://{centralAccount.ServerIp}:5000";
 }
 
 var normalizedRole = syncOptions.NormalizedServerRole;
@@ -219,14 +220,6 @@ if (string.IsNullOrWhiteSpace(normalizedRole))
 if (!syncOptions.HasResolvedMachineProfile)
 {
     throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 UserAccounts.Role 是否已設定門市型態。");
-}
-
-if (syncOptions.IsBranchRole && string.Equals(syncOptions.Transport, SyncTransportModes.Http, StringComparison.OrdinalIgnoreCase))
-{
-    if (string.IsNullOrWhiteSpace(syncOptions.CentralApiBaseUrl))
-    {
-        throw new InvalidOperationException("門市環境需設定 Sync.CentralApiBaseUrl，才能呼叫中央同步 API。");
-    }
 }
 
 builder.Services.AddSingleton(syncOptions);
@@ -300,7 +293,7 @@ builder.Services.AddHttpClient<IRemoteSyncApiClient, RemoteSyncApiClient>(client
     }
 });
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
-if (syncOptions.IsBranchRole)
+if (!syncOptions.IsCentralRole)
 {
     // ---------- 直營或連盟門市背景同步排程 ----------
     builder.Services.AddHostedService<StoreSyncBackgroundService>();
