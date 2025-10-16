@@ -68,7 +68,7 @@
 {
   "storeId": "STORE-001",
   "storeType": "Direct",
-  "serverRole": "DirectStore",
+  "serverRole": "直營",
   "serverIp": "10.1.10.5",
   "changes": [
     {
@@ -94,7 +94,7 @@
 {
   "storeId": "STORE-001",
   "storeType": "Direct",
-  "serverRole": "DirectStore",
+  "serverRole": "直營",
   "lastSyncTime": "2024-04-15T10:30:00Z",
   "orders": [
     {
@@ -132,7 +132,7 @@
 ```json
 "Sync": {
   "MachineKey": "DIRECT-STORE-001",
-  "ServerRole": "DirectStore",
+  "ServerRole": "直營",
   "StoreId": "STORE-001",
   "StoreType": "Direct",
   "ServerIp": "10.1.10.5",

@@ -15,12 +15,12 @@ public class SyncUploadRequest
     public string StoreId { get; set; } = null!;
 
     /// <summary>
-    /// 門市型態（直營店 Direct、連盟店 Franchise 等）。
+    /// 門市型態（例如直營店、連盟店）。
     /// </summary>
     public string StoreType { get; set; } = null!;
 
     /// <summary>
-    /// 門市伺服器角色（DirectStore、AllianceStore），用來建立 store_sync_states 的來源分類。
+    /// 門市伺服器角色（直營、連盟），用來建立 store_sync_states 的來源分類。
     /// </summary>
     public string? ServerRole { get; set; }
 

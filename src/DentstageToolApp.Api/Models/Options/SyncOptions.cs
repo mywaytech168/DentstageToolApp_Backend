@@ -24,7 +24,7 @@ public class SyncOptions
     public string? StoreId { get; set; }
 
     /// <summary>
-    /// 門市型態（例如 Direct、Franchise），供呼叫同步 API 時使用。
+    /// 門市型態（例如直營店、連盟店），供呼叫同步 API 時使用。
     /// </summary>
     public string? StoreType { get; set; }
 
@@ -91,9 +91,14 @@ public class SyncOptions
     public string NormalizedServerRole => SyncServerRoles.Normalize(ServerRole);
 
     /// <summary>
-    /// 判斷目前設定是否為門市角色（直營或連盟）。
+    /// 判斷目前設定是否為同步支援角色（中央或門市）。
     /// </summary>
     public bool IsStoreRole => SyncServerRoles.IsStoreRole(ServerRole);
+
+    /// <summary>
+    /// 判斷目前設定是否為門市角色（直營或連盟）。
+    /// </summary>
+    public bool IsBranchRole => SyncServerRoles.IsBranchRole(ServerRole);
 
     /// <summary>
     /// 判斷是否使用訊息佇列作為同步通訊方式。
