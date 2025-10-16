@@ -54,12 +54,6 @@ public class RemoteSyncApiClient : IRemoteSyncApiClient
             throw new ArgumentNullException(nameof(request));
         }
 
-        if (string.IsNullOrWhiteSpace(_syncOptions.CentralApiBaseUrl))
-        {
-            _logger.LogWarning("未設定中央 API 根網址，無法上傳同步資料。");
-            return null;
-        }
-
         try
         {
             using var response = await _httpClient.PostAsJsonAsync(UploadEndpoint, request, SerializerOptions, cancellationToken);
