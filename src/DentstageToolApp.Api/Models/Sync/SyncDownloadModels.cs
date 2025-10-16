@@ -45,12 +45,12 @@ public class SyncDownloadQuery
     public string StoreId { get; set; } = null!;
 
     /// <summary>
-    /// 門市型態（Direct、Franchise 等）。
+    /// 門市型態（例如直營店、連盟店）。
     /// </summary>
     public string StoreType { get; set; } = null!;
 
     /// <summary>
-    /// 門市伺服器角色（DirectStore、AllianceStore），可協助中央更新伺服器屬性。
+    /// 門市伺服器角色（直營、連盟），可協助中央更新伺服器屬性。
     /// </summary>
     public string? ServerRole { get; set; }
 
