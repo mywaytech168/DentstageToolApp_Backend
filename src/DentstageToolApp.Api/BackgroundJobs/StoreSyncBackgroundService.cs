@@ -484,8 +484,8 @@ public class StoreSyncBackgroundService : BackgroundService
                 return;
             }
 
-            // ---------- 標記後續新增的同步紀錄皆來自中央，方便資料清理 ----------
-            dbContext.SetSyncLogMetadata(storeId, storeType);
+            // ---------- 標記後續新增的同步紀錄皆來自中央，方便資料清理並帶入伺服器角色 ----------
+            dbContext.SetSyncLogMetadata(storeId, storeType, serverRole);
 
             var changes = response.Changes ?? new List<SyncChangeDto>();
             if (changes.Count == 0 && response.Orders.Count == 0)

@@ -227,7 +227,7 @@ if (string.IsNullOrWhiteSpace(normalizedRole))
 var defaultSourceServer = string.IsNullOrWhiteSpace(syncOptions.StoreId)
     ? normalizedRole
     : syncOptions.StoreId;
-DentstageToolAppContext.ConfigureSyncLogDefaults(defaultSourceServer, syncOptions.StoreType);
+DentstageToolAppContext.ConfigureSyncLogDefaults(defaultSourceServer, syncOptions.StoreType, normalizedRole);
 
 if (!syncOptions.HasResolvedMachineProfile)
 {
