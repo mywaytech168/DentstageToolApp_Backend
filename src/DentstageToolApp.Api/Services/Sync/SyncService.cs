@@ -150,9 +150,7 @@ public class SyncService : ISyncService
         var normalizedStoreType = storeType.ToLowerInvariant();
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
-        var logsQuery = _dbContext.SyncLogs
-            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || log.StoreType.ToLower() == normalizedStoreType)
-            .Where(log => !log.Synced);
+        var logsQuery = _dbContext.SyncLogs.AsQueryable();
 
         if (lastSyncTime.HasValue)
         {
@@ -163,17 +161,7 @@ public class SyncService : ISyncService
         var pendingLogs = await logsQuery
             .OrderBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
-            .Take(DefaultPageSize)
             .ToListAsync(cancellationToken);
-
-        if (pendingLogs.Count > 0)
-        {
-            // ---------- 將已下發的紀錄標示為已同步，避免重複傳送 ----------
-            foreach (var log in pendingLogs)
-            {
-                log.Synced = true;
-            }
-        }
 
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
         foreach (var log in pendingLogs)
@@ -229,11 +217,6 @@ public class SyncService : ISyncService
             storeState.ServerIp = resolvedIp;
         }
         storeState.LastDownloadTime = serverTime;
-        if (pendingLogs.Count > 0)
-        {
-            // ---------- 以最後一筆同步紀錄的識別碼作為游標，方便除錯與後續延伸分頁 ----------
-            storeState.LastCursor = pendingLogs[^1].Id.ToString(CultureInfo.InvariantCulture);
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
