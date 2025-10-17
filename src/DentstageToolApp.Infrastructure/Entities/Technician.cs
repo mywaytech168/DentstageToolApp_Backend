@@ -18,6 +18,11 @@ public class Technician
     public string TechnicianName { get; set; } = null!;
 
     /// <summary>
+    /// 技師職稱或角色名稱，對應資料表欄位 JobTitle。
+    /// </summary>
+    public string? JobTitle { get; set; }
+
+    /// <summary>
     /// 所屬門市識別碼，改為以 UID 字串串接門市主檔。
     /// </summary>
     public string? StoreUid { get; set; }
