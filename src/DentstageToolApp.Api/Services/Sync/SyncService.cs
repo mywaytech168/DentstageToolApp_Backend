@@ -146,10 +146,12 @@ public class SyncService : ISyncService
         }
 
         var serverTime = DateTime.UtcNow;
+        // ---------- 標準化門市型態，避免大小寫差異造成同步查詢誤判 ----------
+        var normalizedStoreType = storeType.ToLowerInvariant();
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs
-            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || string.Equals(log.StoreType, storeType, StringComparison.OrdinalIgnoreCase))
+            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || log.StoreType.ToLower() == normalizedStoreType)
             .Where(log => !log.Synced);
 
         if (lastSyncTime.HasValue)
