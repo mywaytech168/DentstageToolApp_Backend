@@ -172,10 +172,17 @@ public class SyncService : ISyncService
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs.AsQueryable();
 
+        // ---------- 將門市與中央來源統一轉為小寫進行比對，避免大小寫差異造成遺漏 ----------
+        var normalizedStoreId = storeId.Trim();
+        var normalizedStoreCandidates = new[]
+        {
+            normalizedStoreId.ToLowerInvariant(),
+            SyncServerRoles.CentralServer.ToLowerInvariant(),
+            "Central".ToLowerInvariant()
+        };
+
         logsQuery = logsQuery.Where(log => string.IsNullOrWhiteSpace(log.SourceServer)
-            || string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(log.SourceServer, SyncServerRoles.CentralServer, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(log.SourceServer, "Central", StringComparison.OrdinalIgnoreCase));
+            || normalizedStoreCandidates.Contains(log.SourceServer!.ToLower()));
 
         if (effectiveLastSyncTime.HasValue)
         {
