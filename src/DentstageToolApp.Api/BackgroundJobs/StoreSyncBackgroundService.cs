@@ -674,8 +674,19 @@ public class StoreSyncBackgroundService : BackgroundService
             return;
         }
 
+        // ---------- 統一使用小寫來源清單，兼容舊有中央別名與最新的門市編號格式 ----------
+        var normalizedStoreId = storeId.Trim();
+        var acceptableSources = new[]
+        {
+            normalizedStoreId.ToLowerInvariant(),
+            SyncServerRoles.CentralServer.ToLowerInvariant(),
+            "Central".ToLowerInvariant()
+        };
+
         var centralLogs = await dbContext.SyncLogs
-            .Where(log => !log.Synced && string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase))
+            .Where(log => !log.Synced
+                && !string.IsNullOrWhiteSpace(log.SourceServer)
+                && acceptableSources.Contains(log.SourceServer!.ToLower()))
             .ToListAsync(cancellationToken);
 
         if (centralLogs.Count == 0)
