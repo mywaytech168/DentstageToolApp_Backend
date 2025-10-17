@@ -404,11 +404,8 @@ public class StoreSyncBackgroundService : BackgroundService
 
             var query = new SyncDownloadQuery
             {
-                StoreId = storeId,
-                StoreType = storeType,
-                ServerRole = serverRole,
-                LastSyncTime = storeState?.LastDownloadTime,
-                PageSize = _syncOptions.BackgroundSyncBatchSize <= 0 ? 100 : _syncOptions.BackgroundSyncBatchSize
+                // ---------- 目前僅需提供最後同步時間，其餘識別資訊改由 Token 取得 ----------
+                LastSyncTime = storeState?.LastDownloadTime
             };
 
             var response = await _remoteSyncApiClient.GetUpdatesAsync(query, cancellationToken);

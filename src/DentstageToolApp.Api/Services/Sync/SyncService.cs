@@ -19,6 +19,11 @@ namespace DentstageToolApp.Api.Services.Sync;
 /// </summary>
 public class SyncService : ISyncService
 {
+    /// <summary>
+    /// 同步下載的預設分頁大小，避免一次抓取過多資料。
+    /// </summary>
+    private const int DefaultPageSize = 100;
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -76,63 +81,59 @@ public class SyncService : ISyncService
             return result;
         }
 
-        foreach (var change in request.Changes)
+        var syncLogs = new List<SyncLog>();
+        _dbContext.DisableSyncLogAutoAppend();
+        try
         {
-            if (!string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
+            foreach (var change in request.Changes)
             {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            var action = change.Action?.Trim().ToUpperInvariant();
-            if (string.IsNullOrWhiteSpace(action))
-            {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            if (string.IsNullOrWhiteSpace(change.RecordId))
-            {
-                result.IgnoredCount++;
-                continue;
-            }
-
-            if (change.Payload is null || change.Payload.Value.ValueKind == JsonValueKind.Null || change.Payload.Value.ValueKind == JsonValueKind.Undefined)
-            {
-                if (!string.Equals(action, "DELETE", StringComparison.Ordinal))
+                try
                 {
+                    var processed = await ProcessChangeAsync(change, request.StoreId, request.StoreType, now, cancellationToken);
+                    if (processed)
+                    {
+                        result.ProcessedCount++;
+                        syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now));
+                    }
+                    else
+                    {
+                        result.IgnoredCount++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // ---------- 錯誤紀錄 ----------
+                    _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, change.RecordId);
                     result.IgnoredCount++;
-                    continue;
                 }
             }
 
-            try
+            if (syncLogs.Count > 0)
             {
-                await ProcessOrderChangeAsync(action, change, request.StoreId, request.StoreType, now, cancellationToken);
-                result.ProcessedCount++;
+                // ---------- 直接儲存分店上傳的同步紀錄，供其他端比對差異 ----------
+                await _dbContext.SyncLogs.AddRangeAsync(syncLogs, cancellationToken);
             }
-            catch (Exception ex)
-            {
-                // ---------- 錯誤紀錄 ----------
-                _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, change.RecordId);
-                result.IgnoredCount++;
-            }
-        }
 
-        storeState.StoreType = request.StoreType;
-        storeState.ServerRole = normalizedRole;
-        if (!string.IsNullOrWhiteSpace(resolvedIp))
-        {
-            storeState.ServerIp = resolvedIp;
+            storeState.StoreType = request.StoreType;
+            storeState.ServerRole = normalizedRole;
+            if (!string.IsNullOrWhiteSpace(resolvedIp))
+            {
+                storeState.ServerIp = resolvedIp;
+            }
+            storeState.LastUploadTime = now;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        storeState.LastUploadTime = now;
-        _dbContext.SetSyncLogMetadata(request.StoreId, request.StoreType);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        finally
+        {
+            // ---------- 無論成功或失敗都恢復自動產生 Sync Log 的機制 ----------
+            _dbContext.EnableSyncLogAutoAppend();
+        }
         return result;
     }
 
     /// <inheritdoc />
-    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken)
+    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(storeId))
         {
@@ -144,17 +145,12 @@ public class SyncService : ISyncService
             throw new ArgumentException("StoreType 不可為空白。", nameof(storeType));
         }
 
-        if (pageSize <= 0)
-        {
-            pageSize = 100;
-        }
-
         var serverTime = DateTime.UtcNow;
+        // ---------- 標準化門市型態，避免大小寫差異造成同步查詢誤判 ----------
+        var normalizedStoreType = storeType.ToLowerInvariant();
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
-        var logsQuery = _dbContext.SyncLogs
-            .AsNoTracking()
-            .Where(log => string.IsNullOrWhiteSpace(log.StoreType) || string.Equals(log.StoreType, storeType, StringComparison.OrdinalIgnoreCase));
+        var logsQuery = _dbContext.SyncLogs.AsQueryable();
 
         if (lastSyncTime.HasValue)
         {
@@ -165,7 +161,6 @@ public class SyncService : ISyncService
         var pendingLogs = await logsQuery
             .OrderBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
-            .Take(pageSize)
             .ToListAsync(cancellationToken);
 
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
@@ -222,11 +217,6 @@ public class SyncService : ISyncService
             storeState.ServerIp = resolvedIp;
         }
         storeState.LastDownloadTime = serverTime;
-        if (pendingLogs.Count > 0)
-        {
-            // ---------- 以最後一筆同步紀錄的識別碼作為游標，方便除錯與後續延伸分頁 ----------
-            storeState.LastCursor = pendingLogs[^1].Id.ToString(CultureInfo.InvariantCulture);
-        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -286,6 +276,28 @@ public class SyncService : ISyncService
         }
 
         return change;
+    }
+
+    /// <summary>
+    /// 將分店上傳的同步異動轉換為中央儲存的 Sync Log。
+    /// </summary>
+    private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime)
+    {
+        var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
+        var updatedAt = change.UpdatedAt ?? fallbackTime;
+        var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        return new SyncLog
+        {
+            TableName = change.TableName,
+            RecordId = change.RecordId,
+            Action = action,
+            UpdatedAt = updatedAt,
+            SourceServer = storeId,
+            StoreType = storeType,
+            Synced = false,
+            Payload = payload
+        };
     }
 
     /// <summary>
@@ -449,6 +461,157 @@ public class SyncService : ISyncService
                 throw new InvalidOperationException($"不支援的同步動作：{action}");
         }
 
+    }
+
+    /// <summary>
+    /// 依據通用同步資料套用至對應資料表，回傳是否成功處理。
+    /// </summary>
+    private async Task<bool> ProcessChangeAsync(
+        SyncChangeDto change,
+        string storeId,
+        string storeType,
+        DateTime processTime,
+        CancellationToken cancellationToken)
+    {
+        // ---------- 驗證基本欄位，避免 Null 造成例外 ----------
+        if (string.IsNullOrWhiteSpace(change.TableName))
+        {
+            _logger.LogWarning("同步資料缺少 TableName，RecordId: {RecordId}", change.RecordId);
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(change.RecordId))
+        {
+            _logger.LogWarning("同步資料缺少 RecordId，Table: {Table}", change.TableName);
+            return false;
+        }
+
+        var action = change.Action?.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(action))
+        {
+            _logger.LogWarning("同步資料缺少 Action，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        // ---------- 工單維持原有特殊邏輯 ----------
+        if (string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
+        {
+            if (change.Payload is null || change.Payload.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                if (!string.Equals(action, "DELETE", StringComparison.Ordinal))
+                {
+                    _logger.LogWarning("工單同步缺少 Payload，RecordId: {RecordId}", change.RecordId);
+                    return false;
+                }
+            }
+
+            await ProcessOrderChangeAsync(action, change, storeId, storeType, processTime, cancellationToken);
+            return true;
+        }
+
+        var entityType = TryResolveEntityType(change.TableName);
+        if (entityType is null)
+        {
+            _logger.LogWarning("找不到資料表 {Table} 對應的實體，RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        if (!TryParseKeyValues(entityType, change.RecordId, out var keyValues))
+        {
+            _logger.LogWarning("無法解析同步資料主鍵，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+            return false;
+        }
+
+        switch (action)
+        {
+            case "INSERT":
+            case "UPDATE":
+            case "UPSERT":
+                if (change.Payload is null || change.Payload.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+                {
+                    _logger.LogWarning("同步 {Action} 異動缺少 Payload，Table: {Table}, RecordId: {RecordId}", action, change.TableName, change.RecordId);
+                    return false;
+                }
+
+                object? payloadEntity;
+                try
+                {
+                    payloadEntity = change.Payload.Value.Deserialize(entityType.ClrType, SerializerOptions);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "同步 Payload 反序列化失敗，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return false;
+                }
+
+                if (payloadEntity is null)
+                {
+                    _logger.LogWarning("同步 Payload 解析後為空，Table: {Table}, RecordId: {RecordId}", change.TableName, change.RecordId);
+                    return false;
+                }
+
+                var existedEntity = await _dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (existedEntity is null)
+                {
+                    // ---------- 找不到舊資料時直接新增，確保中央資料完整 ----------
+                    _dbContext.Add(payloadEntity);
+                }
+                else
+                {
+                    // ---------- 使用 EF Core 套用欄位，避免逐一指定造成遺漏 ----------
+                    _dbContext.Entry(existedEntity).CurrentValues.SetValues(payloadEntity);
+                }
+
+                return true;
+
+            case "DELETE":
+                var entity = await _dbContext.FindAsync(entityType.ClrType, keyValues);
+                if (entity is not null)
+                {
+                    // ---------- 找到資料才進行刪除，避免多餘例外 ----------
+                    _dbContext.Remove(entity);
+                }
+
+                return true;
+
+            default:
+                _logger.LogWarning("同步資料包含未支援動作 {Action}，Table: {Table}", action, change.TableName);
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// 解析同步紀錄的主鍵字串為實際型別陣列。
+    /// </summary>
+    private static bool TryParseKeyValues(IEntityType entityType, string? recordId, out object?[] keyValues)
+    {
+        keyValues = Array.Empty<object?>();
+        var primaryKey = entityType.FindPrimaryKey();
+        if (primaryKey is null || primaryKey.Properties.Count == 0)
+        {
+            return false;
+        }
+
+        var segments = (recordId ?? string.Empty).Split(',', StringSplitOptions.TrimEntries);
+        if (segments.Length != primaryKey.Properties.Count)
+        {
+            return false;
+        }
+
+        keyValues = new object?[segments.Length];
+        for (var index = 0; index < segments.Length; index++)
+        {
+            try
+            {
+                keyValues[index] = ConvertKeyValue(segments[index], primaryKey.Properties[index].ClrType);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

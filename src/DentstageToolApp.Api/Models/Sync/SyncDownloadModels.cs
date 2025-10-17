@@ -40,29 +40,9 @@ public class SyncDownloadResponse
 public class SyncDownloadQuery
 {
     /// <summary>
-    /// 門市識別碼。
-    /// </summary>
-    public string StoreId { get; set; } = null!;
-
-    /// <summary>
-    /// 門市型態（例如直營店、連盟店）。
-    /// </summary>
-    public string StoreType { get; set; } = null!;
-
-    /// <summary>
-    /// 門市伺服器角色（直營、連盟），可協助中央更新伺服器屬性。
-    /// </summary>
-    public string? ServerRole { get; set; }
-
-    /// <summary>
     /// 上次同步時間，若為 null 代表全量下載。
     /// </summary>
     public DateTime? LastSyncTime { get; set; }
-
-    /// <summary>
-    /// 單次同步的最大筆數，預設 100。
-    /// </summary>
-    public int PageSize { get; set; } = 100;
 }
 
 /// <summary>
