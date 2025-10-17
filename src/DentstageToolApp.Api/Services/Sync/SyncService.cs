@@ -23,6 +23,7 @@ public class SyncService : ISyncService
     /// 同步下載的預設分頁大小，避免一次抓取過多資料。
     /// </summary>
     private const int DefaultPageSize = 100;
+    private const char SyncCursorSeparator = '|';
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -82,6 +83,8 @@ public class SyncService : ISyncService
         }
 
         var syncLogs = new List<SyncLog>();
+        // ---------- 使用累計序號確保同批上傳的紀錄能取得遞增時間戳 ----------
+        var logSequence = 0;
         _dbContext.DisableSyncLogAutoAppend();
         try
         {
@@ -93,7 +96,7 @@ public class SyncService : ISyncService
                     if (processed)
                     {
                         result.ProcessedCount++;
-                        syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now));
+                        syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now, logSequence++));
                     }
                     else
                     {
@@ -146,21 +149,42 @@ public class SyncService : ISyncService
         }
 
         var serverTime = DateTime.UtcNow;
-        // ---------- 標準化門市型態，避免大小寫差異造成同步查詢誤判 ----------
-        var normalizedStoreType = storeType.ToLowerInvariant();
+        // ---------- 標準化伺服器角色並先取得門市狀態，後續可使用狀態內的同步游標 ----------
+        var normalizedRole = SyncServerRoles.Normalize(remoteServerRole ?? storeType);
+        var resolvedIp = remoteIpAddress;
+        var storeState = await EnsureStoreStateAsync(storeId, storeType, normalizedRole, resolvedIp, cancellationToken);
+
+        // ---------- 以請求與資料庫記錄的游標綜合判斷上次同步位置 ----------
+        var effectiveLastSyncTime = lastSyncTime ?? storeState.LastDownloadTime;
+        var lastCursorId = 0L;
+        if (TryParseCursor(storeState.LastCursor, out var cursorTime, out var cursorId))
+        {
+            if (!effectiveLastSyncTime.HasValue || cursorTime > effectiveLastSyncTime.Value)
+            {
+                effectiveLastSyncTime = cursorTime;
+                lastCursorId = cursorId;
+            }
+            else if (effectiveLastSyncTime.Value == cursorTime)
+            {
+                lastCursorId = cursorId;
+            }
+        }
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs.AsQueryable();
 
-        if (lastSyncTime.HasValue)
+        if (effectiveLastSyncTime.HasValue)
         {
-            // ---------- 僅取回上次同步後新增的異動 ----------
-            logsQuery = logsQuery.Where(log => log.UpdatedAt > lastSyncTime.Value);
+            var syncTime = effectiveLastSyncTime.Value;
+            var cursorIdForQuery = lastCursorId;
+            logsQuery = logsQuery.Where(log => log.UpdatedAt > syncTime
+                || (cursorIdForQuery > 0 && log.UpdatedAt == syncTime && log.Id > cursorIdForQuery));
         }
 
         var pendingLogs = await logsQuery
             .OrderBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
+            .Take(DefaultPageSize)
             .ToListAsync(cancellationToken);
 
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
@@ -207,9 +231,6 @@ public class SyncService : ISyncService
             }
         }
 
-        var normalizedRole = SyncServerRoles.Normalize(remoteServerRole ?? storeType);
-        var resolvedIp = remoteIpAddress;
-        var storeState = await EnsureStoreStateAsync(storeId, storeType, normalizedRole, resolvedIp, cancellationToken);
         storeState.StoreType = storeType;
         storeState.ServerRole = normalizedRole;
         if (!string.IsNullOrWhiteSpace(resolvedIp))
@@ -217,6 +238,19 @@ public class SyncService : ISyncService
             storeState.ServerIp = resolvedIp;
         }
         storeState.LastDownloadTime = serverTime;
+        if (pendingLogs.Count > 0)
+        {
+            var lastLog = pendingLogs[^1];
+            storeState.LastCursor = BuildCursor(lastLog.UpdatedAt, lastLog.Id);
+        }
+        else if (effectiveLastSyncTime.HasValue)
+        {
+            storeState.LastCursor = BuildCursor(effectiveLastSyncTime.Value, 0);
+        }
+        else
+        {
+            storeState.LastCursor = BuildCursor(serverTime, 0);
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -281,10 +315,12 @@ public class SyncService : ISyncService
     /// <summary>
     /// 將分店上傳的同步異動轉換為中央儲存的 Sync Log。
     /// </summary>
-    private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime)
+    private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime, int sequence)
     {
         var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
-        var updatedAt = change.UpdatedAt ?? fallbackTime;
+        // ---------- 以伺服器時間為準，並依序號微調時間避免同筆請求產生相同時間戳 ----------
+        var serverTimestamp = fallbackTime.AddTicks(sequence);
+        var updatedAt = serverTimestamp;
         var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
 
         return new SyncLog
@@ -632,6 +668,47 @@ public class SyncService : ISyncService
         {
             order.CreationTimestamp = dto.CreationTimestamp ?? change.UpdatedAt ?? processTime;
         }
+    }
+
+    /// <summary>
+    /// 建立同步游標字串，格式為 {時間戳}|{同步紀錄 Id}。
+    /// </summary>
+    private static string BuildCursor(DateTime timestamp, long lastLogId)
+    {
+        // ---------- 使用不受文化影響的格式避免時區與格式差異 ----------
+        return string.Format(CultureInfo.InvariantCulture, "{0:O}{1}{2}", timestamp, SyncCursorSeparator, lastLogId);
+    }
+
+    /// <summary>
+    /// 嘗試解析同步游標字串，取得時間戳與最後處理的同步紀錄 Id。
+    /// </summary>
+    private static bool TryParseCursor(string? rawCursor, out DateTime timestamp, out long lastLogId)
+    {
+        timestamp = default;
+        lastLogId = 0;
+
+        if (string.IsNullOrWhiteSpace(rawCursor))
+        {
+            return false;
+        }
+
+        var segments = rawCursor.Split(SyncCursorSeparator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length != 2)
+        {
+            return false;
+        }
+
+        if (!DateTime.TryParse(segments[0], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out timestamp))
+        {
+            return false;
+        }
+
+        if (!long.TryParse(segments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out lastLogId))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     /// <summary>
