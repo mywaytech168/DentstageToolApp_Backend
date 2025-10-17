@@ -22,11 +22,6 @@ namespace DentstageToolApp.Api.Services.Sync;
 /// </summary>
 public class SyncService : ISyncService
 {
-    /// <summary>
-    /// 同步下載的預設分頁大小，避免一次抓取過多資料。
-    /// </summary>
-    private const int DefaultPageSize = 100;
-
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -187,18 +182,6 @@ public class SyncService : ISyncService
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs.AsQueryable();
 
-        // ---------- 將門市與中央來源統一轉為小寫進行比對，避免大小寫差異造成遺漏 ----------
-        var normalizedStoreId = storeId.Trim();
-        var normalizedStoreCandidates = new[]
-        {
-            normalizedStoreId.ToLowerInvariant(),
-            SyncServerRoles.CentralServer.ToLowerInvariant(),
-            "Central".ToLowerInvariant()
-        };
-
-        logsQuery = logsQuery.Where(log => string.IsNullOrWhiteSpace(log.SourceServer)
-            || normalizedStoreCandidates.Contains(log.SourceServer!.ToLower()));
-
         if (effectiveLastSyncTime.HasValue)
         {
             var syncTime = effectiveLastSyncTime.Value;
@@ -209,12 +192,18 @@ public class SyncService : ISyncService
             .OrderBy(log => log.SyncedAt)
             .ThenBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
-            .Take(DefaultPageSize)
             .ToListAsync(cancellationToken);
 
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
+        var appendedLogIds = new HashSet<Guid>();
         foreach (var log in pendingLogs)
         {
+            // ---------- 若同一次回應已包含相同 LogId，則略過避免重複同步 ----------
+            if (!appendedLogIds.Add(log.Id))
+            {
+                continue;
+            }
+
             var change = await BuildChangeDtoAsync(log, cancellationToken);
             if (change is not null)
             {
