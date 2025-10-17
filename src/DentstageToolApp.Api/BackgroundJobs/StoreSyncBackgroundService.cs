@@ -208,10 +208,12 @@ public class StoreSyncBackgroundService : BackgroundService
             {
                 var change = new SyncChangeDto
                 {
+                    LogId = log.Id,
                     TableName = log.TableName,
                     Action = log.Action,
                     RecordId = log.RecordId,
-                    UpdatedAt = log.UpdatedAt
+                    UpdatedAt = log.UpdatedAt,
+                    SyncedAt = log.SyncedAt
                 };
 
                 if (!string.Equals(log.Action, "DELETE", StringComparison.OrdinalIgnoreCase))
