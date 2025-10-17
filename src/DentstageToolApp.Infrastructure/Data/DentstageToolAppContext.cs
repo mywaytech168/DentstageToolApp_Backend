@@ -18,9 +18,19 @@ public class DentstageToolAppContext : DbContext
     private string? _syncLogSourceServer;
     private string? _syncLogStoreType;
     private bool _suppressSyncLogAppend;
+    private static string? _defaultSyncLogSourceServer;
+    private static string? _defaultSyncLogStoreType;
     private static readonly JsonSerializerOptions SyncLogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
         DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    private static readonly HashSet<string> SyncLogExcludedTables = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // ---------- 排除不需要同步的身分驗證相關資料表 ----------
+        "RefreshTokens",
+        "DeviceRegistrations",
+        "UserAccounts"
     };
 
     /// <summary>
@@ -29,6 +39,9 @@ public class DentstageToolAppContext : DbContext
     public DentstageToolAppContext(DbContextOptions<DentstageToolAppContext> options)
         : base(options)
     {
+        // ---------- 初始化同步紀錄預設來源，確保中央環境自動套用 Synced = 1 ----------
+        _syncLogSourceServer = _defaultSyncLogSourceServer;
+        _syncLogStoreType = _defaultSyncLogStoreType;
     }
 
     /// <summary>
@@ -72,8 +85,9 @@ public class DentstageToolAppContext : DbContext
     /// </summary>
     public void ClearSyncLogMetadata()
     {
-        _syncLogSourceServer = null;
-        _syncLogStoreType = null;
+        // ---------- 恢復為預設來源設定，避免跨交易沿用錯誤資訊 ----------
+        _syncLogSourceServer = _defaultSyncLogSourceServer;
+        _syncLogStoreType = _defaultSyncLogStoreType;
     }
 
     /// <summary>
@@ -90,6 +104,16 @@ public class DentstageToolAppContext : DbContext
     public void EnableSyncLogAutoAppend()
     {
         _suppressSyncLogAppend = false;
+    }
+
+    /// <summary>
+    /// 設定預設的同步紀錄來源，讓中央或門市環境可指定 AppendSyncLogs 的同步旗標與來源別名。
+    /// </summary>
+    public static void ConfigureSyncLogDefaults(string? sourceServer, string? storeType)
+    {
+        // ---------- 儲存預設值給所有 DbContext 實例使用，供中央環境預設標記為已同步 ----------
+        _defaultSyncLogSourceServer = sourceServer;
+        _defaultSyncLogStoreType = storeType;
     }
 
     /// <summary>
@@ -1103,6 +1127,12 @@ public class DentstageToolAppContext : DbContext
                 tableName = entry.Entity.GetType().Name;
             }
 
+            if (SyncLogExcludedTables.Contains(tableName))
+            {
+                // ---------- 排除不應同步的敏感或驗證資料表 ----------
+                continue;
+            }
+
             var keyValues = entry.Properties
                 .Where(property => property.Metadata.IsPrimaryKey())
                 .Select(property =>
@@ -1147,7 +1177,8 @@ public class DentstageToolAppContext : DbContext
 
             // ---------- 依來源角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
             var shouldMarkSynced = string.Equals(_syncLogSourceServer, "中央", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_syncLogSourceServer, "Central", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(_syncLogSourceServer, "Central", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogSourceServer, "CentralServer", StringComparison.OrdinalIgnoreCase);
 
             logs.Add(new SyncLog
             {

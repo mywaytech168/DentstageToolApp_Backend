@@ -217,6 +217,9 @@ if (string.IsNullOrWhiteSpace(normalizedRole))
     throw new InvalidOperationException("請設定 Sync.MachineKey 或 Sync.ServerRole，以便辨識中央或門市角色。");
 }
 
+// ---------- 設定 DbContext 的同步紀錄預設來源，確保中央自動標記 Synced ----------
+DentstageToolAppContext.ConfigureSyncLogDefaults(normalizedRole, syncOptions.StoreType);
+
 if (!syncOptions.HasResolvedMachineProfile)
 {
     throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 UserAccounts.Role 是否已設定門市型態。");
