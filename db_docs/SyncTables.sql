@@ -1,6 +1,6 @@
 -- 同步相關資料表建置與欄位補充說明
 -- 說明：StoreSyncStates 與 SyncMachineProfiles 已整併至 UserAccounts 表，
---       門市同步狀態改由 UserAccounts.StoreId / StoreType / LastUploadTime 等欄位記錄。
+--       門市同步狀態改由 UserAccounts.UserUid（對應 StoreId）、Role（對應 StoreType）、LastUploadTime 等欄位記錄。
 
 -- ---------- SyncLogs：同步異動紀錄 ----------
 CREATE TABLE `SyncLogs` (
@@ -21,8 +21,6 @@ CREATE TABLE `SyncLogs` (
 
 -- ---------- UserAccounts：同步欄位補充 ----------
 ALTER TABLE `UserAccounts`
-    ADD COLUMN `StoreId` VARCHAR(100) NULL COMMENT '門市識別碼（分店與中央共用此欄位）',
-    ADD COLUMN `StoreType` VARCHAR(50) NULL COMMENT '門市型態（直營、加盟）',
     ADD COLUMN `ServerIp` VARCHAR(100) NULL COMMENT '伺服器對外 IP',
     ADD COLUMN `LastUploadTime` DATETIME NULL COMMENT '最近一次同步上傳完成時間',
     ADD COLUMN `LastDownloadTime` DATETIME NULL COMMENT '最近一次同步下載完成時間',
