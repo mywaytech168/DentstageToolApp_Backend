@@ -1,4 +1,5 @@
 using System;
+using DentstageToolApp.Api.Models.Auth;
 using DentstageToolApp.Api.Models.Sync;
 
 namespace DentstageToolApp.Api.Models.Options;
@@ -8,6 +9,31 @@ namespace DentstageToolApp.Api.Models.Options;
 /// </summary>
 public class SyncOptions
 {
+    /// <summary>
+    /// Token 欄位的同步鎖，確保多執行緒同時讀寫時不會互相覆蓋。
+    /// </summary>
+    private readonly object _tokenLock = new();
+
+    /// <summary>
+    /// 目前記憶體內保存的 Access Token，供同步呼叫帶入授權標頭。
+    /// </summary>
+    private string? _accessToken;
+
+    /// <summary>
+    /// Access Token 的到期時間。
+    /// </summary>
+    private DateTime? _accessTokenExpireAt;
+
+    /// <summary>
+    /// Refresh Token 字串，預留給後續需要延長授權時使用。
+    /// </summary>
+    private string? _refreshToken;
+
+    /// <summary>
+    /// Refresh Token 的到期時間。
+    /// </summary>
+    private DateTime? _refreshTokenExpireAt;
+
     /// <summary>
     /// 伺服器角色，分為中央伺服器、直營門市或連盟門市。
     /// </summary>
@@ -62,6 +88,53 @@ public class SyncOptions
     /// 單次背景同步要處理的最大筆數，避免一次讀取過多資料造成效能問題。
     /// </summary>
     public int BackgroundSyncBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// 取得目前的 Access Token，若尚未登入則回傳 null。
+    /// </summary>
+    public string? GetAccessToken()
+    {
+        lock (_tokenLock)
+        {
+            return _accessToken;
+        }
+    }
+
+    /// <summary>
+    /// 判斷 Access Token 是否仍在有效期限內，預設保留 1 分鐘安全緩衝時間。
+    /// </summary>
+    public bool HasValidAccessToken(TimeSpan? safetyMargin = null)
+    {
+        lock (_tokenLock)
+        {
+            if (string.IsNullOrWhiteSpace(_accessToken) || !_accessTokenExpireAt.HasValue)
+            {
+                return false;
+            }
+
+            var margin = safetyMargin ?? TimeSpan.FromMinutes(1);
+            var threshold = _accessTokenExpireAt.Value - margin;
+            return threshold > DateTime.UtcNow;
+        }
+    }
+
+    /// <summary>
+    /// 判斷 Refresh Token 是否有效，供未來擴充自動換發權杖時使用。
+    /// </summary>
+    public bool HasValidRefreshToken(TimeSpan? safetyMargin = null)
+    {
+        lock (_tokenLock)
+        {
+            if (string.IsNullOrWhiteSpace(_refreshToken) || !_refreshTokenExpireAt.HasValue)
+            {
+                return false;
+            }
+
+            var margin = safetyMargin ?? TimeSpan.FromMinutes(1);
+            var threshold = _refreshTokenExpireAt.Value - margin;
+            return threshold > DateTime.UtcNow;
+        }
+    }
 
     /// <summary>
     /// 判斷是否已透過機碼解析出必要的門市資訊。
@@ -128,6 +201,42 @@ public class SyncOptions
         if (!string.IsNullOrWhiteSpace(storeType))
         {
             StoreType = storeType;
+        }
+    }
+
+    /// <summary>
+    /// 依登入回應更新權杖與門市資料，確保背景同步呼叫使用最新資訊。
+    /// </summary>
+    public void ApplyLoginResponse(LoginResponse response)
+    {
+        if (response is null)
+        {
+            throw new ArgumentNullException(nameof(response));
+        }
+
+        ApplyMachineProfile(response.ServerRole, response.StoreId, response.StoreType);
+        UpdateAuthTokens(response.AccessToken, response.AccessTokenExpireAt, response.RefreshToken, response.RefreshTokenExpireAt);
+    }
+
+    /// <summary>
+    /// 清除記憶體中的權杖資訊，通常在授權失敗或重新登入前呼叫。
+    /// </summary>
+    public void ClearAuthTokens()
+    {
+        UpdateAuthTokens(null, null, null, null);
+    }
+
+    /// <summary>
+    /// 更新 Access Token 與 Refresh Token 的內容與到期時間。
+    /// </summary>
+    public void UpdateAuthTokens(string? accessToken, DateTime? accessTokenExpireAt, string? refreshToken, DateTime? refreshTokenExpireAt)
+    {
+        lock (_tokenLock)
+        {
+            _accessToken = string.IsNullOrWhiteSpace(accessToken) ? null : accessToken;
+            _accessTokenExpireAt = accessTokenExpireAt;
+            _refreshToken = string.IsNullOrWhiteSpace(refreshToken) ? null : refreshToken;
+            _refreshTokenExpireAt = refreshTokenExpireAt;
         }
     }
 }
