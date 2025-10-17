@@ -41,6 +41,11 @@ public class SyncUploadRequest
 public class SyncChangeDto
 {
     /// <summary>
+    /// 同步紀錄主鍵識別碼，沿用門市端的 SyncLog.Id，便於中央維持一致性。
+    /// </summary>
+    public Guid? LogId { get; set; }
+
+    /// <summary>
     /// 目標資料表名稱。
     /// </summary>
     public string TableName { get; set; } = null!;
@@ -54,6 +59,11 @@ public class SyncChangeDto
     /// 異動時間。
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 同步紀錄建立時間（門市寫入 SyncLog 的時間），用於還原 SyncedAt。
+    /// </summary>
+    public DateTime? SyncedAt { get; set; }
 
     /// <summary>
     /// 資料表紀錄識別值。

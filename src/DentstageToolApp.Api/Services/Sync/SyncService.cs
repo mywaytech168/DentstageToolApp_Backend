@@ -107,7 +107,22 @@ public class SyncService : ISyncService
                     if (processed)
                     {
                         result.ProcessedCount++;
-                        syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now, logSequence++));
+                        // ---------- 優先沿用門市提供的 SyncLog Id 與 SyncedAt，確保中央與分店紀錄一致 ----------
+                        var sequence = logSequence++;
+                        SyncLog? existedLog = null;
+                        if (change.LogId.HasValue)
+                        {
+                            existedLog = await _dbContext.SyncLogs.FindAsync(new object?[] { change.LogId.Value }, cancellationToken);
+                        }
+
+                        if (existedLog is null)
+                        {
+                            syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now, sequence));
+                        }
+                        else
+                        {
+                            UpdateSyncLog(existedLog, change, request.StoreId, request.StoreType, now, sequence);
+                        }
                     }
                     else
                     {
@@ -353,10 +368,12 @@ public class SyncService : ISyncService
 
         var change = new SyncChangeDto
         {
+            LogId = log.Id,
             TableName = log.TableName,
             Action = action,
             RecordId = log.RecordId,
-            UpdatedAt = log.UpdatedAt
+            UpdatedAt = log.UpdatedAt,
+            SyncedAt = log.SyncedAt
         };
 
         if (string.Equals(action, "DELETE", StringComparison.Ordinal))
@@ -394,14 +411,15 @@ public class SyncService : ISyncService
     private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime, int sequence)
     {
         var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
-        // ---------- 以伺服器時間為準，並依序號微調時間避免同批紀錄同步時間重複 ----------
-        var syncedAt = fallbackTime.AddTicks(sequence);
-        var updatedAt = change.UpdatedAt ?? syncedAt;
         var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
+        // ---------- 若門市提供同步時間則沿用，否則退回資料的 UpdatedAt 或伺服器時間 ----------
+        var syncedAt = change.SyncedAt ?? change.UpdatedAt ?? fallbackTime.AddTicks(sequence);
+        var updatedAt = change.UpdatedAt ?? syncedAt;
+        var logId = change.LogId ?? Guid.NewGuid();
 
         return new SyncLog
         {
-            Id = Guid.NewGuid(),
+            Id = logId,
             TableName = change.TableName,
             RecordId = change.RecordId,
             Action = action,
@@ -409,9 +427,32 @@ public class SyncService : ISyncService
             SyncedAt = syncedAt,
             SourceServer = storeId,
             StoreType = storeType,
-            Synced = false,
+            Synced = true,
             Payload = payload
         };
+    }
+
+    /// <summary>
+    /// 更新既有同步紀錄的欄位內容，讓中央與門市保持一致。
+    /// </summary>
+    private static void UpdateSyncLog(SyncLog log, SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime, int sequence)
+    {
+        var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
+        var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        // ---------- 門市若提供 SyncedAt 與 UpdatedAt 則優先採用，否則沿用舊值或伺服器時間 ----------
+        var syncedAt = change.SyncedAt ?? (log.SyncedAt != default ? log.SyncedAt : change.UpdatedAt) ?? fallbackTime.AddTicks(sequence);
+        var updatedAt = change.UpdatedAt ?? (log.UpdatedAt != default ? log.UpdatedAt : syncedAt);
+
+        log.TableName = change.TableName;
+        log.RecordId = change.RecordId;
+        log.Action = action;
+        log.UpdatedAt = updatedAt;
+        log.SyncedAt = syncedAt;
+        log.SourceServer = storeId;
+        log.StoreType = storeType;
+        log.Synced = true;
+        log.Payload = payload;
     }
 
     /// <summary>

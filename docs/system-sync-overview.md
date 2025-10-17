@@ -25,7 +25,7 @@
 | 表格 | 目的 | 關鍵欄位 |
 | ---- | ---- | -------- |
 | `orders` | 儲存工單主檔，並提供 `ModificationTimestamp` 做差異判斷 | `OrderUid`, `StoreUid`, `Status`, `Amount`, `ModificationTimestamp` |
-| `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SourceServer`, `StoreType`, `Synced` |
+| `sync_logs` | 紀錄每筆異動（新增／更新／刪除），供分店上傳與中央追蹤 | `Id`, `TableName`, `RecordId`, `Action`, `UpdatedAt`, `SyncedAt`, `SourceServer`, `StoreType`, `Synced` |
 | `user_accounts` | 儲存帳號與門市同步狀態欄位 | `UserUid`, `StoreId`, `StoreType`, `ServerRole`, `ServerIp`, `LastUploadTime`, `LastDownloadTime`, `LastSyncCount` |
 
 - 由應用程式層的 `DentstageToolAppContext` 在 `SaveChanges` / `SaveChangesAsync` 進行追蹤，將所有新增、更新、刪除的實體轉換為 `sync_logs`，完全取代資料庫 Trigger。
@@ -37,7 +37,7 @@
 ## 同步流程
 1. **分店上傳**
    - 定期查詢 `sync_logs` 中 `Synced = 0` 的異動資料。
-   - 打包成 JSON （包含 `StoreId`、`TableName`、`Action`、`Payload` 等）送至中央 API。
+   - 打包成 JSON （包含 `StoreId`、`LogId`、`SyncedAt`、`TableName`、`Action`、`Payload` 等）送至中央 API。
    - 中央伺服器依照 Action 進行 Upsert 或刪除，再寫入中央 `sync_logs` 做稽核，並更新 `user_accounts` 的伺服器角色、IP 與最後上傳時間。
    - 回傳成功後，分店將該批 `Synced` 設為 1。
 
@@ -72,8 +72,10 @@
   "serverIp": "10.1.10.5",
   "changes": [
     {
+      "logId": "0a6b1fd3-8a3c-4f5e-9a8b-3c5f7c1f2d8e",
       "tableName": "orders",
       "action": "UPDATE",
+      "syncedAt": "2024-04-15T10:19:55Z",
       "updatedAt": "2024-04-15T10:20:00Z",
       "recordId": "ORD-1001",
       "payload": {
