@@ -1145,6 +1145,10 @@ public class DentstageToolAppContext : DbContext
                 }
             }
 
+            // ---------- 依來源角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
+            var shouldMarkSynced = string.Equals(_syncLogSourceServer, "中央", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogSourceServer, "Central", StringComparison.OrdinalIgnoreCase);
+
             logs.Add(new SyncLog
             {
                 TableName = tableName,
@@ -1153,7 +1157,7 @@ public class DentstageToolAppContext : DbContext
                 UpdatedAt = now,
                 SourceServer = _syncLogSourceServer,
                 StoreType = _syncLogStoreType,
-                Synced = false,
+                Synced = shouldMarkSynced,
                 Payload = payloadJson
             });
         }
