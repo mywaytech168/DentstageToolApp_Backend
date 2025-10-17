@@ -151,7 +151,8 @@ public class StoreSyncBackgroundService : BackgroundService
             var batchSize = _syncOptions.BackgroundSyncBatchSize <= 0 ? 100 : _syncOptions.BackgroundSyncBatchSize;
             var pendingLogs = await dbContext.SyncLogs
                 .Where(log => !log.Synced)
-                .OrderBy(log => log.UpdatedAt)
+                .OrderBy(log => log.SyncedAt)
+                .ThenBy(log => log.UpdatedAt)
                 .Take(batchSize)
                 .ToListAsync(cancellationToken);
 
@@ -269,7 +270,8 @@ public class StoreSyncBackgroundService : BackgroundService
                 storeState = new StoreSyncState
                 {
                     StoreId = storeId,
-                    StoreType = storeType
+                    StoreType = storeType,
+                    LastSyncCount = 0
                 };
 
                 dbContext.StoreSyncStates.Add(storeState);
@@ -282,6 +284,7 @@ public class StoreSyncBackgroundService : BackgroundService
             }
 
             storeState.LastUploadTime = DateTime.UtcNow;
+            storeState.LastSyncCount = totalProcessed;
 
             await dbContext.SaveChangesAsync(cancellationToken);
 
@@ -421,7 +424,7 @@ public class StoreSyncBackgroundService : BackgroundService
             var changes = response.Changes ?? new List<SyncChangeDto>();
             if (changes.Count == 0 && response.Orders.Count == 0)
             {
-                await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, cancellationToken);
+                await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, 0, cancellationToken);
                 await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
                 _logger.LogInformation("中央下發流程完成，本次無差異資料。StoreId: {StoreId}", storeId);
                 return;
@@ -456,7 +459,7 @@ public class StoreSyncBackgroundService : BackgroundService
                 }
             }
 
-            await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, cancellationToken);
+            await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, processedCount, cancellationToken);
 
             await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
 
@@ -576,6 +579,7 @@ public class StoreSyncBackgroundService : BackgroundService
         string storeType,
         string serverRole,
         DateTime serverTime,
+        int processedCount,
         CancellationToken cancellationToken)
     {
         storeState ??= new StoreSyncState
@@ -596,6 +600,7 @@ public class StoreSyncBackgroundService : BackgroundService
         }
 
         storeState.LastDownloadTime = serverTime;
+        storeState.LastSyncCount = processedCount;
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }

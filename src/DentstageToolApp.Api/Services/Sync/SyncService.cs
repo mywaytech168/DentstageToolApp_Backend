@@ -23,7 +23,6 @@ public class SyncService : ISyncService
     /// 同步下載的預設分頁大小，避免一次抓取過多資料。
     /// </summary>
     private const int DefaultPageSize = 100;
-    private const char SyncCursorSeparator = '|';
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
@@ -149,26 +148,13 @@ public class SyncService : ISyncService
         }
 
         var serverTime = DateTime.UtcNow;
-        // ---------- 標準化伺服器角色並先取得門市狀態，後續可使用狀態內的同步游標 ----------
+        // ---------- 標準化伺服器角色並先取得門市狀態，後續可使用狀態內的時間戳判斷差異 ----------
         var normalizedRole = SyncServerRoles.Normalize(remoteServerRole ?? storeType);
         var resolvedIp = remoteIpAddress;
         var storeState = await EnsureStoreStateAsync(storeId, storeType, normalizedRole, resolvedIp, cancellationToken);
 
-        // ---------- 以請求與資料庫記錄的游標綜合判斷上次同步位置 ----------
+        // ---------- 以請求與資料庫記錄的最後同步時間綜合判斷上次同步位置 ----------
         var effectiveLastSyncTime = lastSyncTime ?? storeState.LastDownloadTime;
-        var lastCursorId = 0L;
-        if (TryParseCursor(storeState.LastCursor, out var cursorTime, out var cursorId))
-        {
-            if (!effectiveLastSyncTime.HasValue || cursorTime > effectiveLastSyncTime.Value)
-            {
-                effectiveLastSyncTime = cursorTime;
-                lastCursorId = cursorId;
-            }
-            else if (effectiveLastSyncTime.Value == cursorTime)
-            {
-                lastCursorId = cursorId;
-            }
-        }
 
         // ---------- 依同步紀錄判斷需要下發的異動 ----------
         var logsQuery = _dbContext.SyncLogs.AsQueryable();
@@ -176,13 +162,12 @@ public class SyncService : ISyncService
         if (effectiveLastSyncTime.HasValue)
         {
             var syncTime = effectiveLastSyncTime.Value;
-            var cursorIdForQuery = lastCursorId;
-            logsQuery = logsQuery.Where(log => log.UpdatedAt > syncTime
-                || (cursorIdForQuery > 0 && log.UpdatedAt == syncTime && log.Id > cursorIdForQuery));
+            logsQuery = logsQuery.Where(log => log.SyncedAt > syncTime);
         }
 
         var pendingLogs = await logsQuery
-            .OrderBy(log => log.UpdatedAt)
+            .OrderBy(log => log.SyncedAt)
+            .ThenBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
             .Take(DefaultPageSize)
             .ToListAsync(cancellationToken);
@@ -237,20 +222,10 @@ public class SyncService : ISyncService
         {
             storeState.ServerIp = resolvedIp;
         }
-        storeState.LastDownloadTime = serverTime;
-        if (pendingLogs.Count > 0)
-        {
-            var lastLog = pendingLogs[^1];
-            storeState.LastCursor = BuildCursor(lastLog.UpdatedAt, lastLog.Id);
-        }
-        else if (effectiveLastSyncTime.HasValue)
-        {
-            storeState.LastCursor = BuildCursor(effectiveLastSyncTime.Value, 0);
-        }
-        else
-        {
-            storeState.LastCursor = BuildCursor(serverTime, 0);
-        }
+        storeState.LastDownloadTime = pendingLogs.Count > 0
+            ? pendingLogs[^1].SyncedAt
+            : serverTime;
+        storeState.LastSyncCount = pendingLogs.Count;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
@@ -318,17 +293,19 @@ public class SyncService : ISyncService
     private static SyncLog CreateSyncLog(SyncChangeDto change, string storeId, string storeType, DateTime fallbackTime, int sequence)
     {
         var payload = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
-        // ---------- 以伺服器時間為準，並依序號微調時間避免同筆請求產生相同時間戳 ----------
-        var serverTimestamp = fallbackTime.AddTicks(sequence);
-        var updatedAt = serverTimestamp;
+        // ---------- 以伺服器時間為準，並依序號微調時間避免同批紀錄同步時間重複 ----------
+        var syncedAt = fallbackTime.AddTicks(sequence);
+        var updatedAt = change.UpdatedAt ?? syncedAt;
         var action = change.Action?.Trim().ToUpperInvariant() ?? string.Empty;
 
         return new SyncLog
         {
+            Id = Guid.NewGuid(),
             TableName = change.TableName,
             RecordId = change.RecordId,
             Action = action,
             UpdatedAt = updatedAt,
+            SyncedAt = syncedAt,
             SourceServer = storeId,
             StoreType = storeType,
             Synced = false,
@@ -671,47 +648,6 @@ public class SyncService : ISyncService
     }
 
     /// <summary>
-    /// 建立同步游標字串，格式為 {時間戳}|{同步紀錄 Id}。
-    /// </summary>
-    private static string BuildCursor(DateTime timestamp, long lastLogId)
-    {
-        // ---------- 使用不受文化影響的格式避免時區與格式差異 ----------
-        return string.Format(CultureInfo.InvariantCulture, "{0:O}{1}{2}", timestamp, SyncCursorSeparator, lastLogId);
-    }
-
-    /// <summary>
-    /// 嘗試解析同步游標字串，取得時間戳與最後處理的同步紀錄 Id。
-    /// </summary>
-    private static bool TryParseCursor(string? rawCursor, out DateTime timestamp, out long lastLogId)
-    {
-        timestamp = default;
-        lastLogId = 0;
-
-        if (string.IsNullOrWhiteSpace(rawCursor))
-        {
-            return false;
-        }
-
-        var segments = rawCursor.Split(SyncCursorSeparator, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (segments.Length != 2)
-        {
-            return false;
-        }
-
-        if (!DateTime.TryParse(segments[0], CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out timestamp))
-        {
-            return false;
-        }
-
-        if (!long.TryParse(segments[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out lastLogId))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    /// <summary>
     /// 確保門市同步狀態存在，若無則依門市型態建立一筆獨立資料。
     /// </summary>
     private async Task<StoreSyncState> EnsureStoreStateAsync(string storeId, string storeType, string? serverRole, string? serverIp, CancellationToken cancellationToken)
@@ -739,7 +675,8 @@ public class SyncService : ISyncService
             ServerRole = serverRole,
             ServerIp = serverIp,
             LastUploadTime = null,
-            LastDownloadTime = null
+            LastDownloadTime = null,
+            LastSyncCount = 0
         };
         await _dbContext.StoreSyncStates.AddAsync(storeState, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);

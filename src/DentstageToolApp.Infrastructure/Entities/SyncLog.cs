@@ -8,9 +8,9 @@ namespace DentstageToolApp.Infrastructure.Entities;
 public class SyncLog
 {
     /// <summary>
-    /// 主鍵識別碼。
+    /// 主鍵識別碼，使用 Guid 避免不同來源在高併發時產生重複。
     /// </summary>
-    public long Id { get; set; }
+    public Guid Id { get; set; }
 
     /// <summary>
     /// 目標資料表名稱。
@@ -28,9 +28,14 @@ public class SyncLog
     public string Action { get; set; } = null!;
 
     /// <summary>
-    /// 異動時間，作為差異比對依據。
+    /// 異動時間，記錄資料本身更新的時間點。
     /// </summary>
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 同步時間，記錄異動實際同步到伺服器的時間，供下載流程判斷差異。
+    /// </summary>
+    public DateTime SyncedAt { get; set; }
 
     /// <summary>
     /// 異動來源伺服器，協助辨識是中央或分店。
