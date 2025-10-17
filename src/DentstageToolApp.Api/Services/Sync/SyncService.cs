@@ -29,8 +29,6 @@ public class SyncService : ISyncService
 
     private const string PhotoBinaryField = "fileContentBase64";
     private const string PhotoExtensionField = "fileExtension";
-    private const int DownloadCandidateLimit = 200;
-
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<SyncService> _logger;
     private readonly PhotoStorageOptions _photoStorageOptions;
@@ -73,7 +71,7 @@ public class SyncService : ISyncService
         var resolvedIp = string.IsNullOrWhiteSpace(remoteIpAddress) ? request.ServerIp : remoteIpAddress;
         var storeAccount = await EnsureStoreAccountAsync(request.StoreId, request.StoreType, normalizedRole, resolvedIp, cancellationToken);
 
-        if (request.Changes is null || request.Changes.Count == 0)
+        if (request.Change is null)
         {
             // ---------- 無異動時提早回應 ----------
             _logger.LogInformation("StoreId {StoreId} 於 {Time} 呼叫同步上傳，但無任何異動紀錄。", request.StoreId, now);
@@ -89,16 +87,7 @@ public class SyncService : ISyncService
             return result;
         }
 
-        var targetChange = request.Changes[0];
-        if (request.Changes.Count > 1)
-        {
-            // ---------- 若門市一次送出多筆，僅處理首筆並記錄其餘已被忽略 ----------
-            result.IgnoredCount += request.Changes.Count - 1;
-            _logger.LogWarning(
-                "StoreId {StoreId} 一次上傳 {Count} 筆異動，僅處理首筆，其餘將於下一輪重新送出。",
-                request.StoreId,
-                request.Changes.Count);
-        }
+        var targetChange = request.Change!;
 
         _dbContext.DisableSyncLogAutoAppend();
         try
@@ -187,6 +176,13 @@ public class SyncService : ISyncService
         if (effectiveLastSyncTime.HasValue)
         {
             var syncTime = effectiveLastSyncTime.Value;
+
+            if (syncTime > serverTime)
+            {
+                // ---------- 若紀錄時間超前於中央伺服器，往前回推十分鐘避免漏資料 ----------
+                syncTime = syncTime.AddMinutes(-10);
+            }
+
             logsQuery = logsQuery.Where(log => log.SyncedAt > syncTime);
         }
 
@@ -194,7 +190,6 @@ public class SyncService : ISyncService
             .OrderBy(log => log.SyncedAt)
             .ThenBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
-            .Take(DownloadCandidateLimit)
             .ToListAsync(cancellationToken);
 
         // ---------- 只挑選一筆有效同步紀錄回傳，確保門市逐筆處理並立即落盤 ----------
@@ -261,12 +256,6 @@ public class SyncService : ISyncService
             }
         }
 
-        var changes = new List<SyncChangeDto>(capacity: 1);
-        if (selectedChange is not null)
-        {
-            changes.Add(selectedChange);
-        }
-
         // ---------- 若回傳資料為工單且非刪除動作，同步舊有 Orders 欄位以維持相容 ----------
         var orders = new List<OrderSyncDto>();
         if (selectedChange is not null
@@ -295,20 +284,36 @@ public class SyncService : ISyncService
             storeAccount.ServerIp = resolvedIp;
         }
 
+        DateTime ResolveDownloadTime(DateTime reference)
+        {
+            if (reference <= serverTime)
+            {
+                return reference;
+            }
+
+            var tolerant = reference.AddMinutes(-10);
+            if (tolerant > serverTime)
+            {
+                tolerant = serverTime;
+            }
+
+            return tolerant;
+        }
+
         if (selectedLog is not null)
         {
-            storeAccount.LastDownloadTime = selectedLog.SyncedAt;
+            storeAccount.LastDownloadTime = ResolveDownloadTime(selectedLog.SyncedAt);
             storeAccount.LastSyncCount = 1;
         }
         else if (pendingLogs.Count > 0)
         {
             // ---------- 雖未找到合適資料仍更新檢視位置，避免下一次重複讀取相同紀錄 ----------
-            storeAccount.LastDownloadTime = pendingLogs[^1].SyncedAt;
+            storeAccount.LastDownloadTime = ResolveDownloadTime(pendingLogs[^1].SyncedAt);
             storeAccount.LastSyncCount = 0;
         }
         else
         {
-            storeAccount.LastDownloadTime = serverTime;
+            storeAccount.LastDownloadTime = ResolveDownloadTime(serverTime);
             storeAccount.LastSyncCount = 0;
         }
 
@@ -319,7 +324,7 @@ public class SyncService : ISyncService
             StoreId = storeId,
             StoreType = storeType,
             ServerTime = serverTime,
-            Changes = changes,
+            Change = selectedChange,
             Orders = orders
         };
     }

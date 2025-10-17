@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace DentstageToolApp.Api.Models.Sync;
@@ -30,9 +29,9 @@ public class SyncUploadRequest
     public string? ServerIp { get; set; }
 
     /// <summary>
-    /// 異動清單。
+    /// 單筆異動資料。
     /// </summary>
-    public IList<SyncChangeDto> Changes { get; set; } = new List<SyncChangeDto>();
+    public SyncChangeDto? Change { get; set; }
 }
 
 /// <summary>

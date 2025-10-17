@@ -232,7 +232,7 @@ public class StoreSyncBackgroundService : BackgroundService
                     StoreType = storeType,
                     ServerRole = serverRole,
                     ServerIp = _syncOptions.ServerIp,
-                    Changes = new List<SyncChangeDto> { change }
+                    Change = change
                 };
 
                 if (_logger.IsEnabled(LogLevel.Debug))
@@ -244,7 +244,7 @@ public class StoreSyncBackgroundService : BackgroundService
                 try
                 {
                     // ---------- 逐筆呼叫中央 API，確保單筆成功才會標記同步 ----------
-                    var uploadResult = await _remoteSyncApiClient.UploadChangesAsync(singleRequest, cancellationToken);
+                    var uploadResult = await _remoteSyncApiClient.UploadChangeAsync(singleRequest, cancellationToken);
                     if (uploadResult is null)
                     {
                         failureCount++;
@@ -485,55 +485,44 @@ public class StoreSyncBackgroundService : BackgroundService
             // ---------- 標記後續新增的同步紀錄皆來自中央，方便資料清理並帶入伺服器角色 ----------
             dbContext.SetSyncLogMetadata(storeId, storeType, serverRole);
 
-            var changes = response.Changes ?? new List<SyncChangeDto>();
-            if (changes.Count == 0 && response.Orders.Count == 0)
+            var change = response.Change;
+            if (change is null && response.Orders.Count == 0)
             {
-                await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, response.ServerTime, 0, cancellationToken);
+                await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, null, response.ServerTime, 0, cancellationToken);
                 await MarkCentralLogsAsSyncedAsync(dbContext, storeId, cancellationToken);
                 _logger.LogInformation("中央下發流程完成，本次無差異資料。StoreId: {StoreId}", storeId);
                 return;
             }
 
             var processedCount = 0;
+            DateTime? processedSyncedAt = null;
 
-            if (changes.Count > 0)
+            if (change is not null)
             {
                 dbContext.DisableSyncLogAutoAppend();
                 try
                 {
-                    var changeLogIds = changes
-                        .Where(change => change.LogId.HasValue)
-                        .Select(change => change.LogId!.Value)
-                        .Distinct()
-                        .ToList();
+                    var exists = false;
 
-                    var existedLogIds = changeLogIds.Count == 0
-                        ? new List<Guid>()
-                        : await dbContext.SyncLogs
-                            .AsNoTracking()
-                            .Where(log => changeLogIds.Contains(log.Id))
-                            .Select(log => log.Id)
-                            .ToListAsync(cancellationToken);
-
-                    var knownLogIds = new HashSet<Guid>(existedLogIds);
-
-                    foreach (var change in changes)
+                    if (change.LogId.HasValue)
                     {
-                        if (change.LogId.HasValue && knownLogIds.Contains(change.LogId.Value))
-                        {
-                            // ---------- 若本地端已存在相同 LogId，代表曾處理過該筆異動，直接略過 ----------
-                            _logger.LogInformation("門市資料庫已存在同步紀錄 {LogId}，略過重複套用。", change.LogId.Value);
-                            continue;
-                        }
+                        exists = await dbContext.SyncLogs
+                            .AsNoTracking()
+                            .AnyAsync(log => log.Id == change.LogId.Value, cancellationToken);
+                    }
 
-                        if (change.LogId.HasValue)
-                        {
-                            knownLogIds.Add(change.LogId.Value);
-                        }
-
+                    if (exists)
+                    {
+                        _logger.LogInformation("門市資料庫已存在同步紀錄 {LogId}，略過重複套用。", change.LogId!.Value);
+                        processedSyncedAt = change.SyncedAt ?? change.UpdatedAt ?? response.ServerTime;
+                    }
+                    else
+                    {
                         await UpsertLocalSyncLogAsync(dbContext, change, storeId, storeType, response.ServerTime, cancellationToken);
                         await ApplyChangeAsync(dbContext, change, cancellationToken);
-                        processedCount++;
+                        await dbContext.SaveChangesAsync(cancellationToken);
+                        processedCount = 1;
+                        processedSyncedAt = change.SyncedAt ?? change.UpdatedAt ?? response.ServerTime;
                     }
                 }
                 finally
@@ -544,7 +533,8 @@ public class StoreSyncBackgroundService : BackgroundService
             else
             {
                 // ---------- 沒有提供通用異動格式時，仍以工單同步方式處理 ----------
-                foreach (var orderDto in response.Orders)
+                var orderDto = response.Orders.FirstOrDefault();
+                if (orderDto is not null)
                 {
                     var order = await dbContext.Orders
                         .FirstOrDefaultAsync(entity => entity.OrderUid == orderDto.OrderUid, cancellationToken);
@@ -560,11 +550,12 @@ public class StoreSyncBackgroundService : BackgroundService
                     }
 
                     ApplyOrderSyncData(order, orderDto);
+                    await dbContext.SaveChangesAsync(cancellationToken);
+                    processedCount = 1;
+                    processedSyncedAt = response.ServerTime;
                 }
-
-                processedCount = response.Orders.Count;
             }
-            await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, response.ServerTime, processedCount, cancellationToken);
+            await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, processedSyncedAt, response.ServerTime, processedCount, cancellationToken);
 
             await MarkCentralLogsAsSyncedAsync(dbContext, storeId, cancellationToken);
             _logger.LogInformation("中央下發流程完成，StoreId: {StoreId}, 同步筆數: {Count}", storeId, processedCount);
@@ -722,6 +713,7 @@ public class StoreSyncBackgroundService : BackgroundService
         UserAccount storeAccount,
         string storeType,
         string serverRole,
+        DateTime? processedSyncedAt,
         DateTime serverTime,
         int processedCount,
         CancellationToken cancellationToken)
@@ -742,7 +734,15 @@ public class StoreSyncBackgroundService : BackgroundService
             storeAccount.ServerIp = _syncOptions.ServerIp;
         }
 
-        storeAccount.LastDownloadTime = serverTime;
+        var downloadTime = processedSyncedAt ?? serverTime;
+
+        if (processedSyncedAt.HasValue && processedSyncedAt.Value > serverTime)
+        {
+            // ---------- 若同步時間超前於中央伺服器，往前回推十分鐘減少時鐘差異造成的漏資料 ----------
+            downloadTime = processedSyncedAt.Value.AddMinutes(-10);
+        }
+
+        storeAccount.LastDownloadTime = downloadTime;
         storeAccount.LastSyncCount = processedCount;
 
         await dbContext.SaveChangesAsync(cancellationToken);

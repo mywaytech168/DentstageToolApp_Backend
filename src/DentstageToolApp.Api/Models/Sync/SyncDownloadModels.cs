@@ -24,9 +24,9 @@ public class SyncDownloadResponse
     public DateTime ServerTime { get; set; }
 
     /// <summary>
-    /// 通用的差異異動清單，包含資料表、動作別與實際內容。
+    /// 通用的差異異動資料，包含資料表、動作別與實際內容。
     /// </summary>
-    public IList<SyncChangeDto> Changes { get; set; } = new List<SyncChangeDto>();
+    public SyncChangeDto? Change { get; set; }
 
     /// <summary>
     /// 保留工單差異清單做為舊流程相容用，將在所有端調整完畢後移除。

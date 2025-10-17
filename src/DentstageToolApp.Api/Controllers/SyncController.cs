@@ -83,7 +83,7 @@ public class SyncController : ControllerBase
     /// <summary>
     /// 取得中央伺服器的最新差異資料。
     /// </summary>
-    [HttpGet("changes")]
+    [HttpGet("change")]
     [Authorize]
     public async Task<ActionResult<SyncDownloadResponse>> GetChangesAsync([FromQuery] SyncDownloadQuery query, CancellationToken cancellationToken)
     {
