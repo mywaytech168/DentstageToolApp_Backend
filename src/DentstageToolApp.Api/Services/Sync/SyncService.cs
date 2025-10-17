@@ -194,10 +194,48 @@ public class SyncService : ISyncService
             .ThenBy(log => log.Id)
             .ToListAsync(cancellationToken);
 
+        // ---------- 預先蒐集本次候選同步紀錄的識別碼，用於資料庫查詢是否已存在相同紀錄 ----------
+        var candidateLogIds = pendingLogs
+            .Select(log => log.Id)
+            .Distinct()
+            .ToList();
+
+        var storeLogIds = new HashSet<Guid>();
+        if (candidateLogIds.Count > 0)
+        {
+            var normalizedStoreId = storeId.Trim().ToLowerInvariant();
+            // ---------- 查詢資料庫內由同一門市建立的同步紀錄，若已存在代表門市曾處理過，避免重複派發 ----------
+            var existedLogIds = await _dbContext.SyncLogs
+                .AsNoTracking()
+                .Where(localLog => candidateLogIds.Contains(localLog.Id)
+                    && !string.IsNullOrWhiteSpace(localLog.SourceServer))
+                .Select(localLog => new
+                {
+                    localLog.Id,
+                    Source = localLog.SourceServer!
+                })
+                .ToListAsync(cancellationToken);
+
+            foreach (var item in existedLogIds)
+            {
+                if (string.Equals(item.Source, storeId, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.Source, normalizedStoreId, StringComparison.OrdinalIgnoreCase))
+                {
+                    storeLogIds.Add(item.Id);
+                }
+            }
+        }
+
         var changes = new List<SyncChangeDto>(pendingLogs.Count);
         var appendedLogIds = new HashSet<Guid>();
         foreach (var log in pendingLogs)
         {
+            // ---------- 若門市資料庫已存在相同 LogId，代表先前已完成同步，直接略過 ----------
+            if (storeLogIds.Contains(log.Id))
+            {
+                continue;
+            }
+
             // ---------- 若同一次回應已包含相同 LogId，則略過避免重複同步 ----------
             if (!appendedLogIds.Add(log.Id))
             {

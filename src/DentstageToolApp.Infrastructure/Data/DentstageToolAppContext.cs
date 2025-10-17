@@ -17,9 +17,11 @@ public class DentstageToolAppContext : DbContext
 {
     private string? _syncLogSourceServer;
     private string? _syncLogStoreType;
+    private string? _syncLogServerRole;
     private bool _suppressSyncLogAppend;
     private static string? _defaultSyncLogSourceServer;
     private static string? _defaultSyncLogStoreType;
+    private static string? _defaultSyncLogServerRole;
     private static readonly JsonSerializerOptions SyncLogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
         DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
@@ -42,6 +44,7 @@ public class DentstageToolAppContext : DbContext
         // ---------- 初始化同步紀錄預設來源，確保中央環境自動套用 Synced = 1 ----------
         _syncLogSourceServer = _defaultSyncLogSourceServer;
         _syncLogStoreType = _defaultSyncLogStoreType;
+        _syncLogServerRole = _defaultSyncLogServerRole;
     }
 
     /// <summary>
@@ -74,10 +77,14 @@ public class DentstageToolAppContext : DbContext
     /// <summary>
     /// 設定同步紀錄的門市與來源資訊，讓呼叫者可於同一交易中補齊欄位。
     /// </summary>
-    public void SetSyncLogMetadata(string? sourceServer, string? storeType)
+    public void SetSyncLogMetadata(string? sourceServer, string? storeType, string? serverRole = null)
     {
         _syncLogSourceServer = sourceServer;
         _syncLogStoreType = storeType;
+        if (!string.IsNullOrWhiteSpace(serverRole))
+        {
+            _syncLogServerRole = serverRole;
+        }
     }
 
     /// <summary>
@@ -88,6 +95,7 @@ public class DentstageToolAppContext : DbContext
         // ---------- 恢復為預設來源設定，避免跨交易沿用錯誤資訊 ----------
         _syncLogSourceServer = _defaultSyncLogSourceServer;
         _syncLogStoreType = _defaultSyncLogStoreType;
+        _syncLogServerRole = _defaultSyncLogServerRole;
     }
 
     /// <summary>
@@ -109,11 +117,12 @@ public class DentstageToolAppContext : DbContext
     /// <summary>
     /// 設定預設的同步紀錄來源，讓中央或門市環境可指定 AppendSyncLogs 的同步旗標與來源別名。
     /// </summary>
-    public static void ConfigureSyncLogDefaults(string? sourceServer, string? storeType)
+    public static void ConfigureSyncLogDefaults(string? sourceServer, string? storeType, string? serverRole)
     {
         // ---------- 儲存預設值給所有 DbContext 實例使用，供中央環境預設標記為已同步 ----------
         _defaultSyncLogSourceServer = sourceServer;
         _defaultSyncLogStoreType = storeType;
+        _defaultSyncLogServerRole = serverRole;
     }
 
     /// <summary>
@@ -1123,10 +1132,10 @@ public class DentstageToolAppContext : DbContext
                 }
             }
 
-            // ---------- 依來源角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
-            var shouldMarkSynced = string.Equals(_syncLogSourceServer, "中央", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_syncLogSourceServer, "Central", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_syncLogSourceServer, "CentralServer", StringComparison.OrdinalIgnoreCase);
+            // ---------- 依伺服器角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
+            var shouldMarkSynced = string.Equals(_syncLogServerRole, "中央", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogServerRole, "Central", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogServerRole, "CentralServer", StringComparison.OrdinalIgnoreCase);
 
             logs.Add(new SyncLog
             {
