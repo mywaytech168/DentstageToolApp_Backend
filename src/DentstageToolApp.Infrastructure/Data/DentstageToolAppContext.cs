@@ -277,10 +277,6 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CreatedBy).HasMaxLength(50);
         entity.Property(e => e.ModifiedBy).HasMaxLength(50);
         entity.Property(e => e.DisplayName).HasMaxLength(100);
-        entity.Property(e => e.StoreId)
-            .HasMaxLength(100);
-        entity.Property(e => e.StoreType)
-            .HasMaxLength(50);
         entity.Property(e => e.Role).HasMaxLength(50);
         entity.Property(e => e.ServerRole).HasMaxLength(50);
         entity.Property(e => e.ServerIp).HasMaxLength(100);

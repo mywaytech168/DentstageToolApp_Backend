@@ -76,7 +76,7 @@ public class SyncService : ISyncService
         {
             // ---------- 無異動時提早回應 ----------
             _logger.LogInformation("StoreId {StoreId} 於 {Time} 呼叫同步上傳，但無任何異動紀錄。", request.StoreId, now);
-            storeAccount.StoreType = request.StoreType;
+            storeAccount.Role = request.StoreType;
             storeAccount.ServerRole = normalizedRole;
             if (!string.IsNullOrWhiteSpace(resolvedIp))
             {
@@ -138,7 +138,7 @@ public class SyncService : ISyncService
                 await _dbContext.SyncLogs.AddRangeAsync(syncLogs, cancellationToken);
             }
 
-            storeAccount.StoreType = request.StoreType;
+            storeAccount.Role = request.StoreType;
             storeAccount.ServerRole = normalizedRole;
             if (!string.IsNullOrWhiteSpace(resolvedIp))
             {
@@ -290,7 +290,7 @@ public class SyncService : ISyncService
             }
         }
 
-        storeAccount.StoreType = storeType;
+        storeAccount.Role = storeType;
         storeAccount.ServerRole = normalizedRole;
         if (!string.IsNullOrWhiteSpace(resolvedIp))
         {
@@ -1112,14 +1112,9 @@ public class SyncService : ISyncService
             account.ServerIp = serverIp;
         }
 
-        if (string.IsNullOrWhiteSpace(account.StoreId))
+        if (string.IsNullOrWhiteSpace(account.Role) && !string.IsNullOrWhiteSpace(storeType))
         {
-            account.StoreId = storeId;
-        }
-
-        if (string.IsNullOrWhiteSpace(account.StoreType))
-        {
-            account.StoreType = storeType;
+            account.Role = storeType;
         }
 
         return account;

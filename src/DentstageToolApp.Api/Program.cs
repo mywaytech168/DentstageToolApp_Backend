@@ -177,13 +177,9 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
         throw new InvalidOperationException("使用者帳號尚未設定 ServerRole 欄位，無法判斷中央或門市角色，請至 UserAccounts 補齊資料。");
     }
 
-    // 使用者 UID 即為門市識別碼，角色欄位對應門市型態，統一由 SyncOptions 儲存供後續背景任務使用
-    var resolvedStoreId = string.IsNullOrWhiteSpace(deviceRegistration.UserAccount.StoreId)
-        ? deviceRegistration.UserAccount.UserUid
-        : deviceRegistration.UserAccount.StoreId;
-    var resolvedStoreType = string.IsNullOrWhiteSpace(deviceRegistration.UserAccount.StoreType)
-        ? deviceRegistration.UserAccount.Role
-        : deviceRegistration.UserAccount.StoreType;
+    // 使用者 UID 即為門市識別碼，角色欄位亦做為門市型態，統一寫入 SyncOptions 供後續背景任務使用
+    var resolvedStoreId = deviceRegistration.UserAccount.UserUid;
+    var resolvedStoreType = deviceRegistration.UserAccount.Role;
     syncOptions.ApplyMachineProfile(deviceRegistration.UserAccount.ServerRole, resolvedStoreId, resolvedStoreType);
 
     // ---------- 查詢中央伺服器帳號，取得對外同步 IP ----------
@@ -231,7 +227,7 @@ DentstageToolAppContext.ConfigureSyncLogDefaults(defaultSourceServer, syncOption
 
 if (!syncOptions.HasResolvedMachineProfile)
 {
-    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請確認 UserAccounts.StoreType 或 Role 是否已設定門市型態。");
+    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請確認 UserAccounts.Role 是否已設定門市型態。");
 }
 
 builder.Services.AddSingleton(syncOptions);

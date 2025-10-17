@@ -39,17 +39,7 @@ public class UserAccount
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// 對應門市識別碼，整合 StoreSyncStates 的 StoreId 欄位。
-    /// </summary>
-    public string? StoreId { get; set; }
-
-    /// <summary>
-    /// 門市型態（直營或連盟），供同步流程辨識來源。
-    /// </summary>
-    public string? StoreType { get; set; }
-
-    /// <summary>
-    /// 使用者角色資訊，決定權限等級。
+    /// 使用者角色資訊，亦作為門市型態標記（直營或連盟）。
     /// </summary>
     public string? Role { get; set; }
 

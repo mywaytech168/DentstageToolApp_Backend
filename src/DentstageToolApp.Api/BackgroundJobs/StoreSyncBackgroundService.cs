@@ -71,7 +71,7 @@ public class StoreSyncBackgroundService : BackgroundService
 
         if (!_syncOptions.HasResolvedMachineProfile)
         {
-            _logger.LogWarning("伺服器角色為門市，但尚未透過同步機碼補齊 StoreId/StoreType 設定，請確認 UserAccounts 是否已設定 ServerRole 與 Role。");
+            _logger.LogWarning("伺服器角色為門市，但尚未透過同步機碼補齊 StoreId/Role 設定，請確認 UserAccounts 是否已設定 ServerRole 與 Role。");
             return;
         }
 
@@ -141,17 +141,13 @@ public class StoreSyncBackgroundService : BackgroundService
                 machineAccount = deviceRegistration.UserAccount;
 
                 // ---------- 若資料庫設定更新，立即同步到記憶體中的選項 ----------
-                var accountStoreId = string.IsNullOrWhiteSpace(machineAccount.StoreId)
-                    ? machineAccount.UserUid
-                    : machineAccount.StoreId;
-                var accountStoreType = string.IsNullOrWhiteSpace(machineAccount.StoreType)
-                    ? machineAccount.Role
-                    : machineAccount.StoreType;
+                var accountStoreId = machineAccount.UserUid;
+                var accountStoreType = machineAccount.Role;
                 _syncOptions.ApplyMachineProfile(machineAccount.ServerRole, accountStoreId, accountStoreType);
             }
 
-            var storeId = _syncOptions.StoreId ?? machineAccount?.StoreId ?? machineAccount?.UserUid ?? "UNKNOWN";
-            var storeType = _syncOptions.StoreType ?? machineAccount?.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
+            var storeId = _syncOptions.StoreId ?? machineAccount?.UserUid ?? "UNKNOWN";
+            var storeType = _syncOptions.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
             var serverRole = _syncOptions.NormalizedServerRole;
 
             if (SyncServerRoles.IsCentralRole(serverRole))
@@ -286,9 +282,11 @@ public class StoreSyncBackgroundService : BackgroundService
             }
             else
             {
-                storeAccount.StoreId ??= storeId;
-                storeAccount.StoreType = storeType;
                 storeAccount.ServerRole = serverRole;
+                if (!string.IsNullOrWhiteSpace(storeType))
+                {
+                    storeAccount.Role = storeType;
+                }
                 if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
                 {
                     storeAccount.ServerIp = _syncOptions.ServerIp;
@@ -734,9 +732,11 @@ public class StoreSyncBackgroundService : BackgroundService
         }
 
         // ---------- 同步中央狀態到使用者帳號，整併過往 StoreSyncStates 資訊 ----------
-        storeAccount.StoreId ??= storeAccount.UserUid;
-        storeAccount.StoreType = storeType;
         storeAccount.ServerRole = serverRole;
+        if (!string.IsNullOrWhiteSpace(storeType))
+        {
+            storeAccount.Role = storeType;
+        }
         if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
         {
             storeAccount.ServerIp = _syncOptions.ServerIp;
