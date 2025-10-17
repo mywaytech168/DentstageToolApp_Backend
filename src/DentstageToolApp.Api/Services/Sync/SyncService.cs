@@ -783,7 +783,7 @@ public class SyncService : ISyncService
         if (!string.IsNullOrWhiteSpace(extension))
         {
             extension = extension.Trim();
-            return extension.StartsWith('.', StringComparison.Ordinal) ? extension : "." + extension;
+            return extension.StartsWith(".", StringComparison.Ordinal) ? extension : "." + extension;
         }
 
         var existed = Directory.EnumerateFiles(storageRoot, photoUid + ".*", SearchOption.TopDirectoryOnly)
