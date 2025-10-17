@@ -496,11 +496,51 @@ public class StoreSyncBackgroundService : BackgroundService
                 return;
             }
 
+            var processedCount = 0;
+
             if (changes.Count > 0)
             {
-                foreach (var change in changes)
+                dbContext.DisableSyncLogAutoAppend();
+                try
                 {
-                    await ApplyChangeAsync(dbContext, change, cancellationToken);
+                    var changeLogIds = changes
+                        .Where(change => change.LogId.HasValue)
+                        .Select(change => change.LogId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    var existedLogIds = changeLogIds.Count == 0
+                        ? new List<Guid>()
+                        : await dbContext.SyncLogs
+                            .AsNoTracking()
+                            .Where(log => changeLogIds.Contains(log.Id))
+                            .Select(log => log.Id)
+                            .ToListAsync(cancellationToken);
+
+                    var knownLogIds = new HashSet<Guid>(existedLogIds);
+
+                    foreach (var change in changes)
+                    {
+                        if (change.LogId.HasValue && knownLogIds.Contains(change.LogId.Value))
+                        {
+                            // ---------- 若本地端已存在相同 LogId，代表曾處理過該筆異動，直接略過 ----------
+                            _logger.LogInformation("門市資料庫已存在同步紀錄 {LogId}，略過重複套用。", change.LogId.Value);
+                            continue;
+                        }
+
+                        if (change.LogId.HasValue)
+                        {
+                            knownLogIds.Add(change.LogId.Value);
+                        }
+
+                        await UpsertLocalSyncLogAsync(dbContext, change, storeId, storeType, response.ServerTime, cancellationToken);
+                        await ApplyChangeAsync(dbContext, change, cancellationToken);
+                        processedCount++;
+                    }
+                }
+                finally
+                {
+                    dbContext.EnableSyncLogAutoAppend();
                 }
             }
             else
@@ -523,9 +563,9 @@ public class StoreSyncBackgroundService : BackgroundService
 
                     ApplyOrderSyncData(order, orderDto);
                 }
-            }
 
-            var processedCount = changes.Count > 0 ? changes.Count : response.Orders.Count;
+                processedCount = response.Orders.Count;
+            }
             await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, response.ServerTime, processedCount, cancellationToken);
 
             await MarkCentralLogsAsSyncedAsync(dbContext, storeId, cancellationToken);
@@ -616,6 +656,48 @@ public class StoreSyncBackgroundService : BackgroundService
                 _logger.LogWarning("中央下發資料包含未支援的動作：{Action}", action);
                 break;
         }
+    }
+
+    /// <summary>
+    /// 確保本地同步紀錄存在，若尚未建立則以中央提供的 LogId 與時間補齊，供後續重複檢查使用。
+    /// </summary>
+    private static async Task UpsertLocalSyncLogAsync(
+        DentstageToolAppContext dbContext,
+        SyncChangeDto change,
+        string storeId,
+        string storeType,
+        DateTime serverTime,
+        CancellationToken cancellationToken)
+    {
+        var logId = change.LogId ?? Guid.NewGuid();
+        var action = change.Action?.Trim().ToUpperInvariant() ?? "UPDATE";
+        var syncedAt = change.SyncedAt ?? change.UpdatedAt ?? serverTime;
+        var updatedAt = change.UpdatedAt ?? syncedAt;
+        var payloadJson = change.Payload.HasValue ? change.Payload.Value.GetRawText() : null;
+
+        var existedLog = await dbContext.SyncLogs
+            .FirstOrDefaultAsync(entity => entity.Id == logId, cancellationToken);
+
+        if (existedLog is null)
+        {
+            existedLog = new SyncLog
+            {
+                Id = logId
+            };
+
+            await dbContext.SyncLogs.AddAsync(existedLog, cancellationToken);
+        }
+
+        // ---------- 將中央同步資訊完整寫回，供門市下次下載時能夠辨識已處理紀錄 ----------
+        existedLog.TableName = change.TableName;
+        existedLog.RecordId = change.RecordId;
+        existedLog.Action = action;
+        existedLog.UpdatedAt = updatedAt;
+        existedLog.SyncedAt = syncedAt;
+        existedLog.SourceServer = storeId;
+        existedLog.StoreType = storeType;
+        existedLog.Synced = true;
+        existedLog.Payload = payloadJson;
     }
 
     /// <summary>
