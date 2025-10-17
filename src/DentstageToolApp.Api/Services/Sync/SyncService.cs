@@ -204,6 +204,13 @@ public class SyncService : ISyncService
                 continue;
             }
 
+            // ---------- 檢查資料庫既有紀錄，若來源伺服器等於當前門市代表自家異動，則不重複回傳 ----------
+            if (!string.IsNullOrWhiteSpace(log.SourceServer)
+                && string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             var change = await BuildChangeDtoAsync(log, cancellationToken);
             if (change is not null)
             {
