@@ -68,6 +68,11 @@ public class QuotationStoreUpdateInfo
     public string? Source { get; set; }
 
     /// <summary>
+    /// 預約方式，沿用建立估價單欄位，供前端同步顯示。
+    /// </summary>
+    public string? BookMethod { get; set; }
+
+    /// <summary>
     /// 預約日期，僅在提供值時才會更新資料庫欄位。
     /// </summary>
     public DateTime? ReservationDate { get; set; }

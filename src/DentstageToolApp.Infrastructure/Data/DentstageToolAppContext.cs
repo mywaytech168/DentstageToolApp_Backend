@@ -479,6 +479,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.TechnicianName)
             .IsRequired()
             .HasMaxLength(100);
+        entity.Property(e => e.JobTitle)
+            .HasMaxLength(50)
+            .HasColumnName("JobTitle");
         entity.Property(e => e.StoreUid)
             .HasMaxLength(100)
             .HasColumnName("StoreUID");

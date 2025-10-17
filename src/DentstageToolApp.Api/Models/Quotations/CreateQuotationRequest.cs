@@ -66,6 +66,11 @@ public class CreateQuotationStoreInfo
     public string? Source { get; set; }
 
     /// <summary>
+    /// 預約方式（例如電話、線上填單），提供後端統計來源使用。
+    /// </summary>
+    public string? BookMethod { get; set; }
+
+    /// <summary>
     /// 預約日期，允許前端依需求傳入，若為空則代表尚未排定。
     /// </summary>
     public DateTime? ReservationDate { get; set; }
@@ -233,6 +238,11 @@ public class QuotationStoreInfo
     /// 維修來源。
     /// </summary>
     public string? Source { get; set; }
+
+    /// <summary>
+    /// 預約方式（例如電話預約、LINE 訊息）。
+    /// </summary>
+    public string? BookMethod { get; set; }
 
     /// <summary>
     /// 預計維修日期。

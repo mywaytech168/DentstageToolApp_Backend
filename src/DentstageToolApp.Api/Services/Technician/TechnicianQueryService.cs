@@ -61,7 +61,9 @@ public class TechnicianQueryService : ITechnicianQueryService
                 .Select(technician => new TechnicianItem
                 {
                     TechnicianUid = technician.TechnicianUid,
-                    TechnicianName = technician.TechnicianName
+                    TechnicianName = technician.TechnicianName,
+                    // 同步回傳職稱資訊，讓前端可在下拉選單顯示角色區分。
+                    JobTitle = technician.JobTitle
                 })
                 // EF Core 無法直接翻譯帶有 Comparer 的排序，改用預設排序以確保查詢可被翻譯。 
                 .OrderBy(technician => technician.TechnicianName)

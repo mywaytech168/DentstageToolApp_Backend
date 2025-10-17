@@ -183,7 +183,7 @@ Content-Type: application/json
   }
 }
 ```
-- `store`：需帶技師 UID、來源與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L13-L52】
+- `store`：需帶技師 UID、來源、預約方式與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L13-L58】
 - `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
 - `damages`：可同時帶多筆傷痕項目，格式沿用 `QuotationDamageItem`（詳見程式碼）。
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
