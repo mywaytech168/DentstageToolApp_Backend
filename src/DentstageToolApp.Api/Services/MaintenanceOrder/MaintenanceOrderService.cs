@@ -412,6 +412,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.Email = quotation.Email;
         order.ConnectRemark = quotation.ConnectRemark;
         order.BookDate = quotation.BookDate?.ToString("yyyy-MM-dd");
+        order.BookMethod = quotation.BookMethod;
         order.WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd");
         order.FixType = quotation.FixType;
         order.CarReserved = quotation.CarReserved;
@@ -736,6 +737,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Source = NormalizeOptionalText(order.Source)
                 ?? NormalizeOptionalText(quotation?.Source)
                 ?? quotationStore?.Source,
+            BookMethod = NormalizeOptionalText(order.BookMethod)
+                ?? NormalizeOptionalText(quotation?.BookMethod)
+                ?? quotationStore?.BookMethod,
             RepairDate = repairDate
         };
     }
