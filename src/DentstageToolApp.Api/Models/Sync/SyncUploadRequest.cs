@@ -121,3 +121,74 @@ public class OrderSyncDto
     /// </summary>
     public string? ModifiedBy { get; set; }
 }
+
+/// <summary>
+/// 照片同步所需欄位，包含圖片內容與描述資訊。
+/// </summary>
+public class PhotoSyncPayload
+{
+    /// <summary>
+    /// 照片唯一識別碼。
+    /// </summary>
+    public string PhotoUid { get; set; } = null!;
+
+    /// <summary>
+    /// 對應的估價單識別碼。
+    /// </summary>
+    public string? QuotationUid { get; set; }
+
+    /// <summary>
+    /// 關聯主體識別碼，例如工單或其他資料。
+    /// </summary>
+    public string? RelatedUid { get; set; }
+
+    /// <summary>
+    /// 拍攝位置資訊。
+    /// </summary>
+    public string? Posion { get; set; }
+
+    /// <summary>
+    /// 備註文字。
+    /// </summary>
+    public string? Comment { get; set; }
+
+    /// <summary>
+    /// 傷痕形狀代碼。
+    /// </summary>
+    public string? PhotoShape { get; set; }
+
+    /// <summary>
+    /// 其他形狀描述。
+    /// </summary>
+    public string? PhotoShapeOther { get; set; }
+
+    /// <summary>
+    /// 形狀顯示文字。
+    /// </summary>
+    public string? PhotoShapeShow { get; set; }
+
+    /// <summary>
+    /// 評估費用。
+    /// </summary>
+    public decimal? Cost { get; set; }
+
+    /// <summary>
+    /// 是否已完成。
+    /// </summary>
+    public bool? FlagFinish { get; set; }
+
+    /// <summary>
+    /// 完成費用。
+    /// </summary>
+    public decimal? FinishCost { get; set; }
+
+    /// <summary>
+    /// 圖片內容的 Base64 字串。
+    /// </summary>
+    public string? FileContentBase64 { get; set; }
+
+    /// <summary>
+    /// 圖片副檔名，包含前導的句點（例如 .jpg）。
+    /// </summary>
+    public string? FileExtension { get; set; }
+}
