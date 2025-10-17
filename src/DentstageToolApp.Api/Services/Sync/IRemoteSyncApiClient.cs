@@ -12,7 +12,7 @@ public interface IRemoteSyncApiClient
     /// <summary>
     /// 將門市異動資料上傳至中央伺服器。
     /// </summary>
-    Task<SyncUploadResult?> UploadChangesAsync(SyncUploadRequest request, CancellationToken cancellationToken);
+    Task<SyncUploadResult?> UploadChangeAsync(SyncUploadRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 從中央伺服器取得最新差異資料。

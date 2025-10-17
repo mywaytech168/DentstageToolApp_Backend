@@ -83,7 +83,7 @@ public class SyncController : ControllerBase
     /// <summary>
     /// 取得中央伺服器的最新差異資料。
     /// </summary>
-    [HttpGet("changes")]
+    [HttpGet("change")]
     [Authorize]
     public async Task<ActionResult<SyncDownloadResponse>> GetChangesAsync([FromQuery] SyncDownloadQuery query, CancellationToken cancellationToken)
     {
@@ -115,6 +115,41 @@ public class SyncController : ControllerBase
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "同步差異查詢參數錯誤。");
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 手動補掛同步紀錄，將指定資料表的紀錄加入 SyncLog。
+    /// </summary>
+    [HttpPost("logs/manual")]
+    [Authorize]
+    public async Task<ActionResult<ManualSyncLogResponse>> CreateManualLogAsync([FromBody] ManualSyncLogRequest request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BadRequest("請提供補掛同步的請求內容。");
+        }
+
+        var serverRole = SyncServerRoles.Normalize(User.FindFirstValue("serverRole"));
+        if (!SyncServerRoles.IsCentralRole(serverRole))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "僅限中央角色可手動補掛同步紀錄。");
+        }
+
+        try
+        {
+            var response = await _syncService.CreateManualSyncLogAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (ArgumentException ex)
+        {
+            _logger.LogWarning(ex, "手動補掛同步紀錄參數錯誤。");
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(ex, "手動補掛同步紀錄失敗。");
             return BadRequest(ex.Message);
         }
     }

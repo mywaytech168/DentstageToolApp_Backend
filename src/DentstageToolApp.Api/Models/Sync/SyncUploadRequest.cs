@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text.Json;
 
 namespace DentstageToolApp.Api.Models.Sync;
@@ -30,9 +29,9 @@ public class SyncUploadRequest
     public string? ServerIp { get; set; }
 
     /// <summary>
-    /// 異動清單。
+    /// 單筆異動資料。
     /// </summary>
-    public IList<SyncChangeDto> Changes { get; set; } = new List<SyncChangeDto>();
+    public SyncChangeDto? Change { get; set; }
 }
 
 /// <summary>
@@ -40,6 +39,11 @@ public class SyncUploadRequest
 /// </summary>
 public class SyncChangeDto
 {
+    /// <summary>
+    /// 同步紀錄主鍵識別碼，沿用門市端的 SyncLog.Id，便於中央維持一致性。
+    /// </summary>
+    public Guid? LogId { get; set; }
+
     /// <summary>
     /// 目標資料表名稱。
     /// </summary>
@@ -54,6 +58,11 @@ public class SyncChangeDto
     /// 異動時間。
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 同步紀錄建立時間（門市寫入 SyncLog 的時間），用於還原 SyncedAt。
+    /// </summary>
+    public DateTime? SyncedAt { get; set; }
 
     /// <summary>
     /// 資料表紀錄識別值。
@@ -120,4 +129,75 @@ public class OrderSyncDto
     /// 修改人員。
     /// </summary>
     public string? ModifiedBy { get; set; }
+}
+
+/// <summary>
+/// 照片同步所需欄位，包含圖片內容與描述資訊。
+/// </summary>
+public class PhotoSyncPayload
+{
+    /// <summary>
+    /// 照片唯一識別碼。
+    /// </summary>
+    public string PhotoUid { get; set; } = null!;
+
+    /// <summary>
+    /// 對應的估價單識別碼。
+    /// </summary>
+    public string? QuotationUid { get; set; }
+
+    /// <summary>
+    /// 關聯主體識別碼，例如工單或其他資料。
+    /// </summary>
+    public string? RelatedUid { get; set; }
+
+    /// <summary>
+    /// 拍攝位置資訊。
+    /// </summary>
+    public string? Posion { get; set; }
+
+    /// <summary>
+    /// 備註文字。
+    /// </summary>
+    public string? Comment { get; set; }
+
+    /// <summary>
+    /// 傷痕形狀代碼。
+    /// </summary>
+    public string? PhotoShape { get; set; }
+
+    /// <summary>
+    /// 其他形狀描述。
+    /// </summary>
+    public string? PhotoShapeOther { get; set; }
+
+    /// <summary>
+    /// 形狀顯示文字。
+    /// </summary>
+    public string? PhotoShapeShow { get; set; }
+
+    /// <summary>
+    /// 評估費用。
+    /// </summary>
+    public decimal? Cost { get; set; }
+
+    /// <summary>
+    /// 是否已完成。
+    /// </summary>
+    public bool? FlagFinish { get; set; }
+
+    /// <summary>
+    /// 完成費用。
+    /// </summary>
+    public decimal? FinishCost { get; set; }
+
+    /// <summary>
+    /// 圖片內容的 Base64 字串。
+    /// </summary>
+    public string? FileContentBase64 { get; set; }
+
+    /// <summary>
+    /// 圖片副檔名，包含前導的句點（例如 .jpg）。
+    /// </summary>
+    public string? FileExtension { get; set; }
 }

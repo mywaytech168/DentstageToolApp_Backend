@@ -6,6 +6,7 @@
     <RootNamespace>DentstageToolApp.Api</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <Configurations>Debug;Release;Debug2</Configurations>
   </PropertyGroup>
 
   <ItemGroup>

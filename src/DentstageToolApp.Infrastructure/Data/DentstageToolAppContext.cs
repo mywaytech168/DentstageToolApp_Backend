@@ -17,9 +17,11 @@ public class DentstageToolAppContext : DbContext
 {
     private string? _syncLogSourceServer;
     private string? _syncLogStoreType;
+    private string? _syncLogServerRole;
     private bool _suppressSyncLogAppend;
     private static string? _defaultSyncLogSourceServer;
     private static string? _defaultSyncLogStoreType;
+    private static string? _defaultSyncLogServerRole;
     private static readonly JsonSerializerOptions SyncLogSerializerOptions = new(JsonSerializerDefaults.Web)
     {
         DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
@@ -42,6 +44,7 @@ public class DentstageToolAppContext : DbContext
         // ---------- 初始化同步紀錄預設來源，確保中央環境自動套用 Synced = 1 ----------
         _syncLogSourceServer = _defaultSyncLogSourceServer;
         _syncLogStoreType = _defaultSyncLogStoreType;
+        _syncLogServerRole = _defaultSyncLogServerRole;
     }
 
     /// <summary>
@@ -74,10 +77,14 @@ public class DentstageToolAppContext : DbContext
     /// <summary>
     /// 設定同步紀錄的門市與來源資訊，讓呼叫者可於同一交易中補齊欄位。
     /// </summary>
-    public void SetSyncLogMetadata(string? sourceServer, string? storeType)
+    public void SetSyncLogMetadata(string? sourceServer, string? storeType, string? serverRole = null)
     {
         _syncLogSourceServer = sourceServer;
         _syncLogStoreType = storeType;
+        if (!string.IsNullOrWhiteSpace(serverRole))
+        {
+            _syncLogServerRole = serverRole;
+        }
     }
 
     /// <summary>
@@ -88,6 +95,7 @@ public class DentstageToolAppContext : DbContext
         // ---------- 恢復為預設來源設定，避免跨交易沿用錯誤資訊 ----------
         _syncLogSourceServer = _defaultSyncLogSourceServer;
         _syncLogStoreType = _defaultSyncLogStoreType;
+        _syncLogServerRole = _defaultSyncLogServerRole;
     }
 
     /// <summary>
@@ -109,11 +117,12 @@ public class DentstageToolAppContext : DbContext
     /// <summary>
     /// 設定預設的同步紀錄來源，讓中央或門市環境可指定 AppendSyncLogs 的同步旗標與來源別名。
     /// </summary>
-    public static void ConfigureSyncLogDefaults(string? sourceServer, string? storeType)
+    public static void ConfigureSyncLogDefaults(string? sourceServer, string? storeType, string? serverRole)
     {
         // ---------- 儲存預設值給所有 DbContext 實例使用，供中央環境預設標記為已同步 ----------
         _defaultSyncLogSourceServer = sourceServer;
         _defaultSyncLogStoreType = storeType;
+        _defaultSyncLogServerRole = serverRole;
     }
 
     /// <summary>
@@ -197,16 +206,6 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<SyncLog> SyncLogs => Set<SyncLog>();
 
     /// <summary>
-    /// 門市同步狀態資料集。
-    /// </summary>
-    public virtual DbSet<StoreSyncState> StoreSyncStates => Set<StoreSyncState>();
-
-    /// <summary>
-    /// 同步機碼設定資料集，用於依機碼取得伺服器角色與門市資訊。
-    /// </summary>
-    public virtual DbSet<SyncMachineProfile> SyncMachineProfiles => Set<SyncMachineProfile>();
-
-    /// <summary>
     /// 建立資料模型對應設定。
     /// </summary>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -227,8 +226,6 @@ public class DentstageToolAppContext : DbContext
         ConfigureDeviceRegistration(modelBuilder);
         ConfigureRefreshToken(modelBuilder);
         ConfigureSyncLog(modelBuilder);
-        ConfigureStoreSyncState(modelBuilder);
-        ConfigureSyncMachineProfile(modelBuilder);
     }
 
     /// <summary>
@@ -283,6 +280,11 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.Role).HasMaxLength(50);
         entity.Property(e => e.ServerRole).HasMaxLength(50);
         entity.Property(e => e.ServerIp).HasMaxLength(100);
+        entity.Property(e => e.LastUploadTime)
+            .HasColumnType("datetime");
+        entity.Property(e => e.LastDownloadTime)
+            .HasColumnType("datetime");
+        entity.Property(e => e.LastSyncCount);
         entity.HasMany(e => e.DeviceRegistrations)
             .WithOne(e => e.UserAccount)
             .HasForeignKey(e => e.UserUid)
@@ -1017,6 +1019,10 @@ public class DentstageToolAppContext : DbContext
         var entity = modelBuilder.Entity<SyncLog>();
         entity.ToTable("SyncLogs");
         entity.HasKey(e => e.Id);
+        entity.Property(e => e.Id)
+            .IsRequired()
+            .HasColumnType("char(36)")
+            .ValueGeneratedNever();
         entity.Property(e => e.TableName)
             .IsRequired()
             .HasMaxLength(100);
@@ -1034,63 +1040,10 @@ public class DentstageToolAppContext : DbContext
             .HasColumnType("longtext");
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("datetime");
-        entity.HasIndex(e => new { e.TableName, e.StoreType, e.UpdatedAt });
+        entity.Property(e => e.SyncedAt)
+            .HasColumnType("datetime");
+        entity.HasIndex(e => new { e.TableName, e.StoreType, e.SyncedAt });
         entity.HasIndex(e => e.Synced);
-    }
-
-    /// <summary>
-    /// 設定門市同步狀態資料表欄位與索引。
-    /// </summary>
-    private static void ConfigureStoreSyncState(ModelBuilder modelBuilder)
-    {
-        var entity = modelBuilder.Entity<StoreSyncState>();
-        entity.ToTable("StoreSyncStates");
-        entity.HasKey(e => e.Id);
-        entity.Property(e => e.StoreId)
-            .IsRequired()
-            .HasMaxLength(50);
-        entity.Property(e => e.StoreType)
-            .IsRequired()
-            .HasMaxLength(50);
-        entity.Property(e => e.ServerRole)
-            .HasMaxLength(50);
-        entity.Property(e => e.ServerIp)
-            .HasMaxLength(100);
-        entity.Property(e => e.LastCursor)
-            .HasMaxLength(100);
-        entity.Property(e => e.LastUploadTime)
-            .HasColumnType("datetime");
-        entity.Property(e => e.LastDownloadTime)
-            .HasColumnType("datetime");
-        entity.HasIndex(e => new { e.StoreId, e.StoreType })
-            .IsUnique();
-    }
-
-    /// <summary>
-    /// 設定同步機碼資料表欄位與索引。
-    /// </summary>
-    private static void ConfigureSyncMachineProfile(ModelBuilder modelBuilder)
-    {
-        var entity = modelBuilder.Entity<SyncMachineProfile>();
-        entity.ToTable("SyncMachineProfiles");
-        entity.HasKey(e => e.MachineKey);
-        entity.Property(e => e.MachineKey)
-            .IsRequired()
-            .HasMaxLength(150);
-        entity.Property(e => e.ServerRole)
-            .IsRequired()
-            .HasMaxLength(50);
-        entity.Property(e => e.StoreId)
-            .HasMaxLength(100);
-        entity.Property(e => e.StoreType)
-            .HasMaxLength(50);
-        entity.Property(e => e.Remark)
-            .HasMaxLength(255);
-        entity.Property(e => e.UpdatedAt)
-            .HasColumnType("datetime");
-        entity.Property(e => e.IsActive)
-            .HasColumnType("bit");
-        entity.HasIndex(e => new { e.ServerRole, e.IsActive });
     }
 
     /// <summary>
@@ -1102,7 +1055,7 @@ public class DentstageToolAppContext : DbContext
         var trackedEntries = ChangeTracker
             .Entries()
             .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-            .Where(entry => entry.Entity is not SyncLog && entry.Entity is not StoreSyncState && entry.Entity is not SyncMachineProfile)
+            .Where(entry => entry.Entity is not SyncLog)
             .ToList();
 
         if (trackedEntries.Count == 0)
@@ -1175,17 +1128,21 @@ public class DentstageToolAppContext : DbContext
                 }
             }
 
-            // ---------- 依來源角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
-            var shouldMarkSynced = string.Equals(_syncLogSourceServer, "中央", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_syncLogSourceServer, "Central", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(_syncLogSourceServer, "CentralServer", StringComparison.OrdinalIgnoreCase);
+            // ---------- 依伺服器角色決定同步旗標，中央派發的資料須直接標記為已同步 ----------
+            var shouldMarkSynced = string.Equals(_syncLogServerRole, "中央", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogServerRole, "Central", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_syncLogServerRole, "CentralServer", StringComparison.OrdinalIgnoreCase);
 
             logs.Add(new SyncLog
             {
+                Id = Guid.NewGuid(),
                 TableName = tableName,
                 RecordId = recordId,
                 Action = action,
+                // ---------- 伺服器產生的同步紀錄更新時間即為當下時間 ----------
                 UpdatedAt = now,
+                // ---------- 同步時間同樣記錄為產生時刻，供門市端以此判斷差異 ----------
+                SyncedAt = now,
                 SourceServer = _syncLogSourceServer,
                 StoreType = _syncLogStoreType,
                 Synced = shouldMarkSynced,

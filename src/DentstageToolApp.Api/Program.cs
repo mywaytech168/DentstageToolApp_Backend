@@ -177,8 +177,10 @@ if (!string.IsNullOrWhiteSpace(syncOptions.MachineKey))
         throw new InvalidOperationException("使用者帳號尚未設定 ServerRole 欄位，無法判斷中央或門市角色，請至 UserAccounts 補齊資料。");
     }
 
-    // 使用者 UID 即為門市識別碼，角色欄位對應門市型態，統一由 SyncOptions 儲存供後續背景任務使用
-    syncOptions.ApplyMachineProfile(deviceRegistration.UserAccount.ServerRole, deviceRegistration.UserAccount.UserUid, deviceRegistration.UserAccount.Role);
+    // 使用者 UID 即為門市識別碼，角色欄位亦做為門市型態，統一寫入 SyncOptions 供後續背景任務使用
+    var resolvedStoreId = deviceRegistration.UserAccount.UserUid;
+    var resolvedStoreType = deviceRegistration.UserAccount.Role;
+    syncOptions.ApplyMachineProfile(deviceRegistration.UserAccount.ServerRole, resolvedStoreId, resolvedStoreType);
 
     // ---------- 查詢中央伺服器帳號，取得對外同步 IP ----------
     var centralCandidates = await syncDbContext.UserAccounts
@@ -218,11 +220,14 @@ if (string.IsNullOrWhiteSpace(normalizedRole))
 }
 
 // ---------- 設定 DbContext 的同步紀錄預設來源，確保中央自動標記 Synced ----------
-DentstageToolAppContext.ConfigureSyncLogDefaults(normalizedRole, syncOptions.StoreType);
+var defaultSourceServer = string.IsNullOrWhiteSpace(syncOptions.StoreId)
+    ? normalizedRole
+    : syncOptions.StoreId;
+DentstageToolAppContext.ConfigureSyncLogDefaults(defaultSourceServer, syncOptions.StoreType, normalizedRole);
 
 if (!syncOptions.HasResolvedMachineProfile)
 {
-    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請檢查 UserAccounts.Role 是否已設定門市型態。");
+    throw new InvalidOperationException("同步機碼尚未補齊門市資訊，請確認 UserAccounts.Role 是否已設定門市型態。");
 }
 
 builder.Services.AddSingleton(syncOptions);

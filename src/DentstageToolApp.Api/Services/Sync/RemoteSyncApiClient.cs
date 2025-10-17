@@ -22,7 +22,7 @@ namespace DentstageToolApp.Api.Services.Sync;
 public class RemoteSyncApiClient : IRemoteSyncApiClient
 {
     private const string UploadEndpoint = "/api/sync/upload";
-    private const string DownloadEndpoint = "/api/sync/changes";
+    private const string DownloadEndpoint = "/api/sync/change";
     private const string LoginEndpoint = "/api/auth/login";
 
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
@@ -52,7 +52,7 @@ public class RemoteSyncApiClient : IRemoteSyncApiClient
     }
 
     /// <inheritdoc />
-    public async Task<SyncUploadResult?> UploadChangesAsync(SyncUploadRequest request, CancellationToken cancellationToken)
+    public async Task<SyncUploadResult?> UploadChangeAsync(SyncUploadRequest request, CancellationToken cancellationToken)
     {
         if (request is null)
         {

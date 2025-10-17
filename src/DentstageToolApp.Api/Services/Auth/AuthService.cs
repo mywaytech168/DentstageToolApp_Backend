@@ -96,11 +96,13 @@ public class AuthService : IAuthService
         {
             throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
-        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole)
+            && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }
 
+        // ---------- 以 UserUid 作為唯一門市識別，Role 同步代表門市型態 ----------
         var storeId = user.UserUid;
         var storeType = user.Role;
 
@@ -200,11 +202,13 @@ public class AuthService : IAuthService
             throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
 
-        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole)
+            && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }
 
+        // ---------- 門市識別統一改用 UserUid，型態直接沿用 Role ----------
         var storeId = user.UserUid;
         var storeType = user.Role;
 

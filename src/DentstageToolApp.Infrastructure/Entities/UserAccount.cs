@@ -39,7 +39,7 @@ public class UserAccount
     public string? DisplayName { get; set; }
 
     /// <summary>
-    /// 使用者角色資訊，決定權限等級。
+    /// 使用者角色資訊，亦作為門市型態標記（直營或連盟）。
     /// </summary>
     public string? Role { get; set; }
 
@@ -62,6 +62,21 @@ public class UserAccount
     /// 最後一次成功登入時間，用於統計或安全稽核。
     /// </summary>
     public DateTime? LastLoginAt { get; set; }
+
+    /// <summary>
+    /// 最近一次門市上傳完成的時間，合併 StoreSyncStates.LastUploadTime 資訊。
+    /// </summary>
+    public DateTime? LastUploadTime { get; set; }
+
+    /// <summary>
+    /// 最近一次下載中央資料完成的時間，合併 StoreSyncStates.LastDownloadTime 資訊。
+    /// </summary>
+    public DateTime? LastDownloadTime { get; set; }
+
+    /// <summary>
+    /// 最近一次同步成功處理的資料筆數，對應 StoreSyncStates.LastSyncCount。
+    /// </summary>
+    public int LastSyncCount { get; set; }
 
     /// <summary>
     /// 使用者名下的裝置註冊清單。
