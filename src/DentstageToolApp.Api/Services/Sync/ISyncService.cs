@@ -23,4 +23,9 @@ public interface ISyncService
     /// <param name="lastSyncTime">最後一次成功同步時間。</param>
     /// <param name="cancellationToken">取消作業的通知權杖。</param>
     Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 針對指定資料手動建立同步紀錄。
+    /// </summary>
+    Task<ManualSyncLogResponse> CreateManualSyncLogAsync(ManualSyncLogRequest request, CancellationToken cancellationToken);
 }
