@@ -99,29 +99,17 @@ public class SyncController : ControllerBase
             return StatusCode(StatusCodes.Status401Unauthorized, "權杖缺少門市資訊，請重新登入後再試。");
         }
 
-        if (!string.IsNullOrWhiteSpace(query.StoreId) && !string.Equals(query.StoreId, identity.Value.StoreId, StringComparison.Ordinal))
-        {
-            _logger.LogWarning("同步下載 StoreId 與權杖不符，Token: {TokenStoreId}, Request: {RequestStoreId}", identity.Value.StoreId, query.StoreId);
-            return StatusCode(StatusCodes.Status403Forbidden, "請求的 StoreId 與登入資訊不符。");
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.StoreType)
-            && !string.Equals(SyncServerRoles.Normalize(query.StoreType), identity.Value.StoreType, StringComparison.Ordinal))
-        {
-            _logger.LogWarning("同步下載 StoreType 與權杖不符，Token: {TokenStoreType}, Request: {RequestStoreType}", identity.Value.StoreType, query.StoreType);
-            return StatusCode(StatusCodes.Status403Forbidden, "請求的 StoreType 與登入資訊不符。");
-        }
-
-        // ---------- 以權杖資訊更新查詢條件，確保不會取得其他門市的資料 ----------
-        query.StoreId = identity.Value.StoreId;
-        query.StoreType = identity.Value.StoreType;
-        query.ServerRole = identity.Value.ServerRole;
-
         try
         {
             // ---------- 將來源伺服器角色與 IP 傳遞給服務層，供中央更新 store_sync_states ----------
             var remoteIp = HttpContext.Connection.RemoteIpAddress?.ToString();
-            var response = await _syncService.GetUpdatesAsync(query.StoreId, query.StoreType, query.LastSyncTime, query.PageSize, query.ServerRole, remoteIp, cancellationToken);
+            var response = await _syncService.GetUpdatesAsync(
+                identity.Value.StoreId,
+                identity.Value.StoreType,
+                query.LastSyncTime,
+                identity.Value.ServerRole,
+                remoteIp,
+                cancellationToken);
             return Ok(response);
         }
         catch (ArgumentException ex)

@@ -21,7 +21,6 @@ public interface ISyncService
     /// <param name="storeId">門市唯一識別碼。</param>
     /// <param name="storeType">門市型態（直營、連盟）。</param>
     /// <param name="lastSyncTime">最後一次成功同步時間。</param>
-    /// <param name="pageSize">單次同步的最大筆數。</param>
     /// <param name="cancellationToken">取消作業的通知權杖。</param>
-    Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken);
+    Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken);
 }
