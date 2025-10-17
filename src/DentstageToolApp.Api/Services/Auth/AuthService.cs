@@ -96,13 +96,15 @@ public class AuthService : IAuthService
         {
             throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
-        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole)
+            && string.IsNullOrWhiteSpace(user.StoreType)
+            && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }
 
-        var storeId = user.UserUid;
-        var storeType = user.Role;
+        var storeId = string.IsNullOrWhiteSpace(user.StoreId) ? user.UserUid : user.StoreId;
+        var storeType = string.IsNullOrWhiteSpace(user.StoreType) ? user.Role : user.StoreType;
 
         var accessToken = GenerateAccessToken(user, device, normalizedServerRole, storeId, storeType, now, accessTokenExpireAt);
         var refreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);
@@ -200,13 +202,15 @@ public class AuthService : IAuthService
             throw new AuthException(HttpStatusCode.Forbidden, "帳號 ServerRole 值無法辨識，請確認是否為 中央、直營 或 連盟。");
         }
 
-        if (SyncServerRoles.IsBranchRole(normalizedServerRole) && string.IsNullOrWhiteSpace(user.Role))
+        if (SyncServerRoles.IsBranchRole(normalizedServerRole)
+            && string.IsNullOrWhiteSpace(user.StoreType)
+            && string.IsNullOrWhiteSpace(user.Role))
         {
             throw new AuthException(HttpStatusCode.Forbidden, "門市帳號尚未設定 Role 欄位，無法辨識門市型態，請洽管理員補齊資料。");
         }
 
-        var storeId = user.UserUid;
-        var storeType = user.Role;
+        var storeId = string.IsNullOrWhiteSpace(user.StoreId) ? user.UserUid : user.StoreId;
+        var storeType = string.IsNullOrWhiteSpace(user.StoreType) ? user.Role : user.StoreType;
 
         var accessToken = GenerateAccessToken(user, device, normalizedServerRole, storeId, storeType, now, accessTokenExpireAt);
         var newRefreshToken = GenerateRefreshToken(user, device, refreshTokenExpireAt, now);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -30,10 +31,14 @@ public class StoreSyncBackgroundService : BackgroundService
         PropertyNameCaseInsensitive = true
     };
 
+    private const string PhotoBinaryField = "fileContentBase64";
+    private const string PhotoExtensionField = "fileExtension";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<StoreSyncBackgroundService> _logger;
     private readonly SyncOptions _syncOptions;
     private readonly IRemoteSyncApiClient _remoteSyncApiClient;
+    private readonly PhotoStorageOptions _photoStorageOptions;
 
     /// <summary>
     /// 建構子，注入必要的相依物件。
@@ -42,12 +47,14 @@ public class StoreSyncBackgroundService : BackgroundService
         IServiceScopeFactory scopeFactory,
         IRemoteSyncApiClient remoteSyncApiClient,
         IOptions<SyncOptions> syncOptions,
+        IOptions<PhotoStorageOptions> photoStorageOptions,
         ILogger<StoreSyncBackgroundService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _syncOptions = syncOptions.Value ?? throw new ArgumentNullException(nameof(syncOptions));
         _remoteSyncApiClient = remoteSyncApiClient;
+        _photoStorageOptions = photoStorageOptions?.Value ?? new PhotoStorageOptions();
     }
 
     /// <summary>
@@ -134,11 +141,17 @@ public class StoreSyncBackgroundService : BackgroundService
                 machineAccount = deviceRegistration.UserAccount;
 
                 // ---------- 若資料庫設定更新，立即同步到記憶體中的選項 ----------
-                _syncOptions.ApplyMachineProfile(machineAccount.ServerRole, machineAccount.UserUid, machineAccount.Role);
+                var accountStoreId = string.IsNullOrWhiteSpace(machineAccount.StoreId)
+                    ? machineAccount.UserUid
+                    : machineAccount.StoreId;
+                var accountStoreType = string.IsNullOrWhiteSpace(machineAccount.StoreType)
+                    ? machineAccount.Role
+                    : machineAccount.StoreType;
+                _syncOptions.ApplyMachineProfile(machineAccount.ServerRole, accountStoreId, accountStoreType);
             }
 
-            var storeId = _syncOptions.StoreId ?? machineAccount?.UserUid ?? "UNKNOWN";
-            var storeType = _syncOptions.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
+            var storeId = _syncOptions.StoreId ?? machineAccount?.StoreId ?? machineAccount?.UserUid ?? "UNKNOWN";
+            var storeType = _syncOptions.StoreType ?? machineAccount?.StoreType ?? machineAccount?.Role ?? "UNKNOWN";
             var serverRole = _syncOptions.NormalizedServerRole;
 
             if (SyncServerRoles.IsCentralRole(serverRole))
@@ -262,33 +275,28 @@ public class StoreSyncBackgroundService : BackgroundService
                 return;
             }
 
-            var storeState = await dbContext.StoreSyncStates
-                .FirstOrDefaultAsync(state => state.StoreId == storeId && state.StoreType == storeType, cancellationToken);
+            var storeAccount = await dbContext.UserAccounts
+                .FirstOrDefaultAsync(account => account.UserUid == storeId, cancellationToken);
 
-            if (storeState is null)
+            if (storeAccount is null)
             {
-                storeState = new StoreSyncState
+                _logger.LogWarning("找不到門市 {StoreId} 對應的使用者帳號，無法更新同步狀態資訊。", storeId);
+            }
+            else
+            {
+                storeAccount.StoreId ??= storeId;
+                storeAccount.StoreType = storeType;
+                storeAccount.ServerRole = serverRole;
+                if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
                 {
-                    StoreId = storeId,
-                    StoreType = storeType,
-                    LastSyncCount = 0
-                };
+                    storeAccount.ServerIp = _syncOptions.ServerIp;
+                }
 
-                dbContext.StoreSyncStates.Add(storeState);
+                storeAccount.LastUploadTime = DateTime.UtcNow;
+                storeAccount.LastSyncCount = totalProcessed;
+
+                await dbContext.SaveChangesAsync(cancellationToken);
             }
-
-            storeState.ServerRole = serverRole;
-            if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
-            {
-                storeState.ServerIp = _syncOptions.ServerIp;
-            }
-
-            storeState.LastUploadTime = DateTime.UtcNow;
-            storeState.LastSyncCount = totalProcessed;
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            await MarkStoreStateLogsAsSyncedAsync(dbContext, cancellationToken);
 
             var pendingCount = await dbContext.SyncLogs.CountAsync(log => !log.Synced, cancellationToken);
 
@@ -305,28 +313,6 @@ public class StoreSyncBackgroundService : BackgroundService
         {
             _logger.LogError(ex, "門市同步排程執行失敗，StoreId: {StoreId}, StoreType: {StoreType}", _syncOptions.StoreId, _syncOptions.StoreType);
         }
-    }
-
-    /// <summary>
-    /// 將同步狀態相關的同步紀錄標記為已處理，避免重複上傳。
-    /// </summary>
-    private static async Task MarkStoreStateLogsAsSyncedAsync(DentstageToolAppContext dbContext, CancellationToken cancellationToken)
-    {
-        var stateLogs = await dbContext.SyncLogs
-            .Where(log => !log.Synced && string.Equals(log.TableName, "store_sync_states", StringComparison.OrdinalIgnoreCase))
-            .ToListAsync(cancellationToken);
-
-        if (stateLogs.Count == 0)
-        {
-            return;
-        }
-
-        foreach (var log in stateLogs)
-        {
-            log.Synced = true;
-        }
-
-        await dbContext.SaveChangesAsync(cancellationToken);
     }
 
     /// <summary>
@@ -379,7 +365,79 @@ public class StoreSyncBackgroundService : BackgroundService
             return JsonSerializer.SerializeToElement(dto, SerializerOptions);
         }
 
+        if (string.Equals(log.TableName, "photo_data", StringComparison.OrdinalIgnoreCase))
+        {
+            return await BuildPhotoPayloadAsync(dbContext, log.RecordId, cancellationToken);
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// 將照片資料打包為同步 Payload，並附帶實體檔案的 Base64 字串。
+    /// </summary>
+    private async Task<JsonElement?> BuildPhotoPayloadAsync(
+        DentstageToolAppContext dbContext,
+        string photoUid,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(photoUid))
+        {
+            return null;
+        }
+
+        var photo = await dbContext.PhotoData
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.PhotoUid == photoUid, cancellationToken);
+
+        if (photo is null)
+        {
+            _logger.LogWarning("找不到照片 {PhotoUid} 的資料庫紀錄，無法建立同步 Payload。", photoUid);
+            return null;
+        }
+
+        var payload = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["photoUid"] = photo.PhotoUid,
+            ["quotationUid"] = photo.QuotationUid,
+            ["relatedUid"] = photo.RelatedUid,
+            ["posion"] = photo.Posion,
+            ["comment"] = photo.Comment,
+            ["photoShape"] = photo.PhotoShape,
+            ["photoShapeOther"] = photo.PhotoShapeOther,
+            ["photoShapeShow"] = photo.PhotoShapeShow,
+            ["cost"] = photo.Cost,
+            ["flagFinish"] = photo.FlagFinish,
+            ["finishCost"] = photo.FinishCost
+        };
+
+        var storageRoot = EnsurePhotoStorageRoot();
+        var physicalPath = ResolvePhotoPhysicalPath(storageRoot, photo.PhotoUid);
+
+        if (File.Exists(physicalPath))
+        {
+            try
+            {
+                var bytes = await File.ReadAllBytesAsync(physicalPath, cancellationToken);
+                payload[PhotoBinaryField] = Convert.ToBase64String(bytes);
+
+                var extension = Path.GetExtension(physicalPath);
+                if (!string.IsNullOrWhiteSpace(extension))
+                {
+                    payload[PhotoExtensionField] = extension;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "讀取照片檔案 {PhotoUid} 失敗，將僅同步資料欄位。", photo.PhotoUid);
+            }
+        }
+        else
+        {
+            _logger.LogWarning("找不到照片 {PhotoUid} 的實體檔案：{Path}", photo.PhotoUid, physicalPath);
+        }
+
+        return JsonSerializer.SerializeToElement(payload, SerializerOptions);
     }
 
     /// <summary>
@@ -402,13 +460,19 @@ public class StoreSyncBackgroundService : BackgroundService
                 return;
             }
 
-            var storeState = await dbContext.StoreSyncStates
-                .FirstOrDefaultAsync(state => state.StoreId == storeId && state.StoreType == storeType, cancellationToken);
+            var storeAccount = await dbContext.UserAccounts
+                .FirstOrDefaultAsync(account => account.UserUid == storeId, cancellationToken);
+
+            if (storeAccount is null)
+            {
+                _logger.LogWarning("找不到門市 {StoreId} 對應的使用者帳號，無法執行中央下發流程。", storeId);
+                return;
+            }
 
             var query = new SyncDownloadQuery
             {
                 // ---------- 目前僅需提供最後同步時間，其餘識別資訊改由 Token 取得 ----------
-                LastSyncTime = storeState?.LastDownloadTime
+                LastSyncTime = storeAccount.LastDownloadTime
             };
 
             var response = await _remoteSyncApiClient.GetUpdatesAsync(query, cancellationToken);
@@ -419,13 +483,13 @@ public class StoreSyncBackgroundService : BackgroundService
             }
 
             // ---------- 標記後續新增的同步紀錄皆來自中央，方便資料清理 ----------
-            dbContext.SetSyncLogMetadata(SyncServerRoles.CentralServer, storeType);
+            dbContext.SetSyncLogMetadata(storeId, storeType);
 
             var changes = response.Changes ?? new List<SyncChangeDto>();
             if (changes.Count == 0 && response.Orders.Count == 0)
             {
-                await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, 0, cancellationToken);
-                await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
+                await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, response.ServerTime, 0, cancellationToken);
+                await MarkCentralLogsAsSyncedAsync(dbContext, storeId, cancellationToken);
                 _logger.LogInformation("中央下發流程完成，本次無差異資料。StoreId: {StoreId}", storeId);
                 return;
             }
@@ -459,11 +523,10 @@ public class StoreSyncBackgroundService : BackgroundService
                 }
             }
 
-            await UpdateDownloadStateAsync(dbContext, storeState, storeId, storeType, serverRole, response.ServerTime, processedCount, cancellationToken);
-
-            await MarkCentralLogsAsSyncedAsync(dbContext, cancellationToken);
-
             var processedCount = changes.Count > 0 ? changes.Count : response.Orders.Count;
+            await UpdateDownloadStateAsync(dbContext, storeAccount, storeType, serverRole, response.ServerTime, processedCount, cancellationToken);
+
+            await MarkCentralLogsAsSyncedAsync(dbContext, storeId, cancellationToken);
             _logger.LogInformation("中央下發流程完成，StoreId: {StoreId}, 同步筆數: {Count}", storeId, processedCount);
         }
         catch (Exception ex)
@@ -574,33 +637,29 @@ public class StoreSyncBackgroundService : BackgroundService
     /// </summary>
     private async Task UpdateDownloadStateAsync(
         DentstageToolAppContext dbContext,
-        StoreSyncState? storeState,
-        string storeId,
+        UserAccount storeAccount,
         string storeType,
         string serverRole,
         DateTime serverTime,
         int processedCount,
         CancellationToken cancellationToken)
     {
-        storeState ??= new StoreSyncState
+        if (storeAccount is null)
         {
-            StoreId = storeId,
-            StoreType = storeType
-        };
-
-        if (storeState.Id == 0)
-        {
-            dbContext.StoreSyncStates.Add(storeState);
+            return;
         }
 
-        storeState.ServerRole = serverRole;
+        // ---------- 同步中央狀態到使用者帳號，整併過往 StoreSyncStates 資訊 ----------
+        storeAccount.StoreId ??= storeAccount.UserUid;
+        storeAccount.StoreType = storeType;
+        storeAccount.ServerRole = serverRole;
         if (!string.IsNullOrWhiteSpace(_syncOptions.ServerIp))
         {
-            storeState.ServerIp = _syncOptions.ServerIp;
+            storeAccount.ServerIp = _syncOptions.ServerIp;
         }
 
-        storeState.LastDownloadTime = serverTime;
-        storeState.LastSyncCount = processedCount;
+        storeAccount.LastDownloadTime = serverTime;
+        storeAccount.LastSyncCount = processedCount;
 
         await dbContext.SaveChangesAsync(cancellationToken);
     }
@@ -608,11 +667,15 @@ public class StoreSyncBackgroundService : BackgroundService
     /// <summary>
     /// 將中央來源的同步紀錄標記為已處理，避免重複下載。
     /// </summary>
-    private static async Task MarkCentralLogsAsSyncedAsync(DentstageToolAppContext dbContext, CancellationToken cancellationToken)
+    private static async Task MarkCentralLogsAsSyncedAsync(DentstageToolAppContext dbContext, string storeId, CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(storeId))
+        {
+            return;
+        }
+
         var centralLogs = await dbContext.SyncLogs
-            .Where(log => !log.Synced && (log.SourceServer == SyncServerRoles.CentralServer
-                || log.SourceServer == "Central"))
+            .Where(log => !log.Synced && string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase))
             .ToListAsync(cancellationToken);
 
         if (centralLogs.Count == 0)
@@ -712,5 +775,40 @@ public class StoreSyncBackgroundService : BackgroundService
         }
 
         return Convert.ChangeType(rawValue, actualType, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>
+    /// 取得照片儲存根目錄，若不存在則自動建立資料夾。
+    /// </summary>
+    private string EnsurePhotoStorageRoot()
+    {
+        var root = _photoStorageOptions.RootPath;
+        if (string.IsNullOrWhiteSpace(root))
+        {
+            root = Path.Combine(AppContext.BaseDirectory, "App_Data", "photos");
+        }
+
+        if (!Directory.Exists(root))
+        {
+            Directory.CreateDirectory(root);
+        }
+
+        return root;
+    }
+
+    /// <summary>
+    /// 依 PhotoUid 推導實際儲存的檔案路徑，支援不同副檔名。
+    /// </summary>
+    private static string ResolvePhotoPhysicalPath(string storageRoot, string photoUid)
+    {
+        var candidate = Directory.EnumerateFiles(storageRoot, photoUid + ".*", SearchOption.TopDirectoryOnly)
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(candidate))
+        {
+            return candidate;
+        }
+
+        return Path.Combine(storageRoot, photoUid);
     }
 }
