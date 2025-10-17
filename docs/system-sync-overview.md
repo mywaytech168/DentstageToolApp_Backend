@@ -59,8 +59,8 @@
 ## API 設計
 | Method | Path | 說明 |
 | ------ | ---- | ---- |
-| `POST /api/sync/upload` | 分店上傳差異，包含新增、更新、刪除異動清單，需帶入 `storeType`、`serverRole`，並建議附帶 `serverIp`。 |
-| `GET /api/sync/changes` | 分店下載差異，依照 `storeId`、`storeType` 與 `lastSyncTime` 回傳最新資料。 |
+| `POST /api/sync/upload` | 分店上傳差異，逐筆傳送新增、更新、刪除異動，需帶入 `storeType`、`serverRole`，並建議附帶 `serverIp`。 |
+| `GET /api/sync/change` | 分店下載差異，依照 `storeId`、`storeType` 與 `lastSyncTime` 逐筆回傳最新資料。 |
 | `POST /api/sync/logs/manual` | 中央管理員手動補掛指定資料表與主鍵的同步紀錄，會以伺服器時間寫入 `sync_logs`，`SourceServer` 及 `StoreType` 需提供正確的門市資訊。 |
 
 ### 上傳範例
@@ -70,24 +70,22 @@
   "storeType": "Direct",
   "serverRole": "直營",
   "serverIp": "10.1.10.5",
-  "changes": [
-    {
-      "logId": "0a6b1fd3-8a3c-4f5e-9a8b-3c5f7c1f2d8e",
-      "tableName": "orders",
-      "action": "UPDATE",
-      "syncedAt": "2024-04-15T10:19:55Z",
-      "updatedAt": "2024-04-15T10:20:00Z",
-      "recordId": "ORD-1001",
-      "payload": {
-        "orderUid": "ORD-1001",
-        "storeUid": "STORE-001",
-        "orderNo": "A12345",
-        "amount": 1500.00,
-        "status": "Completed",
-        "modificationTimestamp": "2024-04-15T10:20:00Z"
-      }
+  "change": {
+    "logId": "0a6b1fd3-8a3c-4f5e-9a8b-3c5f7c1f2d8e",
+    "tableName": "orders",
+    "action": "UPDATE",
+    "syncedAt": "2024-04-15T10:19:55Z",
+    "updatedAt": "2024-04-15T10:20:00Z",
+    "recordId": "ORD-1001",
+    "payload": {
+      "orderUid": "ORD-1001",
+      "storeUid": "STORE-001",
+      "orderNo": "A12345",
+      "amount": 1500.00,
+      "status": "Completed",
+      "modificationTimestamp": "2024-04-15T10:20:00Z"
     }
-  ]
+  }
 }
 ```
 
@@ -98,6 +96,22 @@
   "storeType": "Direct",
   "serverRole": "直營",
   "lastSyncTime": "2024-04-15T10:30:00Z",
+  "change": {
+    "logId": "0a6b1fd3-8a3c-4f5e-9a8b-3c5f7c1f2d8e",
+    "tableName": "orders",
+    "action": "UPDATE",
+    "syncedAt": "2024-04-15T10:19:55Z",
+    "updatedAt": "2024-04-15T10:20:00Z",
+    "recordId": "ORD-1001",
+    "payload": {
+      "orderUid": "ORD-1001",
+      "storeUid": "STORE-001",
+      "orderNo": "A12345",
+      "amount": 1500.00,
+      "status": "Completed",
+      "modificationTimestamp": "2024-04-15T10:20:00Z"
+    }
+  },
   "orders": [
     {
       "orderUid": "ORD-1001",
