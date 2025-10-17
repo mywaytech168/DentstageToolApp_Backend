@@ -29,6 +29,7 @@ public class SyncService : ISyncService
 
     private const string PhotoBinaryField = "fileContentBase64";
     private const string PhotoExtensionField = "fileExtension";
+    private const int DownloadCandidateLimit = 200;
 
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<SyncService> _logger;
@@ -88,56 +89,57 @@ public class SyncService : ISyncService
             return result;
         }
 
-        var syncLogs = new List<SyncLog>();
-        // ---------- 使用累計序號確保同批上傳的紀錄能取得遞增時間戳 ----------
-        var logSequence = 0;
+        var targetChange = request.Changes[0];
+        if (request.Changes.Count > 1)
+        {
+            // ---------- 若門市一次送出多筆，僅處理首筆並記錄其餘已被忽略 ----------
+            result.IgnoredCount += request.Changes.Count - 1;
+            _logger.LogWarning(
+                "StoreId {StoreId} 一次上傳 {Count} 筆異動，僅處理首筆，其餘將於下一輪重新送出。",
+                request.StoreId,
+                request.Changes.Count);
+        }
+
         _dbContext.DisableSyncLogAutoAppend();
         try
         {
-            foreach (var change in request.Changes)
+            try
             {
-                try
+                var processed = await ProcessChangeAsync(targetChange, request.StoreId, request.StoreType, now, cancellationToken);
+                if (processed)
                 {
-                    var processed = await ProcessChangeAsync(change, request.StoreId, request.StoreType, now, cancellationToken);
-                    if (processed)
-                    {
-                        result.ProcessedCount++;
-                        // ---------- 優先沿用門市提供的 SyncLog Id 與 SyncedAt，確保中央與分店紀錄一致 ----------
-                        var sequence = logSequence++;
-                        SyncLog? existedLog = null;
-                        if (change.LogId.HasValue)
-                        {
-                            existedLog = await _dbContext.SyncLogs.FindAsync(new object?[] { change.LogId.Value }, cancellationToken);
-                        }
+                    result.ProcessedCount++;
 
-                        if (existedLog is null)
-                        {
-                            syncLogs.Add(CreateSyncLog(change, request.StoreId, request.StoreType, now, sequence));
-                        }
-                        else
-                        {
-                            UpdateSyncLog(existedLog, change, request.StoreId, request.StoreType, now, sequence);
-                        }
+                    // ---------- 優先沿用門市提供的 SyncLog Id 與 SyncedAt，確保中央與分店紀錄一致 ----------
+                    SyncLog? existedLog = null;
+                    if (targetChange.LogId.HasValue)
+                    {
+                        existedLog = await _dbContext.SyncLogs.FindAsync(new object?[] { targetChange.LogId.Value }, cancellationToken);
+                    }
+
+                    if (existedLog is null)
+                    {
+                        var newLog = CreateSyncLog(targetChange, request.StoreId, request.StoreType, now, sequence: 0);
+                        await _dbContext.SyncLogs.AddAsync(newLog, cancellationToken);
                     }
                     else
                     {
-                        result.IgnoredCount++;
+                        UpdateSyncLog(existedLog, targetChange, request.StoreId, request.StoreType, now, sequence: 0);
                     }
                 }
-                catch (Exception ex)
+                else
                 {
-                    // ---------- 錯誤紀錄 ----------
-                    _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, change.RecordId);
                     result.IgnoredCount++;
                 }
             }
-
-            if (syncLogs.Count > 0)
+            catch (Exception ex)
             {
-                // ---------- 直接儲存分店上傳的同步紀錄，供其他端比對差異 ----------
-                await _dbContext.SyncLogs.AddRangeAsync(syncLogs, cancellationToken);
+                // ---------- 單筆處理失敗時立即記錄並回傳忽略狀態 ----------
+                _logger.LogError(ex, "處理同步資料時發生例外，StoreId: {StoreId}, RecordId: {RecordId}", request.StoreId, targetChange.RecordId);
+                result.IgnoredCount++;
             }
 
+            // ---------- 單筆處理完成後立即同步門市帳號狀態 ----------
             storeAccount.Role = request.StoreType;
             storeAccount.ServerRole = normalizedRole;
             if (!string.IsNullOrWhiteSpace(resolvedIp))
@@ -192,93 +194,89 @@ public class SyncService : ISyncService
             .OrderBy(log => log.SyncedAt)
             .ThenBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
+            .Take(DownloadCandidateLimit)
             .ToListAsync(cancellationToken);
 
-        // ---------- 預先蒐集本次候選同步紀錄的識別碼，用於資料庫查詢是否已存在相同紀錄 ----------
-        var candidateLogIds = pendingLogs
-            .Select(log => log.Id)
-            .Distinct()
-            .ToList();
+        // ---------- 只挑選一筆有效同步紀錄回傳，確保門市逐筆處理並立即落盤 ----------
+        SyncLog? selectedLog = null;
+        SyncChangeDto? selectedChange = null;
 
-        var storeLogIds = new HashSet<Guid>();
-        if (candidateLogIds.Count > 0)
+        if (pendingLogs.Count > 0)
         {
-            var normalizedStoreId = storeId.Trim().ToLowerInvariant();
-            // ---------- 查詢資料庫內由同一門市建立的同步紀錄，若已存在代表門市曾處理過，避免重複派發 ----------
-            var existedLogIds = await _dbContext.SyncLogs
-                .AsNoTracking()
-                .Where(localLog => candidateLogIds.Contains(localLog.Id)
-                    && !string.IsNullOrWhiteSpace(localLog.SourceServer))
-                .Select(localLog => new
-                {
-                    localLog.Id,
-                    Source = localLog.SourceServer!
-                })
-                .ToListAsync(cancellationToken);
+            // ---------- 預先蒐集候選 LogId，查詢門市是否已下載過 ----------
+            var candidateLogIds = pendingLogs
+                .Select(log => log.Id)
+                .Distinct()
+                .ToList();
 
-            foreach (var item in existedLogIds)
+            var processedLogIds = new HashSet<Guid>();
+            if (candidateLogIds.Count > 0)
             {
-                if (string.Equals(item.Source, storeId, StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(item.Source, normalizedStoreId, StringComparison.OrdinalIgnoreCase))
+                var normalizedStoreId = storeId.Trim().ToLowerInvariant();
+                var existedLogIds = await _dbContext.SyncLogs
+                    .AsNoTracking()
+                    .Where(localLog => candidateLogIds.Contains(localLog.Id)
+                        && !string.IsNullOrWhiteSpace(localLog.SourceServer))
+                    .Select(localLog => new
+                    {
+                        localLog.Id,
+                        Source = localLog.SourceServer!
+                    })
+                    .ToListAsync(cancellationToken);
+
+                foreach (var item in existedLogIds)
                 {
-                    storeLogIds.Add(item.Id);
+                    if (string.Equals(item.Source, storeId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(item.Source, normalizedStoreId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        processedLogIds.Add(item.Id);
+                    }
                 }
             }
+
+            foreach (var log in pendingLogs)
+            {
+                // ---------- 若門市曾寫入相同 LogId 代表已處理，直接略過 ----------
+                if (processedLogIds.Contains(log.Id))
+                {
+                    continue;
+                }
+
+                // ---------- 檢查來源伺服器是否為門市自身，若是則避免重複派發 ----------
+                if (!string.IsNullOrWhiteSpace(log.SourceServer)
+                    && string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var change = await BuildChangeDtoAsync(log, cancellationToken);
+                if (change is null)
+                {
+                    continue;
+                }
+
+                selectedLog = log;
+                selectedChange = change;
+                break;
+            }
         }
 
-        var changes = new List<SyncChangeDto>(pendingLogs.Count);
-        var appendedLogIds = new HashSet<Guid>();
-        foreach (var log in pendingLogs)
+        var changes = new List<SyncChangeDto>(capacity: 1);
+        if (selectedChange is not null)
         {
-            // ---------- 若門市資料庫已存在相同 LogId，代表先前已完成同步，直接略過 ----------
-            if (storeLogIds.Contains(log.Id))
-            {
-                continue;
-            }
-
-            // ---------- 若同一次回應已包含相同 LogId，則略過避免重複同步 ----------
-            if (!appendedLogIds.Add(log.Id))
-            {
-                continue;
-            }
-
-            // ---------- 檢查資料庫既有紀錄，若來源伺服器等於當前門市代表自家異動，則不重複回傳 ----------
-            if (!string.IsNullOrWhiteSpace(log.SourceServer)
-                && string.Equals(log.SourceServer, storeId, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            var change = await BuildChangeDtoAsync(log, cancellationToken);
-            if (change is not null)
-            {
-                changes.Add(change);
-            }
+            changes.Add(selectedChange);
         }
 
-        // ---------- 將工單異動轉換為舊有回應格式，維持相容性 ----------
+        // ---------- 若回傳資料為工單且非刪除動作，同步舊有 Orders 欄位以維持相容 ----------
         var orders = new List<OrderSyncDto>();
-        foreach (var change in changes)
+        if (selectedChange is not null
+            && string.Equals(selectedChange.TableName, "orders", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(selectedChange.Action, "DELETE", StringComparison.OrdinalIgnoreCase)
+            && selectedChange.Payload is not null)
         {
-            if (!string.Equals(change.TableName, "orders", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (string.Equals(change.Action, "DELETE", StringComparison.OrdinalIgnoreCase))
-            {
-                // ---------- 刪除操作僅保留在通用變更清單中 ----------
-                continue;
-            }
-
-            if (change.Payload is null)
-            {
-                continue;
-            }
-
             try
             {
-                var order = change.Payload.Value.Deserialize<OrderSyncDto>(SerializerOptions);
+                var order = selectedChange.Payload.Value.Deserialize<OrderSyncDto>(SerializerOptions);
                 if (order is not null)
                 {
                     orders.Add(order);
@@ -286,7 +284,7 @@ public class SyncService : ISyncService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "解析工單同步 Payload 失敗，RecordId: {RecordId}", change.RecordId);
+                _logger.LogWarning(ex, "解析工單同步 Payload 失敗，RecordId: {RecordId}", selectedChange.RecordId);
             }
         }
 
@@ -296,10 +294,23 @@ public class SyncService : ISyncService
         {
             storeAccount.ServerIp = resolvedIp;
         }
-        storeAccount.LastDownloadTime = pendingLogs.Count > 0
-            ? pendingLogs[^1].SyncedAt
-            : serverTime;
-        storeAccount.LastSyncCount = pendingLogs.Count;
+
+        if (selectedLog is not null)
+        {
+            storeAccount.LastDownloadTime = selectedLog.SyncedAt;
+            storeAccount.LastSyncCount = 1;
+        }
+        else if (pendingLogs.Count > 0)
+        {
+            // ---------- 雖未找到合適資料仍更新檢視位置，避免下一次重複讀取相同紀錄 ----------
+            storeAccount.LastDownloadTime = pendingLogs[^1].SyncedAt;
+            storeAccount.LastSyncCount = 0;
+        }
+        else
+        {
+            storeAccount.LastDownloadTime = serverTime;
+            storeAccount.LastSyncCount = 0;
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
