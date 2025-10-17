@@ -1017,6 +1017,10 @@ public class DentstageToolAppContext : DbContext
         var entity = modelBuilder.Entity<SyncLog>();
         entity.ToTable("SyncLogs");
         entity.HasKey(e => e.Id);
+        entity.Property(e => e.Id)
+            .IsRequired()
+            .HasColumnType("char(36)")
+            .ValueGeneratedNever();
         entity.Property(e => e.TableName)
             .IsRequired()
             .HasMaxLength(100);
@@ -1034,7 +1038,9 @@ public class DentstageToolAppContext : DbContext
             .HasColumnType("longtext");
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("datetime");
-        entity.HasIndex(e => new { e.TableName, e.StoreType, e.UpdatedAt });
+        entity.Property(e => e.SyncedAt)
+            .HasColumnType("datetime");
+        entity.HasIndex(e => new { e.TableName, e.StoreType, e.SyncedAt });
         entity.HasIndex(e => e.Synced);
     }
 
@@ -1056,12 +1062,11 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(50);
         entity.Property(e => e.ServerIp)
             .HasMaxLength(100);
-        entity.Property(e => e.LastCursor)
-            .HasMaxLength(100);
         entity.Property(e => e.LastUploadTime)
             .HasColumnType("datetime");
         entity.Property(e => e.LastDownloadTime)
             .HasColumnType("datetime");
+        entity.Property(e => e.LastSyncCount);
         entity.HasIndex(e => new { e.StoreId, e.StoreType })
             .IsUnique();
     }
@@ -1182,10 +1187,14 @@ public class DentstageToolAppContext : DbContext
 
             logs.Add(new SyncLog
             {
+                Id = Guid.NewGuid(),
                 TableName = tableName,
                 RecordId = recordId,
                 Action = action,
+                // ---------- 伺服器產生的同步紀錄更新時間即為當下時間 ----------
                 UpdatedAt = now,
+                // ---------- 同步時間同樣記錄為產生時刻，供門市端以此判斷差異 ----------
+                SyncedAt = now,
                 SourceServer = _syncLogSourceServer,
                 StoreType = _syncLogStoreType,
                 Synced = shouldMarkSynced,

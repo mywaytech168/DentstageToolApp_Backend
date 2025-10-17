@@ -3,7 +3,7 @@ using System;
 namespace DentstageToolApp.Infrastructure.Entities;
 
 /// <summary>
-/// 門市同步狀態實體，用來紀錄各門市最後同步時間與游標。
+/// 門市同步狀態實體，用來紀錄各門市最後同步時間與同步統計資訊。
 /// </summary>
 public class StoreSyncState
 {
@@ -43,7 +43,7 @@ public class StoreSyncState
     public DateTime? LastDownloadTime { get; set; }
 
     /// <summary>
-    /// 下載差異時使用的游標，可用於分頁控制。
+    /// 最近一次同步時實際取得的資料筆數，利於監控同步效率。
     /// </summary>
-    public string? LastCursor { get; set; }
+    public int LastSyncCount { get; set; }
 }
