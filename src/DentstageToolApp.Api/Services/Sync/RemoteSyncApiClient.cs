@@ -95,16 +95,16 @@ public class RemoteSyncApiClient : IRemoteSyncApiClient
         return await SendWithAuthorizationAsync(
             async token =>
             {
-                var parameters = new Dictionary<string, string?>
+                var parameters = new Dictionary<string, string?>();
+                if (query.LastSyncTime.HasValue)
                 {
-                    ["storeId"] = query.StoreId,
-                    ["storeType"] = query.StoreType,
-                    ["pageSize"] = query.PageSize.ToString(),
-                    ["serverRole"] = query.ServerRole,
-                    ["lastSyncTime"] = query.LastSyncTime?.ToString("O")
-                };
+                    // ---------- 僅在有提供最後同步時間時加入查詢參數 ----------
+                    parameters["lastSyncTime"] = query.LastSyncTime.Value.ToString("O");
+                }
 
-                var requestUri = QueryHelpers.AddQueryString(DownloadEndpoint, parameters);
+                var requestUri = parameters.Count > 0
+                    ? QueryHelpers.AddQueryString(DownloadEndpoint, parameters)
+                    : DownloadEndpoint;
                 using var requestMessage = new HttpRequestMessage(HttpMethod.Get, requestUri);
                 requestMessage.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 

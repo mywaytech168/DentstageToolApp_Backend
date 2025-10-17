@@ -19,6 +19,11 @@ namespace DentstageToolApp.Api.Services.Sync;
 /// </summary>
 public class SyncService : ISyncService
 {
+    /// <summary>
+    /// 同步下載的預設分頁大小，避免一次抓取過多資料。
+    /// </summary>
+    private const int DefaultPageSize = 100;
+
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true
@@ -128,7 +133,7 @@ public class SyncService : ISyncService
     }
 
     /// <inheritdoc />
-    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, int pageSize, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken)
+    public async Task<SyncDownloadResponse> GetUpdatesAsync(string storeId, string storeType, DateTime? lastSyncTime, string? remoteServerRole, string? remoteIpAddress, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(storeId))
         {
@@ -138,11 +143,6 @@ public class SyncService : ISyncService
         if (string.IsNullOrWhiteSpace(storeType))
         {
             throw new ArgumentException("StoreType 不可為空白。", nameof(storeType));
-        }
-
-        if (pageSize <= 0)
-        {
-            pageSize = 100;
         }
 
         var serverTime = DateTime.UtcNow;
@@ -161,7 +161,7 @@ public class SyncService : ISyncService
         var pendingLogs = await logsQuery
             .OrderBy(log => log.UpdatedAt)
             .ThenBy(log => log.Id)
-            .Take(pageSize)
+            .Take(DefaultPageSize)
             .ToListAsync(cancellationToken);
 
         if (pendingLogs.Count > 0)
