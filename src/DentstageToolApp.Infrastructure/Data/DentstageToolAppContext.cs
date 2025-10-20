@@ -975,6 +975,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FinishCost)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("Finish_Cost");
+        entity.Property(e => e.FixType)
+            .HasMaxLength(50)
+            .HasColumnName("Fix_Type");
 
         entity.HasOne(d => d.Quatation)
             .WithMany(p => p.PhotoData)
