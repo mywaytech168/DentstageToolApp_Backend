@@ -1,11 +1,12 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
 using DentstageToolApp.Api.Models.Technicians;
 using DentstageToolApp.Api.Services.Technician;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -14,23 +15,26 @@ using Microsoft.Extensions.Logging;
 namespace DentstageToolApp.Api.Controllers;
 
 /// <summary>
-/// 技師資料查詢 API，提供前端取得登入者所屬門市的技師名單。
+/// 技師資料維運 API，提供查詢、建立、更新與刪除技師資料的端點。
 /// </summary>
 [ApiController]
 [Route("api/technicians")]
 [Authorize]
 public class TechniciansController : ControllerBase
 {
+    private readonly ITechnicianManagementService _technicianManagementService;
     private readonly ITechnicianQueryService _technicianQueryService;
     private readonly ILogger<TechniciansController> _logger;
 
     /// <summary>
-    /// 建構子，注入技師查詢服務與記錄器。
+    /// 建構子，注入技師維運服務與記錄器。
     /// </summary>
     public TechniciansController(
+        ITechnicianManagementService technicianManagementService,
         ITechnicianQueryService technicianQueryService,
         ILogger<TechniciansController> logger)
     {
+        _technicianManagementService = technicianManagementService;
         _technicianQueryService = technicianQueryService;
         _logger = logger;
     }
@@ -81,6 +85,155 @@ public class TechniciansController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 新增技師資料，並綁定至指定門市。
+    /// </summary>
+    /// <param name="request">技師建立資料。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "technicianName": "王小明",
+          "jobTitle": "資深技師",
+          "storeUid": "St_28E50A91-6DA5-4A66-9BA9-6C318D2A9E12"
+        }
+        """)]
+    [ProducesResponseType(typeof(CreateTechnicianResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CreateTechnicianResponse>> CreateTechnicianAsync([FromBody] CreateTechnicianRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 以 JWT 取得操作人員名稱，便於記錄操作歷程。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _technicianManagementService.CreateTechnicianAsync(request, operatorName, cancellationToken);
+            return StatusCode(StatusCodes.Status201Created, response);
+        }
+        catch (TechnicianManagementException ex)
+        {
+            // 將已知業務例外轉換為統一錯誤輸出格式。
+            _logger.LogWarning(ex, "新增技師失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "新增技師資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            // 請求若被取消，回傳 499 告知前端流程已終止。
+            _logger.LogInformation("新增技師流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "新增技師資料已取消");
+        }
+        catch (Exception ex)
+        {
+            // 其他未預期錯誤以 500 告知前端稍後再試。
+            _logger.LogError(ex, "新增技師流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "新增技師資料失敗");
+        }
+    }
+
+    /// <summary>
+    /// 編輯既有技師資料，包含名稱、職稱與所屬門市。
+    /// </summary>
+    /// <param name="request">技師更新資料。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "technicianUid": "Tc_5C6F4A52-1B43-447B-A4A0-8F6D8B6F9E11",
+          "technicianName": "李大華",
+          "jobTitle": "主任技師",
+          "storeUid": "St_4D9E1F72-9931-4E6B-9A4C-3E2B7C8D5F10"
+        }
+        """)]
+    [ProducesResponseType(typeof(EditTechnicianResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<EditTechnicianResponse>> EditTechnicianAsync([FromBody] EditTechnicianRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 取得操作人員資訊，便於寫入操作紀錄。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _technicianManagementService.EditTechnicianAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (TechnicianManagementException ex)
+        {
+            _logger.LogWarning(ex, "編輯技師失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "編輯技師資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("編輯技師流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "編輯技師資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "編輯技師流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "編輯技師資料失敗");
+        }
+    }
+
+    /// <summary>
+    /// 刪除指定技師資料，刪除前會檢查是否仍被報價單使用。
+    /// </summary>
+    /// <param name="request">技師刪除資料。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpPost("delete")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "technicianUid": "Tc_DELETE_TARGET_UID"
+        }
+        """)]
+    [ProducesResponseType(typeof(DeleteTechnicianResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<DeleteTechnicianResponse>> DeleteTechnicianAsync([FromBody] DeleteTechnicianRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 取得操作人員名稱，記錄刪除紀錄。
+            var operatorName = GetCurrentOperatorName();
+            var response = await _technicianManagementService.DeleteTechnicianAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (TechnicianManagementException ex)
+        {
+            _logger.LogWarning(ex, "刪除技師失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "刪除技師資料失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("刪除技師流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "刪除技師資料已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "刪除技師流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "刪除技師資料失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -119,6 +272,33 @@ public class TechniciansController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? null : userUid;
+    }
+
+    /// <summary>
+    /// 取得操作人員名稱，優先使用 displayName，若無則回退至識別碼。
+    /// </summary>
+    private string GetCurrentOperatorName()
+    {
+        var displayName = User.FindFirstValue("displayName");
+        if (!string.IsNullOrWhiteSpace(displayName))
+        {
+            return displayName;
+        }
+
+        var userUid = User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(JwtRegisteredClaimNames.UniqueName);
+        if (!string.IsNullOrWhiteSpace(userUid))
+        {
+            return userUid;
+        }
+
+        userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
     }
 
     // ---------- 生命週期 ----------
