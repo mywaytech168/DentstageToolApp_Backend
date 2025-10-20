@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -44,15 +45,22 @@ public class CarsController : ControllerBase
     /// <summary>
     /// 取得車輛列表，供前端顯示車輛資料。
     /// </summary>
+    /// <remarks>
+    /// GET /api/cars?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件，預設第一頁、每頁二十筆。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpGet]
     [ProducesResponseType(typeof(CarListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CarListResponse>> GetCarsAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<CarListResponse>> GetCarsAsync(
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _carQueryService.GetCarsAsync(cancellationToken);
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _carQueryService.GetCarsAsync(paginationRequest, cancellationToken);
             return Ok(response);
         }
         catch (CarQueryServiceException ex)

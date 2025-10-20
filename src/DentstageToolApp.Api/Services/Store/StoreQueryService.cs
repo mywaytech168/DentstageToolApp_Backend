@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Stores;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,15 +29,24 @@ public class StoreQueryService : IStoreQueryService
     }
 
     /// <inheritdoc />
-    public async Task<StoreListResponse> GetStoresAsync(CancellationToken cancellationToken)
+    public async Task<StoreListResponse> GetStoresAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var items = await _dbContext.Stores
+            var pagination = request ?? new PaginationRequest();
+            var (page, pageSize) = pagination.Normalize();
+
+            var query = _dbContext.Stores
                 .AsNoTracking()
-                .OrderBy(store => store.StoreName)
+                .OrderBy(store => store.StoreName);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(store => new StoreListItem
                 {
                     StoreUid = store.StoreUid,
@@ -46,7 +56,13 @@ public class StoreQueryService : IStoreQueryService
 
             return new StoreListResponse
             {
-                Items = items
+                Items = items,
+                Pagination = new PaginationMetadata
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                }
             };
         }
         catch (OperationCanceledException)

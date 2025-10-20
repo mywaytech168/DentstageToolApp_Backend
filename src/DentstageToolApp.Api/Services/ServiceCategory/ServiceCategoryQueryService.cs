@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.ServiceCategories;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,15 +29,24 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
     }
 
     /// <inheritdoc />
-    public async Task<ServiceCategoryListResponse> GetServiceCategoriesAsync(CancellationToken cancellationToken)
+    public async Task<ServiceCategoryListResponse> GetServiceCategoriesAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var items = await _dbContext.FixTypes
+            var pagination = request ?? new PaginationRequest();
+            var (page, pageSize) = pagination.Normalize();
+
+            var query = _dbContext.FixTypes
                 .AsNoTracking()
-                .OrderBy(type => type.FixTypeName)
+                .OrderBy(type => type.FixTypeName);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(type => new ServiceCategoryListItem
                 {
                     ServiceCategoryUid = type.FixTypeUid,
@@ -46,7 +56,13 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
 
             return new ServiceCategoryListResponse
             {
-                Items = items
+                Items = items,
+                Pagination = new PaginationMetadata
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                }
             };
         }
         catch (OperationCanceledException)

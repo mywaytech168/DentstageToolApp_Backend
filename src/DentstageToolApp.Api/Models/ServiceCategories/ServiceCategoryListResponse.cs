@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.ServiceCategories;
 
@@ -11,6 +12,11 @@ public class ServiceCategoryListResponse
     /// 服務類別資料集合。
     /// </summary>
     public List<ServiceCategoryListItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 分頁資訊，提供前端計算下一頁與總頁數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>

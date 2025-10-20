@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Technicians;
 
@@ -11,6 +12,21 @@ public class TechnicianListResponse
     /// 技師清單集合，依照名稱排序後回傳。
     /// </summary>
     public List<TechnicianItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 回傳技師所屬門市識別碼，便於前端紀錄使用來源。
+    /// </summary>
+    public string? StoreUid { get; set; }
+
+    /// <summary>
+    /// 回傳技師所屬門市名稱，提升列表資訊完整度。
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
+    /// 分頁資訊，協助前端顯示頁碼與總筆數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>

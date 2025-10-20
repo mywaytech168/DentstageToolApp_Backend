@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -44,15 +45,22 @@ public class BrandsController : ControllerBase
     /// <summary>
     /// 取得品牌列表，供前端顯示品牌下拉選單使用。
     /// </summary>
+    /// <remarks>
+    /// GET /api/brands?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpGet]
     [ProducesResponseType(typeof(BrandListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<BrandListResponse>> GetBrandsAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<BrandListResponse>> GetBrandsAsync(
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _brandQueryService.GetBrandsAsync(cancellationToken);
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _brandQueryService.GetBrandsAsync(paginationRequest, cancellationToken);
             return Ok(response);
         }
         catch (BrandQueryServiceException ex)
