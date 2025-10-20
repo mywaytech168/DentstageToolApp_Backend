@@ -38,4 +38,10 @@ public class CreateCarRequest
     [StringLength(255, ErrorMessage = "備註長度不得超過 255 個字元。")]
     public string? Remark { get; set; }
 
+    /// <summary>
+    /// 車輛里程數，採用公里數紀錄，允許留空代表未知。
+    /// </summary>
+    [Range(0, int.MaxValue, ErrorMessage = "里程數必須為不小於 0 的整數。")]
+    public int? Mileage { get; set; }
+
 }

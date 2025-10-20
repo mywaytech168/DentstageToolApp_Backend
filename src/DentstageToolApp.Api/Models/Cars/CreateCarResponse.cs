@@ -48,6 +48,11 @@ public class CreateCarResponse
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 車輛里程數，使用公里為單位回傳，便於前端顯示。
+    /// </summary>
+    public int? Mileage { get; set; }
+
+    /// <summary>
     /// 建立時間，以 UTC 儲存供前端轉換時區。
     /// </summary>
     public DateTime CreatedAt { get; set; }

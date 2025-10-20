@@ -38,6 +38,11 @@ public class CarDetailResponse
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 里程數（公里），協助維修人員掌握車況基礎資訊。
+    /// </summary>
+    public int? Mileage { get; set; }
+
+    /// <summary>
     /// 建立時間戳記。
     /// </summary>
     public DateTime? CreatedAt { get; set; }

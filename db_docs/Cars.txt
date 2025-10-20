@@ -10,5 +10,6 @@ CREATE TABLE Cars (
     Model                  VARCHAR(50),
     Color                  VARCHAR(50),
     Car_Remark             VARCHAR(255),
+    Milage                 INT,
     Brand_Model            VARCHAR(100)
 );

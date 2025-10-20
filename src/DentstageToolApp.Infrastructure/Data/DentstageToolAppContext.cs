@@ -377,6 +377,8 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CarRemark)
             .HasMaxLength(255)
             .HasColumnName("Car_Remark");
+        entity.Property(e => e.Milage)
+            .HasColumnName("Milage");
         entity.Property(e => e.BrandModel)
             .HasMaxLength(100)
             .HasColumnName("Brand_Model");
@@ -546,6 +548,8 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CarRemark)
             .HasMaxLength(255)
             .HasColumnName("Car_Remark");
+        entity.Property(e => e.Milage)
+            .HasColumnName("Milage");
         entity.Property(e => e.BrandModel)
             .HasMaxLength(100)
             .HasColumnName("Brand_Model");
@@ -723,6 +727,8 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.CarRemark)
             .HasMaxLength(255)
             .HasColumnName("Car_Remark");
+        entity.Property(e => e.Milage)
+            .HasColumnName("Milage");
         entity.Property(e => e.BrandModel)
             .HasMaxLength(100)
             .HasColumnName("Brand_Model");

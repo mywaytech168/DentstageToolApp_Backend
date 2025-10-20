@@ -396,6 +396,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.Model = quotation.Model;
         order.Color = quotation.Color;
         order.CarRemark = quotation.CarRemark;
+        order.Milage = quotation.Milage;
         order.BrandModel = quotation.BrandModel;
         order.CustomerUid = quotation.CustomerUid;
         order.CustomerType = quotation.CustomerType;
@@ -772,7 +773,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 ?? quotationCar?.Color,
             Remark = NormalizeOptionalText(order.CarRemark)
                 ?? NormalizeOptionalText(quotation?.CarRemark)
-                ?? quotationCar?.Remark
+                ?? quotationCar?.Remark,
+            // 里程數優先採用維修單最新紀錄，其次回退估價單或估價詳情。
+            Mileage = order.Milage
+                ?? quotation?.Milage
+                ?? quotationCar?.Mileage
         };
     }
 
@@ -794,6 +799,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Phone = NormalizeOptionalText(order.Phone)
                 ?? NormalizeOptionalText(quotation?.Phone)
                 ?? quotationCustomer?.Phone,
+            // 電子郵件同樣以維修單資料為主，缺少時回退估價單或原始查詢結果。
+            Email = NormalizeOptionalText(order.Email)
+                ?? NormalizeOptionalText(quotation?.Email)
+                ?? quotationCustomer?.Email,
             Gender = NormalizeOptionalText(order.Gender)
                 ?? NormalizeOptionalText(quotation?.Gender)
                 ?? quotationCustomer?.Gender,
@@ -1268,6 +1277,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ModelUid = source.ModelUid,
             Color = source.Color,
             CarRemark = source.CarRemark,
+            Milage = source.Milage,
             BrandModel = source.BrandModel,
             CustomerUid = source.CustomerUid,
             CustomerType = source.CustomerType,

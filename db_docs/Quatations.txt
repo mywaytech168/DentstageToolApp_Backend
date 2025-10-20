@@ -20,6 +20,7 @@ CREATE TABLE Quatations (
     Model                    VARCHAR(50),
     Color                    VARCHAR(20),
     Car_Remark               VARCHAR(255),
+    Milage                   INT,
     Brand_Model              VARCHAR(100),
     CustomerUID              VARCHAR(100),
     Phone_input_Global       VARCHAR(20),
