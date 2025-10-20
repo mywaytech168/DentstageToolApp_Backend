@@ -4,7 +4,6 @@ using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using CarEntity = DentstageToolApp.Infrastructure.Entities.Car;
 using CustomerEntity = DentstageToolApp.Infrastructure.Entities.Customer;
-using FixTypeEntity = DentstageToolApp.Infrastructure.Entities.FixType;
 using StoreEntity = DentstageToolApp.Infrastructure.Entities.Store;
 using TechnicianEntity = DentstageToolApp.Infrastructure.Entities.Technician;
 using PhotoEntity = DentstageToolApp.Infrastructure.Entities.PhotoDatum;
@@ -89,10 +88,6 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .Take(RandomCandidateFetchCount)
             .ToListAsync(cancellationToken);
-        var fixTypeSamples = await _context.FixTypes
-            .AsNoTracking()
-            .Take(RandomCandidateFetchCount)
-            .ToListAsync(cancellationToken);
         var photoSamples = await _context.PhotoData
             .AsNoTracking()
             .Take(RandomCandidateFetchCount)
@@ -103,7 +98,8 @@ public class QuotationService : IQuotationService
         var technician = PickRandomOrDefault(technicianSamples, random);
         var customer = PickRandomOrDefault(customerSamples, random);
         var car = PickRandomOrDefault(carSamples, random);
-        var fixType = PickRandomOrDefault(fixTypeSamples, random);
+        var fixTypeKey = QuotationDamageFixTypeHelper.CanonicalOrder[random.Next(QuotationDamageFixTypeHelper.CanonicalOrder.Count)];
+        var fixTypeDisplayName = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
 
         var reservationDate = DateTime.Now.Date
             .AddDays(random.Next(1, 8))
@@ -136,13 +132,12 @@ public class QuotationService : IQuotationService
             },
             Damages = BuildRandomDamages(photoSamples, random),
             CarBodyConfirmation = BuildRandomCarBodyConfirmation(photoSamples, random),
-            Maintenance = BuildRandomMaintenance(fixType, random)
+            Maintenance = BuildRandomMaintenance(fixTypeKey, random)
         };
 
         var usedExistingData = technician is not null
             || customer is not null
             || car is not null
-            || fixType is not null
             || photoSamples.Count > 0;
 
         var response = new CreateQuotationTestPageResponse
@@ -152,7 +147,7 @@ public class QuotationService : IQuotationService
             Store = technician?.Store is null ? null : CreateStoreSummary(technician.Store),
             Customer = customer is null ? null : CreateCustomerSummary(customer),
             Car = car is null ? null : CreateCarSummary(car),
-            FixType = fixType is null ? null : CreateFixTypeSummary(fixType),
+            FixType = CreateFixTypeSummary(fixTypeKey, fixTypeDisplayName),
             UsedExistingData = usedExistingData,
             GeneratedAt = DateTimeOffset.Now,
             Notes = BuildTestNotes(draft, usedExistingData)
@@ -181,12 +176,19 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .AsQueryable();
 
-        // 篩選維修類型，優先以識別碼比對，維持舊有欄位作為相容邏輯。
+        // 篩選維修類型，允許以舊版中文或新版鍵值查詢。
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
             var fixTypeFilter = query.FixType.Trim();
+            var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixTypeFilter);
+            var displayName = normalizedFilter is null
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFilter);
+
             quotationsQuery = quotationsQuery.Where(q =>
-                q.FixTypeUid == fixTypeFilter || q.FixType == fixTypeFilter);
+                q.FixType == fixTypeFilter ||
+                (normalizedFilter != null && q.FixType == normalizedFilter) ||
+                (displayName != null && q.FixType == displayName));
         }
 
         // 篩選估價單狀態。
@@ -239,15 +241,12 @@ public class QuotationService : IQuotationService
             join model in _context.Models.AsNoTracking()
                 on quotation.ModelUid equals model.ModelUid into modelGroup
             from model in modelGroup.DefaultIfEmpty()
-            join fixType in _context.FixTypes.AsNoTracking()
-                on quotation.FixTypeUid equals fixType.FixTypeUid into fixTypeGroup
-            from fixType in fixTypeGroup.DefaultIfEmpty()
             join store in _context.Stores.AsNoTracking()
                 on quotation.StoreUid equals store.StoreUid into storeGroup
             from store in storeGroup.DefaultIfEmpty()
             orderby quotation.CreationTimestamp ?? DateTime.MinValue descending,
                 quotation.QuotationNo descending
-            select new { quotation, brand, model, fixType, store };
+            select new { quotation, brand, model, store };
 
         // 先取出分頁後的原始資料集合，避免一次載入過多資料。
         var pagedSource = await orderedQuery
@@ -351,7 +350,6 @@ public class QuotationService : IQuotationService
                 var quotation = result.quotation;
                 var brand = result.brand;
                 var model = result.model;
-                var fixType = result.fixType;
                 var store = result.store;
 
                 // 優先使用使用者帳號顯示名稱，若查無對應資料則回退為估價單上的 UserName 欄位。
@@ -393,8 +391,8 @@ public class QuotationService : IQuotationService
                     // 製單技師若能對應技師主檔則使用主檔名稱。
                     CreatorTechnicianName = creatorName,
                     CreatedAt = quotation.CreationTimestamp,
-                    // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
-                    FixType = fixType != null ? fixType.FixTypeName : quotation.FixType
+                    // 維修類型輸出時優先回傳中文顯示名稱，若無法解析則保留原值。
+                    FixType = ResolveQuotationFixTypeDisplayName(quotation.FixType)
                 };
             })
             .ToList();
@@ -469,11 +467,13 @@ public class QuotationService : IQuotationService
         var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
 
         // ---------- 維修設定處理 ----------
-        // 依據維修類型 UID 驗證主檔，並轉換常見布林選項為資料表欄位使用的旗標文字。
+        // 依據維修類型鍵值正規化分類，並轉換常見布林選項為資料表欄位使用的旗標文字。
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
-        var fixTypeUid = NormalizeRequiredText(maintenanceInfo.FixTypeUid, "維修類型");
-        var fixTypeEntity = await GetFixTypeEntityAsync(fixTypeUid, cancellationToken);
-        var fixTypeName = NormalizeOptionalText(fixTypeEntity?.FixTypeName) ?? fixTypeUid;
+        var fixTypeRaw = NormalizeRequiredText(maintenanceInfo.FixType, "維修類型");
+        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
+        var fixTypeDisplayName = normalizedFixType is null
+            ? fixTypeRaw
+            : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
@@ -642,8 +642,7 @@ public class QuotationService : IQuotationService
             BookDate = reservationDate,
             BookMethod = bookMethod,
             FixDate = repairDate,
-            FixTypeUid = fixTypeUid,
-            FixType = fixTypeName,
+            FixType = fixTypeDisplayName,
             CarReserved = reserveCarFlag,
             Coat = coatingFlag,
             Envelope = wrappingFlag,
@@ -741,8 +740,7 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .Include(q => q.StoreNavigation)
             .Include(q => q.BrandNavigation)
-            .Include(q => q.ModelNavigation)
-            .Include(q => q.FixTypeNavigation);
+            .Include(q => q.ModelNavigation);
 
         // 估價單編號過濾邏輯與 Include 不衝突，因此直接回寫 IQueryable 以避免轉型例外。
         query = ApplyQuotationFilter(query, quotationNo);
@@ -846,6 +844,13 @@ public class QuotationService : IQuotationService
         var unrepairableReason = NormalizeOptionalText(quotation.RejectReason)
             ?? NormalizeOptionalText(extraData?.UnrepairableReason);
 
+        var maintenanceFixTypeValue = NormalizeOptionalText(quotation.FixType);
+        var maintenanceFixTypeNormalized = QuotationDamageFixTypeHelper.Normalize(maintenanceFixTypeValue);
+        var maintenanceFixTypeName = maintenanceFixTypeNormalized is null
+            ? maintenanceFixTypeValue
+            : QuotationDamageFixTypeHelper.ResolveDisplayName(maintenanceFixTypeNormalized);
+        var maintenanceFixTypeKey = maintenanceFixTypeNormalized ?? maintenanceFixTypeValue;
+
         // 透過現有估價金額與折扣計算應付金額，避免直接存取缺少對應欄位的實體屬性。
         var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
 
@@ -913,7 +918,8 @@ public class QuotationService : IQuotationService
             CarBodyConfirmation = simplifiedCarBody,
             Maintenance = new QuotationMaintenanceDetail
             {
-                FixTypeUid = quotation.FixTypeUid,
+                FixType = maintenanceFixTypeKey,
+                FixTypeName = maintenanceFixTypeName,
                 ReserveCar = ParseBooleanFlag(quotation.CarReserved),
                 ApplyCoating = ParseBooleanFlag(quotation.Coat),
                 ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
@@ -1162,13 +1168,24 @@ public class QuotationService : IQuotationService
         {
             maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark) ?? maintenanceRemark;
 
-            if (!string.IsNullOrWhiteSpace(maintenanceInfo.FixTypeUid) &&
-                !string.Equals(maintenanceInfo.FixTypeUid, quotation.FixTypeUid, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(maintenanceInfo.FixType))
             {
-                var fixTypeEntity = await GetFixTypeEntityAsync(maintenanceInfo.FixTypeUid, cancellationToken);
-                quotation.FixTypeUid = NormalizeOptionalText(fixTypeEntity?.FixTypeUid) ?? NormalizeOptionalText(maintenanceInfo.FixTypeUid);
-                quotation.FixType = NormalizeOptionalText(fixTypeEntity?.FixTypeName)
-                    ?? NormalizeOptionalText(maintenanceInfo.FixTypeUid);
+                var requestedFixType = NormalizeOptionalText(maintenanceInfo.FixType);
+                var normalizedRequested = QuotationDamageFixTypeHelper.Normalize(requestedFixType);
+                var requestedDisplay = normalizedRequested is null
+                    ? requestedFixType
+                    : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedRequested);
+
+                var currentFixTypeValue = NormalizeOptionalText(quotation.FixType);
+                var currentNormalized = QuotationDamageFixTypeHelper.Normalize(currentFixTypeValue);
+                var currentKey = currentNormalized ?? currentFixTypeValue;
+                var requestedKey = normalizedRequested ?? requestedFixType;
+
+                if (!string.IsNullOrWhiteSpace(requestedKey) &&
+                    !string.Equals(requestedKey, currentKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    quotation.FixType = requestedDisplay ?? requestedKey;
+                }
             }
 
             if (maintenanceInfo.ReserveCar.HasValue)
@@ -1972,29 +1989,6 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 依據維修類型識別碼取得維修類型主檔，若不存在則提示呼叫端重新選擇。
-    /// </summary>
-    private async Task<FixTypeEntity?> GetFixTypeEntityAsync(string? fixTypeUid, CancellationToken cancellationToken)
-    {
-        var normalizedUid = NormalizeOptionalText(fixTypeUid);
-        if (normalizedUid is null)
-        {
-            return null;
-        }
-
-        var fixType = await _context.FixTypes
-            .AsNoTracking()
-            .FirstOrDefaultAsync(entity => entity.FixTypeUid == normalizedUid, cancellationToken);
-
-        if (fixType is null)
-        {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "找不到對應的維修類型，請重新選擇。");
-        }
-
-        return fixType;
-    }
-
-    /// <summary>
     /// 依據車輛識別碼取得車輛主檔資料，若未提供識別碼則回傳 null。
     /// </summary>
     private async Task<CarEntity?> GetCarEntityAsync(string? carUid, CancellationToken cancellationToken)
@@ -2563,7 +2557,7 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount, string? FixTypeUid, string? FixTypeName, string? FixTypeCategory)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount, string? FixTypeKey, string? FixTypeName)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
 
         foreach (var damage in damages)
@@ -2578,7 +2572,6 @@ public class QuotationService : IQuotationService
             var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
             var description = NormalizeOptionalText(damage.DisplayDescription);
             var amount = damage.DisplayEstimatedAmount;
-            var fixTypeUid = NormalizeOptionalText(damage.FixTypeUid);
             var fixTypeKey = NormalizeOptionalText(damage.DisplayFixType);
             var fixTypeName = NormalizeOptionalText(damage.FixTypeName);
 
@@ -2589,12 +2582,16 @@ public class QuotationService : IQuotationService
                 fixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedCategory);
             }
 
-            if (string.IsNullOrWhiteSpace(fixTypeName) && !string.IsNullOrWhiteSpace(fixTypeUid))
+            var fixTypeCategory = normalizedCategory ?? fixTypeKey;
+            if (string.IsNullOrWhiteSpace(fixTypeCategory))
             {
-                fixTypeName = fixTypeUid;
+                fixTypeCategory = fixTypeName;
             }
 
-            var fixTypeCategory = normalizedCategory ?? fixTypeKey;
+            if (string.IsNullOrWhiteSpace(fixTypeName))
+            {
+                fixTypeName = fixTypeCategory;
+            }
 
             foreach (var photoUid in EnumerateDamagePhotoUids(damage))
             {
@@ -2608,7 +2605,7 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                metadata.Add((photoUid, position, dentStatus, description, amount, fixTypeUid, fixTypeName, fixTypeCategory));
+                metadata.Add((photoUid, position, dentStatus, description, amount, fixTypeCategory, fixTypeName));
             }
         }
 
@@ -2667,10 +2664,32 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
-            var fixTypeUid = info.FixTypeUid ?? info.FixTypeCategory;
-            if (!string.Equals(photo.FixTypeUid, fixTypeUid, StringComparison.Ordinal))
+            var normalizedFixType = info.FixTypeKey;
+            var displayFixType = info.FixTypeName;
+            if (!string.IsNullOrWhiteSpace(normalizedFixType))
             {
-                photo.FixTypeUid = fixTypeUid;
+                normalizedFixType = QuotationDamageFixTypeHelper.Normalize(normalizedFixType) ?? normalizedFixType;
+            }
+
+            if (!string.IsNullOrWhiteSpace(displayFixType) && normalizedFixType is null)
+            {
+                normalizedFixType = QuotationDamageFixTypeHelper.Normalize(displayFixType);
+            }
+
+            var storedFixType = displayFixType;
+            if (string.IsNullOrWhiteSpace(storedFixType) && normalizedFixType is not null)
+            {
+                storedFixType = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
+            }
+
+            if (string.IsNullOrWhiteSpace(storedFixType))
+            {
+                storedFixType = info.FixTypeKey;
+            }
+
+            if (!string.Equals(photo.FixType, storedFixType, StringComparison.Ordinal))
+            {
+                photo.FixType = storedFixType;
                 updated = true;
             }
         }
@@ -2774,8 +2793,9 @@ public class QuotationService : IQuotationService
                 continue;
             }
 
-            var storedFixType = NormalizeOptionalText(photo?.FixTypeUid);
-            var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(storedFixType) ?? storedFixType;
+            var storedFixType = NormalizeOptionalText(photo?.FixType);
+            var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(storedFixType);
+            var fixTypeKey = normalizedFixType ?? storedFixType;
             var fixTypeName = normalizedFixType is not null
                 ? QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType)
                 : storedFixType;
@@ -2795,8 +2815,7 @@ public class QuotationService : IQuotationService
                 DisplayDentStatus = photo?.PhotoShapeShow,
                 DisplayDescription = photo?.Comment,
                 DisplayEstimatedAmount = photo?.Cost,
-                FixTypeUid = storedFixType,
-                DisplayFixType = normalizedFixType,
+                DisplayFixType = fixTypeKey,
                 FixTypeName = fixTypeName
             };
 
@@ -2854,19 +2873,18 @@ public class QuotationService : IQuotationService
                     damage.DisplayEstimatedAmount = photo.Cost;
                 }
 
-                if (string.IsNullOrWhiteSpace(damage.FixTypeUid) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
+                if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixType))
                 {
-                    damage.FixTypeUid = photo.FixTypeUid;
+                    var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
+                    damage.DisplayFixType = normalizedFixType ?? photo.FixType;
                 }
 
-                if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
+                if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(photo.FixType))
                 {
-                    damage.DisplayFixType = photo.FixTypeUid;
-                }
-
-                if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
-                {
-                    damage.FixTypeName = photo.FixTypeUid;
+                    var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
+                    damage.FixTypeName = normalizedFixType is null
+                        ? photo.FixType
+                        : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
                 }
 
                 if (damage.Photos is { Count: > 0 })
@@ -2952,7 +2970,6 @@ public class QuotationService : IQuotationService
                 DentStatus = NormalizeOptionalText(damage.DentStatus),
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
-                FixTypeUid = NormalizeOptionalText(damage.FixTypeUid) ?? NormalizeOptionalText(damage.DisplayFixType),
                 FixType = fixTypeKey,
                 FixTypeName = fixTypeName
             });
@@ -3260,15 +3277,16 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 建立隨機維修設定資料，模擬一般估價流程會填入的欄位內容。
     /// </summary>
-    private static CreateQuotationMaintenanceInfo BuildRandomMaintenance(FixTypeEntity? fixType, Random random)
+    private static CreateQuotationMaintenanceInfo BuildRandomMaintenance(string fixTypeKey, Random random)
     {
         var percentageDiscount = random.Next(0, 2) == 0
             ? (decimal?)null
             : Math.Round((decimal)random.NextDouble() * 15m, 1);
 
+        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeKey) ?? fixTypeKey;
         return new CreateQuotationMaintenanceInfo
         {
-            FixTypeUid = fixType?.FixTypeUid ?? BuildFallbackUid("F"),
+            FixType = normalizedFixType,
             ReserveCar = random.Next(2) == 0,
             ApplyCoating = random.Next(2) == 0,
             ApplyWrapping = random.Next(2) == 0,
@@ -3413,13 +3431,12 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 建立維修類型摘要資訊。
     /// </summary>
-    private static CreateQuotationTestEntitySummary CreateFixTypeSummary(FixTypeEntity fixType)
+    private static CreateQuotationTestEntitySummary CreateFixTypeSummary(string fixTypeKey, string fixTypeDisplayName)
     {
-        var name = NormalizeOptionalText(fixType.FixTypeName) ?? "測試維修類型";
         return new CreateQuotationTestEntitySummary
         {
-            Uid = fixType.FixTypeUid,
-            Name = name,
+            Uid = fixTypeKey,
+            Name = fixTypeDisplayName,
             Description = "測試資料用維修類型"
         };
     }
@@ -3453,9 +3470,9 @@ public class QuotationService : IQuotationService
             notes.Add($"預約日期：{draft.Store.ReservationDate:yyyy/MM/dd HH:mm}");
         }
 
-        if (draft.Maintenance?.FixTypeUid is not null)
+        if (draft.Maintenance?.FixType is not null)
         {
-            notes.Add($"維修類型 UID：{draft.Maintenance.FixTypeUid}");
+            notes.Add($"維修類型：{draft.Maintenance.FixType}");
         }
 
         return notes;

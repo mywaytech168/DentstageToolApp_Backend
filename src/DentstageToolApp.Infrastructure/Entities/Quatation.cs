@@ -89,19 +89,9 @@ public class Quatation
     public string? Status { get; set; }
 
     /// <summary>
-    /// 維修類型。
+    /// 維修類型鍵值，使用 dent、beauty、paint、other 或舊版中文描述。
     /// </summary>
     public string? FixType { get; set; }
-
-    /// <summary>
-    /// 維修類型識別碼（UID），對應 fix_types 表格主鍵。
-    /// </summary>
-    public string? FixTypeUid { get; set; }
-
-    /// <summary>
-    /// 導覽屬性：維修類型主檔資料。
-    /// </summary>
-    public FixType? FixTypeNavigation { get; set; }
 
     /// <summary>
     /// 關聯車輛識別碼。

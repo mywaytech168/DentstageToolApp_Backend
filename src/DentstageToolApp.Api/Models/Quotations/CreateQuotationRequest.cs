@@ -92,11 +92,11 @@ public class CreateQuotationStoreInfo
 public class CreateQuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型識別碼（UID），用於對應維修類型主檔並由後端帶出名稱。
+    /// 維修類型鍵值，限定使用 dent、beauty、paint、other 等固定分類。
     /// </summary>
     [Required(ErrorMessage = "請選擇維修類型。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
-    public string? FixTypeUid { get; set; }
+    public string? FixType { get; set; }
 
     /// <summary>
     /// 是否需留車，True 代表需要留車。
@@ -267,9 +267,9 @@ public class QuotationStoreInfo
 public class QuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型識別碼，前端僅需儲存 UID 即可由後端還原完整資訊。
+    /// 維修類型鍵值，使用固定分類字串（dent、beauty、paint、other）。
     /// </summary>
-    public string? FixTypeUid { get; set; }
+    public string? FixType { get; set; }
 
     /// <summary>
     /// 是否需留車。

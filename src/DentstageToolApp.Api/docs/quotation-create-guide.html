@@ -184,9 +184,14 @@
           <td>選填欄位，可描述該位置的補充說明。</td>
         </tr>
         <tr>
-          <td><code>maintenance.fixTypeUid</code></td>
-          <td>維修類型 UID，Swagger 範例中提供。</td>
-          <td>選填欄位，建議帶入以便後端記錄維修分類。</td>
+          <td><code>maintenance.fixType</code></td>
+          <td>維修類型鍵值，限定 dent、beauty、paint、other。</td>
+          <td>選填欄位，若未提供後端會依傷痕內容推論，建議明確指定。</td>
+        </tr>
+        <tr>
+          <td><code>maintenance.fixTypeName</code></td>
+          <td>維修類型顯示名稱，常見為凹痕、美容、鈑烤或其他。</td>
+          <td>選填欄位，主要提供前端顯示，若缺漏後端會依鍵值補齊。</td>
         </tr>
         <tr>
           <td><code>maintenance.reserveCar</code></td>

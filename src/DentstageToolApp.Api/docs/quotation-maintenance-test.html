@@ -103,7 +103,8 @@
       damages: [],
       carBodyConfirmation: null,
       maintenance: {
-        fixTypeUid: '',
+        fixType: '',
+        fixTypeName: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -149,7 +150,8 @@
       damages: [],
       carBodyConfirmation: null,
       maintenance: {
-        fixTypeUid: '',
+        fixType: '',
+        fixTypeName: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -222,7 +224,8 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixTypeUid: detail.maintenance.fixTypeUid ?? '',
+            fixType: detail.maintenance.fixType ?? '',
+            fixTypeName: detail.maintenance.fixTypeName ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,
@@ -298,7 +301,8 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixTypeUid: detail.maintenance.fixTypeUid ?? '',
+            fixType: detail.maintenance.fixType ?? '',
+            fixTypeName: detail.maintenance.fixTypeName ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,

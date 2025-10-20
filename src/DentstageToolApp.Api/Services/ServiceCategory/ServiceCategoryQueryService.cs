@@ -3,6 +3,7 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using DentstageToolApp.Api.Models.Quotations;
 using DentstageToolApp.Api.Models.ServiceCategories;
 using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
@@ -40,7 +41,7 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
 
             var query = _dbContext.FixTypes
                 .AsNoTracking()
-                .OrderBy(type => type.FixTypeName);
+                .OrderBy(type => type.FixType);
 
             var totalCount = await query.CountAsync(cancellationToken);
 
@@ -49,10 +50,22 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
                 .Take(pageSize)
                 .Select(type => new ServiceCategoryListItem
                 {
-                    ServiceCategoryUid = type.FixTypeUid,
+                    FixType = type.FixType,
                     CategoryName = type.FixTypeName
                 })
                 .ToListAsync(cancellationToken);
+
+            // ---------- 陣列整理區 ----------
+            // 依照系統既定的 dent、beauty、paint、other 順序排序，避免不同資料庫排序造成顯示不一致。
+            items = items
+                .OrderBy(item =>
+                {
+                    var normalized = QuotationDamageFixTypeHelper.Normalize(item.FixType) ?? item.FixType;
+                    var index = QuotationDamageFixTypeHelper.CanonicalOrder.IndexOf(normalized ?? string.Empty);
+                    return index >= 0 ? index : int.MaxValue;
+                })
+                .ThenBy(item => item.FixType)
+                .ToList();
 
             return new ServiceCategoryListResponse
             {
@@ -82,30 +95,33 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
     }
 
     /// <inheritdoc />
-    public async Task<ServiceCategoryDetailResponse> GetServiceCategoryAsync(string serviceCategoryUid, CancellationToken cancellationToken)
+    public async Task<ServiceCategoryDetailResponse> GetServiceCategoryAsync(string fixType, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var normalizedUid = (serviceCategoryUid ?? string.Empty).Trim();
+            var normalizedUid = (fixType ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalizedUid))
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供服務類別識別碼。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型鍵值。");
             }
+
+            var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid)
+                ?? normalizedUid;
 
             var entity = await _dbContext.FixTypes
                 .AsNoTracking()
-                .FirstOrDefaultAsync(type => type.FixTypeUid == normalizedUid, cancellationToken);
+                .FirstOrDefaultAsync(type => type.FixType == canonicalFixType, cancellationToken);
 
             if (entity is null)
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
             }
 
             return new ServiceCategoryDetailResponse
             {
-                ServiceCategoryUid = entity.FixTypeUid,
+                FixType = entity.FixType,
                 CategoryName = entity.FixTypeName
             };
         }
