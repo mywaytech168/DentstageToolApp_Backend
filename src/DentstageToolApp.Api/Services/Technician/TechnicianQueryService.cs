@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Technicians;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,7 +29,10 @@ public class TechnicianQueryService : ITechnicianQueryService
     }
 
     /// <inheritdoc />
-    public async Task<TechnicianListResponse> GetTechniciansAsync(string userUid, CancellationToken cancellationToken)
+    public async Task<TechnicianListResponse> GetTechniciansAsync(
+        string userUid,
+        PaginationRequest request,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -55,26 +59,7 @@ public class TechnicianQueryService : ITechnicianQueryService
 
             // ---------- 查詢組合區 ----------
             // 透過技師主檔資料表過濾店家識別碼，並僅保留必要欄位，降低資料傳輸量。
-            var technicians = await _dbContext.Technicians
-                .AsNoTracking()
-                .Where(technician => technician.StoreUid == store.StoreUid)
-                .Select(technician => new TechnicianItem
-                {
-                    TechnicianUid = technician.TechnicianUid,
-                    TechnicianName = technician.TechnicianName,
-                    // 同步回傳職稱資訊，讓前端可在下拉選單顯示角色區分。
-                    JobTitle = technician.JobTitle
-                })
-                // EF Core 無法直接翻譯帶有 Comparer 的排序，改用預設排序以確保查詢可被翻譯。 
-                .OrderBy(technician => technician.TechnicianName)
-                .ToListAsync(cancellationToken);
-
-            // ---------- 組裝回應區 ----------
-            // 即便沒有資料也回傳空集合，讓前端可以顯示相對應提示。
-            return new TechnicianListResponse
-            {
-                Items = technicians
-            };
+            return await FetchTechniciansByStoreAsync(store.StoreUid, store.StoreName, request, cancellationToken);
         }
         catch (OperationCanceledException)
         {
@@ -93,6 +78,106 @@ public class TechnicianQueryService : ITechnicianQueryService
             _logger.LogError(ex, "查詢技師名單時發生未預期錯誤。");
             throw new TechnicianQueryServiceException(HttpStatusCode.InternalServerError, "查詢技師名單發生錯誤，請稍後再試。");
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<TechnicianListResponse> GetTechniciansByStoreAsync(
+        string storeUid,
+        PaginationRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var normalizedStoreUid = (storeUid ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(normalizedStoreUid))
+            {
+                throw new TechnicianQueryServiceException(HttpStatusCode.BadRequest, "請提供門市識別碼。");
+            }
+
+            var store = await _dbContext.Stores
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedStoreUid, cancellationToken);
+
+            if (store is null)
+            {
+                throw new TechnicianQueryServiceException(HttpStatusCode.NotFound, "找不到對應的門市資料。");
+            }
+
+            return await FetchTechniciansByStoreAsync(store.StoreUid, store.StoreName, request, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("技師名單查詢流程被取消。");
+            throw new TechnicianQueryServiceException((HttpStatusCode)499, "查詢已取消，請重新嘗試。");
+        }
+        catch (TechnicianQueryServiceException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "依門市查詢技師名單時發生未預期錯誤。");
+            throw new TechnicianQueryServiceException(HttpStatusCode.InternalServerError, "查詢技師名單發生錯誤，請稍後再試。");
+        }
+    }
+
+    /// <summary>
+    /// 統一依門市取得技師名單並套用分頁設定。
+    /// </summary>
+    private async Task<TechnicianListResponse> FetchTechniciansByStoreAsync(
+        string storeUid,
+        string? storeName,
+        PaginationRequest request,
+        CancellationToken cancellationToken)
+    {
+        var pagination = request ?? new PaginationRequest();
+        var (page, pageSize) = pagination.Normalize();
+
+        _logger.LogDebug(
+            "查詢門市 {StoreUid} 技師列表，頁碼：{Page}，每頁筆數：{PageSize}。",
+            storeUid,
+            page,
+            pageSize);
+
+        var query = _dbContext.Technicians
+            .AsNoTracking()
+            .Where(technician => technician.StoreUid == storeUid);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
+            .OrderBy(technician => technician.TechnicianName)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(technician => new TechnicianItem
+            {
+                TechnicianUid = technician.TechnicianUid,
+                TechnicianName = technician.TechnicianName,
+                JobTitle = technician.JobTitle
+            })
+            .ToListAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "門市 {StoreUid} 技師列表查詢完成，頁碼：{Page}，取得 {Count} / {Total} 筆資料。",
+            storeUid,
+            page,
+            items.Count,
+            totalCount);
+
+        return new TechnicianListResponse
+        {
+            StoreUid = storeUid,
+            StoreName = storeName,
+            Items = items,
+            Pagination = new PaginationMetadata
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            }
+        };
     }
 }
 

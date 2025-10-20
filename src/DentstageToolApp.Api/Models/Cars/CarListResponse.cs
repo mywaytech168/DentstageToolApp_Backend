@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Cars;
 
@@ -12,6 +13,11 @@ public class CarListResponse
     /// 車輛摘要集合。
     /// </summary>
     public List<CarListItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 分頁資訊，提供前端掌握目前頁碼與總筆數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>

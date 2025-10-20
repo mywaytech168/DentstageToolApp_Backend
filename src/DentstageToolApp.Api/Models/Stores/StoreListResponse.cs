@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Stores;
 
@@ -11,6 +12,11 @@ public class StoreListResponse
     /// 門市資料集合。
     /// </summary>
     public List<StoreListItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 分頁資訊，協助前端掌握目前頁碼與總筆數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>
