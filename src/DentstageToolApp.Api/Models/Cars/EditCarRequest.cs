@@ -44,4 +44,10 @@ public class EditCarRequest
     /// </summary>
     [StringLength(255, ErrorMessage = "備註長度不得超過 255 個字元。")]
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 車輛里程數，編輯時可一併更新，留空則不變更。
+    /// </summary>
+    [Range(0, int.MaxValue, ErrorMessage = "里程數必須為不小於 0 的整數。")]
+    public int? Mileage { get; set; }
 }

@@ -67,6 +67,8 @@ public class CarManagementService : ICarManagementService
         var model = NormalizeOptionalText(resolvedModel?.ModelName);
         var color = NormalizeOptionalText(request.Color);
         var remark = NormalizeOptionalText(request.Remark);
+        var mileage = request.Mileage;
+        var mileage = request.Mileage;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -98,6 +100,7 @@ public class CarManagementService : ICarManagementService
             Model = model,
             Color = color,
             CarRemark = remark,
+            Milage = mileage,
             BrandModel = BuildBrandModel(brand, model),
             CreationTimestamp = now,
             CreatedBy = operatorLabel,
@@ -121,6 +124,7 @@ public class CarManagementService : ICarManagementService
             ModelUid = resolvedModel?.ModelUid,
             Color = carEntity.Color,
             Remark = carEntity.CarRemark,
+            Mileage = carEntity.Milage,
             CreatedAt = now,
             Message = "已建立車輛資料。"
         };
@@ -207,6 +211,11 @@ public class CarManagementService : ICarManagementService
         carEntity.Model = model;
         carEntity.Color = color;
         carEntity.CarRemark = remark;
+        // 里程數允許為空值，若前端提供資料則直接覆寫以維持最新車況。
+        if (request.Mileage.HasValue)
+        {
+            carEntity.Milage = mileage;
+        }
         carEntity.BrandModel = BuildBrandModel(brand, model);
         carEntity.ModificationTimestamp = now;
         carEntity.ModifiedBy = operatorLabel;
@@ -226,6 +235,7 @@ public class CarManagementService : ICarManagementService
             ModelUid = resolvedModel?.ModelUid,
             Color = carEntity.Color,
             Remark = carEntity.CarRemark,
+            Mileage = carEntity.Milage,
             UpdatedAt = now,
             Message = "已更新車輛資料。"
         };

@@ -376,6 +376,12 @@ public class CreateQuotationCarInfo
     /// 車輛型號識別碼（選填），若提供將同步寫入估價單的 ModelUID 欄位。
     /// </summary>
     public string? ModelUid { get; set; }
+
+    /// <summary>
+    /// 車輛里程數（公里），若現場測量有新數值可一併回傳。
+    /// </summary>
+    [Range(0, int.MaxValue, ErrorMessage = "里程數必須為不小於 0 的整數。")]
+    public int? Mileage { get; set; }
 }
 
 /// <summary>
@@ -412,6 +418,11 @@ public class QuotationCarInfo
     /// 車輛型號識別碼。
     /// </summary>
     public string? ModelUid { get; set; }
+
+    /// <summary>
+    /// 車輛里程數，回傳時以公里為單位呈現，便於維修人員掌握車況。
+    /// </summary>
+    public int? Mileage { get; set; }
 
     /// <summary>
     /// 車色。
@@ -456,6 +467,11 @@ public class QuotationCustomerInfo
     /// 聯絡電話。
     /// </summary>
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// 電子郵件，補齊客服聯繫管道。
+    /// </summary>
+    public string? Email { get; set; }
 
     /// <summary>
     /// 性別。

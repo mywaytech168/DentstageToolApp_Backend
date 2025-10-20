@@ -450,6 +450,7 @@ public class QuotationService : IQuotationService
         var model = NormalizeOptionalText(carEntity.Model);
         var color = NormalizeOptionalText(carEntity.Color);
         var carRemark = NormalizeOptionalText(carEntity.CarRemark);
+        var carMileage = carEntity.Milage;
 
         // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
         var brandUid = NormalizeOptionalText(carInfo.BrandUid);
@@ -483,6 +484,12 @@ public class QuotationService : IQuotationService
             modelUid = NormalizeOptionalText(matchedModelUid);
         }
 
+        if (carInfo.Mileage.HasValue)
+        {
+            // 若前端提供即時里程數，優先覆寫車輛主檔的舊資料。
+            carMileage = carInfo.Mileage;
+        }
+
         // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
         var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
         var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
@@ -502,6 +509,7 @@ public class QuotationService : IQuotationService
         var customerReason = NormalizeOptionalText(customerEntity.Reason);
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
+        var customerEmail = NormalizeOptionalText(customerEntity.Email);
 
         var normalizedDamages = ExtractDamageList(request);
         var carBodyConfirmation = request.CarBodyConfirmation;
@@ -577,6 +585,7 @@ public class QuotationService : IQuotationService
             BrandModel = BuildBrandModel(brand, model),
             Color = color,
             CarRemark = carRemark,
+            Milage = carMileage,
             CustomerUid = customerUid,
             Name = customerName,
             Phone = customerPhone,
@@ -591,6 +600,7 @@ public class QuotationService : IQuotationService
             ConnectRemark = customerRemark,
             // 消息來源優先採用門市輸入，若門市未提供則以客戶主檔資料補齊。
             Source = source ?? customerSource,
+            Email = customerEmail,
             Remark = remarkPayload,
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
@@ -769,13 +779,15 @@ public class QuotationService : IQuotationService
                 BrandUid = quotation.BrandUid,
                 ModelUid = quotation.ModelUid,
                 Color = quotation.Color,
-                Remark = quotation.CarRemark
+                Remark = quotation.CarRemark,
+                Mileage = quotation.Milage
             },
             Customer = new QuotationCustomerInfo
             {
                 CustomerUid = quotation.CustomerUid,
                 Name = quotation.Name,
                 Phone = quotation.Phone,
+                Email = quotation.Email,
                 Gender = quotation.Gender,
                 CustomerType = quotation.CustomerType,
                 County = quotation.County,
@@ -880,6 +892,12 @@ public class QuotationService : IQuotationService
             quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
         }
 
+        if (carInfo.Mileage.HasValue)
+        {
+            // 里程數以最新值覆寫，維持估價與維修流程可共用同一筆數據。
+            quotation.Milage = carInfo.Mileage;
+        }
+
         // ---------- 客戶資料同步 ----------
         quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
 
@@ -888,6 +906,12 @@ public class QuotationService : IQuotationService
             quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
             quotation.PhoneInput = quotation.Phone;
             quotation.PhoneInputGlobal = quotation.Phone;
+        }
+
+        if (customerInfo.Email is not null)
+        {
+            // 若前端補齊電子郵件，優先以最新資料覆寫估價單欄位供後續聯繫。
+            quotation.Email = NormalizeOptionalText(customerInfo.Email);
         }
 
         if (customerInfo.Gender is not null)
@@ -1411,6 +1435,7 @@ public class QuotationService : IQuotationService
             Model = quotation.Model,
             Color = quotation.Color,
             CarRemark = quotation.CarRemark,
+            Milage = quotation.Milage,
             BrandModel = quotation.BrandModel,
             CustomerUid = quotation.CustomerUid,
             CustomerType = quotation.CustomerType,

@@ -64,6 +64,11 @@ public class Car
     public string? CarRemark { get; set; }
 
     /// <summary>
+    /// 車輛里程數，以公里為單位儲存，允許 null 代表未記錄。
+    /// </summary>
+    public int? Milage { get; set; }
+
+    /// <summary>
     /// 品牌與型號組合。
     /// </summary>
     public string? BrandModel { get; set; }
