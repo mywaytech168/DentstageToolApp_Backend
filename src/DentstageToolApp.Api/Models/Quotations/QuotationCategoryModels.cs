@@ -153,7 +153,18 @@ public class QuotationDamageItem
     [JsonPropertyName("fixType")]
     public string? DisplayFixType
     {
-        get => FixType;
+        get
+        {
+            // 若已有預先計算的顯示名稱，直接輸出中文內容。
+            if (!string.IsNullOrWhiteSpace(FixTypeName))
+            {
+                return FixTypeName;
+            }
+
+            return string.IsNullOrWhiteSpace(FixType)
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(FixType);
+        }
         set
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -176,9 +187,25 @@ public class QuotationDamageItem
     /// <summary>
     /// 傷痕所屬維修類型顯示名稱，預設為中文描述供前端呈現。
     /// </summary>
+    [JsonIgnore]
+    public string? FixTypeName { get; set; }
+
+    /// <summary>
+    /// 舊版欄位：維修類型顯示名稱。新流程改以 FixType 單獨輸出中文名稱，因此此欄位僅保留解析舊資料用途。
+    /// </summary>
     [JsonPropertyName("fixTypeName")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? FixTypeName { get; set; }
+    public string? LegacyFixTypeName
+    {
+        get => null;
+        set
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                FixType = value;
+            }
+        }
+    }
 
     /// <summary>
     /// 舊版 JSON 的中文欄位，避免歷史資料解析失敗。
@@ -327,23 +354,18 @@ public class QuotationDamageItem
             if (normalized is not null)
             {
                 _fixType = normalized;
-                if (string.IsNullOrWhiteSpace(FixTypeName))
-                {
-                    FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
-                }
+                FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
             }
             else if (string.IsNullOrWhiteSpace(value))
             {
                 _fixType = null;
+                FixTypeName = null;
             }
             else
             {
                 var trimmed = value.Trim();
                 _fixType = trimmed;
-                if (string.IsNullOrWhiteSpace(FixTypeName))
-                {
-                    FixTypeName = _fixType;
-                }
+                FixTypeName = _fixType;
             }
         }
     }
@@ -523,9 +545,6 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
 
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.DisplayFixType);
-
-        writer.WritePropertyName("fixTypeName");
-        WriteNullableString(writer, target.FixTypeName);
 
         writer.WriteEndObject();
     }
@@ -845,6 +864,7 @@ internal static class QuotationDamageFixTypeHelper
         ["鈑烤"] = "paint",
         ["板烤"] = "paint",
         ["烤漆"] = "paint",
+        ["板烤/鈑烤"] = "paint",
         ["other"] = "other",
         ["其他"] = "other"
     };
@@ -882,7 +902,7 @@ internal static class QuotationDamageFixTypeHelper
         {
             "dent" => "凹痕",
             "beauty" => "美容",
-            "paint" => "鈑烤",
+            "paint" => "板烤/鈑烤",
             _ => "其他"
         };
     }
@@ -922,6 +942,7 @@ internal static class QuotationDamageFixTypeHelper
             {
                 damage.FixTypeName = ResolveDisplayName(normalized);
             }
+            // 透過自動補齊顯示名稱，外部即可僅依 FixType 呈現中文維修類型。
         }
         else if (!string.IsNullOrWhiteSpace(damage.FixTypeName))
         {
@@ -957,6 +978,7 @@ internal static class QuotationDamageFixTypeHelper
             {
                 summary.FixTypeName = ResolveDisplayName(normalized);
             }
+            // 確保摘要輸出時維持鍵值與中文顯示同步，提供前端直接使用。
         }
         else if (!string.IsNullOrWhiteSpace(summary.FixTypeName))
         {

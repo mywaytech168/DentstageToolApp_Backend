@@ -104,7 +104,6 @@
       carBodyConfirmation: null,
       maintenance: {
         fixType: '',
-        fixTypeName: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -151,7 +150,6 @@
       carBodyConfirmation: null,
       maintenance: {
         fixType: '',
-        fixTypeName: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -225,7 +223,6 @@
       payload.maintenance = detail.maintenance
         ? {
             fixType: detail.maintenance.fixType ?? '',
-            fixTypeName: detail.maintenance.fixTypeName ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,
@@ -302,7 +299,6 @@
       payload.maintenance = detail.maintenance
         ? {
             fixType: detail.maintenance.fixType ?? '',
-            fixTypeName: detail.maintenance.fixTypeName ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,
