@@ -143,8 +143,7 @@ Content-Type: application/json
     "mileage": 18500
   },
   "customer": {
-    "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A",
-    "email": "guest@example.com"
+    "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
   },
   "damages": [
     {
@@ -190,7 +189,7 @@ Content-Type: application/json
 ```
 - `store`：需帶技師 UID、來源、預約方式與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L52-L81】
 - `car`：可額外附上 `mileage` 更新車輛里程。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L362-L384】
-- `customer`：若需同步電子郵件請一併帶入 `email` 欄位。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L443-L474】
+- `customer`：沿用客戶主檔資訊，建立或編輯估價單時僅需帶入 `customerUid`。
 - `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
 - `damages`：可同時帶多筆傷痕項目，格式沿用 `QuotationDamageItem`（詳見程式碼）。
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
