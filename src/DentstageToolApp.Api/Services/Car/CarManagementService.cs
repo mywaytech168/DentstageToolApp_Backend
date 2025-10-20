@@ -67,7 +67,7 @@ public class CarManagementService : ICarManagementService
         var model = NormalizeOptionalText(resolvedModel?.ModelName);
         var color = NormalizeOptionalText(request.Color);
         var remark = NormalizeOptionalText(request.Remark);
-        var mileage = request.Mileage;
+        // 里程數為選填欄位，保留原始整數輸入即可，若為 null 代表現場未提供資料。
         var mileage = request.Mileage;
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -181,6 +181,8 @@ public class CarManagementService : ICarManagementService
         var model = NormalizeOptionalText(resolvedModel?.ModelName);
         var color = NormalizeOptionalText(request.Color);
         var remark = NormalizeOptionalText(request.Remark);
+        // 編輯流程同樣保留里程數原始數值，避免不必要的型別轉換造成落差。
+        var mileage = request.Mileage;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -212,7 +214,7 @@ public class CarManagementService : ICarManagementService
         carEntity.Color = color;
         carEntity.CarRemark = remark;
         // 里程數允許為空值，若前端提供資料則直接覆寫以維持最新車況。
-        if (request.Mileage.HasValue)
+        if (mileage.HasValue)
         {
             carEntity.Milage = mileage;
         }
