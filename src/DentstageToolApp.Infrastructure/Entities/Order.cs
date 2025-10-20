@@ -58,6 +58,11 @@ public class Order
     public string? UserName { get; set; }
 
     /// <summary>
+    /// 估價技師識別碼，保留維修單建立時的估價人員資訊。
+    /// </summary>
+    public string? EstimationTechnicianUid { get; set; }
+
+    /// <summary>
     /// 製單技師識別碼，提供與估價單一致的技師資訊。
     /// </summary>
     public string? CreatorTechnicianUid { get; set; }

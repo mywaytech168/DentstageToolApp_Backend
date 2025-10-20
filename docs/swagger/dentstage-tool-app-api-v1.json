@@ -61,11 +61,11 @@
                     "properties": {
                       "estimationTechnicianUid": {
                         "type": "string",
-                        "description": "估價技師的 UID。"
+                        "description": "估價技師的 UID，會同步寫入維修單欄位 EstimationTechnicianUID。"
                       },
                       "creatorTechnicianUid": {
                         "type": "string",
-                        "description": "製單技師的 UID，若未指定則與估價技師相同。"
+                        "description": "製單技師的 UID，若未指定則與估價技師相同，同步存入維修單 CreatorTechnicianUID。"
                       },
                       "source": {
                         "type": "string",

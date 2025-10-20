@@ -1539,8 +1539,12 @@ public class QuotationService : IQuotationService
         var orderNoNew = BuildOrderNo(orderSerial, now);
         var (plainRemark, _) = ParseRemark(quotation.Remark);
         var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
-        var orderCreatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid)
+        var orderEstimationUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
             ?? NormalizeOptionalText(quotation.UserUid);
+
+        // ---------- 製單技師預設回落至估價技師，確保舊資料亦能帶出製單資訊 ----------
+        var orderCreatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid)
+            ?? orderEstimationUid;
 
         var order = new Order
         {
@@ -1551,8 +1555,10 @@ public class QuotationService : IQuotationService
             CreatedBy = operatorLabel,
             ModificationTimestamp = now,
             ModifiedBy = operatorLabel,
-            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.EstimationTechnicianUid ?? operatorLabel,
+            // ---------- 儲存估價與使用者資料，方便維修單查詢顯示 ----------
+            UserUid = NormalizeOptionalText(quotation.UserUid) ?? orderEstimationUid ?? operatorLabel,
             UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
+            EstimationTechnicianUid = orderEstimationUid,
             CreatorTechnicianUid = orderCreatorUid,
             StoreUid = quotation.StoreUid,
             Date = DateOnly.FromDateTime(now),
