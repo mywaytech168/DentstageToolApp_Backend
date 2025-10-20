@@ -423,6 +423,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.DiscountPercent = quotation.DiscountPercent;
         order.Discount = quotation.Discount;
         order.DiscountReason = quotation.DiscountReason;
+        order.CreatorTechnicianUid = quotation.CreatorTechnicianUid;
         order.Amount = amount;
         order.ModificationTimestamp = now;
         order.ModifiedBy = operatorLabel;
@@ -643,6 +644,13 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var estimatorName = quotation?.TechnicianNavigation?.TechnicianName
             ?? NormalizeOptionalText(quotation?.UserName)
             ?? quotation?.CurrentStatusUser;
+        var estimatorUid = NormalizeOptionalText(order.UserUid)
+            ?? NormalizeOptionalText(quotation?.UserUid);
+        var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid);
+
+        var creatorName = NormalizeOptionalText(quotation?.CreatedBy)
+            ?? NormalizeOptionalText(order.UserName);
 
         return new MaintenanceOrderSummaryResponse
         {
@@ -654,9 +662,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CarBrand = order.Brand,
             CarModel = order.Model,
             CarPlate = order.CarNo,
+            EstimatorUid = estimatorUid,
+            CreatorUid = creatorUid,
             StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
             EstimatorName = NormalizeOptionalText(estimatorName),
-            CreatorName = NormalizeOptionalText(order.UserName),
+            CreatorName = creatorName,
             CreatedAt = order.CreationTimestamp
         };
     }
@@ -715,20 +725,29 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
             ?? quotationStore?.RepairDate;
 
+        var estimatorUid = NormalizeOptionalText(order.UserUid)
+            ?? NormalizeOptionalText(quotation?.UserUid)
+            ?? quotationStore?.EstimatorUid
+            ?? quotationStore?.UserUid;
+        var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid)
+            ?? quotationStore?.CreatorUid
+            ?? quotationStore?.UserUid;
+
         return new QuotationStoreInfo
         {
             StoreUid = NormalizeOptionalText(order.StoreUid)
                 ?? NormalizeOptionalText(quotation?.StoreUid)
                 ?? quotationStore?.StoreUid,
-            UserUid = NormalizeOptionalText(order.UserUid)
-                ?? NormalizeOptionalText(quotation?.UserUid)
-                ?? quotationStore?.UserUid,
+            UserUid = estimatorUid,
+            EstimatorUid = estimatorUid,
+            CreatorUid = creatorUid,
             StoreName = normalizedStoreName,
             EstimatorName = NormalizeOptionalText(quotation?.TechnicianNavigation?.TechnicianName)
                 ?? NormalizeOptionalText(quotation?.UserName)
                 ?? quotationStore?.EstimatorName,
-            CreatorName = NormalizeOptionalText(order.UserName)
-                ?? NormalizeOptionalText(quotation?.CreatedBy)
+            CreatorName = NormalizeOptionalText(quotation?.CreatedBy)
+                ?? NormalizeOptionalText(order.UserName)
                 ?? quotationStore?.CreatorName,
             TechnicianUid = NormalizeOptionalText(quotation?.TechnicianUid) ?? quotationStore?.TechnicianUid,
             CreatedDate = order.CreationTimestamp
@@ -1263,6 +1282,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             UserUid = source.UserUid,
             UserName = source.UserName,
             TechnicianUid = source.TechnicianUid,
+            CreatorTechnicianUid = source.CreatorTechnicianUid,
             Date = DateOnly.FromDateTime(timestamp),
             Status = source.Status,
             FixType = source.FixType,

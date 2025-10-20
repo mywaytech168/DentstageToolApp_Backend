@@ -74,6 +74,11 @@ public class Quatation
     public Technician? TechnicianNavigation { get; set; }
 
     /// <summary>
+    /// 製單技師識別碼，預留與舊系統同步使用。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
+
+    /// <summary>
     /// 報價日期。
     /// </summary>
     public DateOnly? Date { get; set; }

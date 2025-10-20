@@ -9,6 +9,7 @@ CREATE TABLE Orders (
     StoreUID                VARCHAR(100),
     UserUID                 VARCHAR(100),
     UserName                VARCHAR(100),
+    CreatorTechnicianUID    VARCHAR(100),
     Date                    DATE,
     Status                  VARCHAR(20),
     CarUID                  VARCHAR(100),
