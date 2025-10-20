@@ -111,8 +111,7 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixTypeUid": "F_DENT_SAMPLE",
-                "fixType": "F_DENT_SAMPLE",
+                "fixType": "dent",
                 "fixTypeName": "凹痕"
               }
             ],
@@ -123,8 +122,7 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "烤漆",
                 "description": "刮傷需補土烤漆",
                 "estimatedAmount": 3200,
-                "fixTypeUid": "F_PAINT_SAMPLE",
-                "fixType": "F_PAINT_SAMPLE",
+                "fixType": "paint",
                 "fixTypeName": "鈑烤"
               }
             ]
@@ -143,7 +141,7 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
+            "fixType": "dent",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
@@ -273,8 +271,7 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixTypeUid": "F_DENT_SAMPLE",
-                "fixType": "F_DENT_SAMPLE",
+                "fixType": "dent",
                 "fixTypeName": "凹痕"
               }
             ],
@@ -285,8 +282,7 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "美容拋光",
                 "description": "座椅刮痕需要美容處理",
                 "estimatedAmount": 1500,
-                "fixTypeUid": "F_BEAUTY_SAMPLE",
-                "fixType": "F_BEAUTY_SAMPLE",
+                "fixType": "beauty",
                 "fixTypeName": "美容"
               }
             ]
@@ -305,7 +301,7 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixTypeUid": "F_9C2EDFDA-9F5A-11F0-A812-000C2990DEAF",
+            "fixType": "paint",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,

@@ -1,12 +1,11 @@
 CREATE TABLE fix_types (
-    FixTypeUID VARCHAR(100) NOT NULL PRIMARY KEY,
+    FixType VARCHAR(50) NOT NULL PRIMARY KEY,
     FixTypeName VARCHAR(100) NOT NULL
 ) ENGINE=InnoDB;
 
-INSERT INTO fix_types (FixTypeUID, FixTypeName)
-SELECT 
-    CONCAT('F_', UPPER(UUID())) AS FixTypeUID,
-    q.Fix_Type
-FROM quatations q
-WHERE q.Fix_Type IS NOT NULL AND q.Fix_Type <> ''
-GROUP BY q.Fix_Type;
+INSERT INTO fix_types (FixType, FixTypeName) VALUES
+    ('dent', '凹痕'),
+    ('beauty', '美容'),
+    ('paint', '鈑烤'),
+    ('other', '其他')
+ON DUPLICATE KEY UPDATE FixTypeName = VALUES(FixTypeName);

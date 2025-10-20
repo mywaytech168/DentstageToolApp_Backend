@@ -130,12 +130,6 @@ public class QuotationDamageSummary
     public decimal? EstimatedAmount { get; set; }
 
     /// <summary>
-    /// 維修類型識別碼，提供前端回填對應的服務類別。
-    /// </summary>
-    [JsonPropertyName("fixTypeUid")]
-    public string? FixTypeUid { get; set; }
-
-    /// <summary>
     /// 維修類型鍵值，對應凹痕、美容、鈑烤或其他陣列。
     /// </summary>
     public string? FixType { get; set; }
@@ -144,6 +138,7 @@ public class QuotationDamageSummary
     /// 維修類型顯示名稱，預設使用中文描述。
     /// </summary>
     public string? FixTypeName { get; set; }
+
 }
 
 /// <summary>
@@ -163,9 +158,14 @@ public class QuotationCarBodyConfirmationResponse
 public class QuotationMaintenanceDetail
 {
     /// <summary>
-    /// 維修類型識別碼，保留以供前端選單回填。
+    /// 維修類型鍵值，供前端回填分類選項。
     /// </summary>
-    public string? FixTypeUid { get; set; }
+    public string? FixType { get; set; }
+
+    /// <summary>
+    /// 維修類型顯示名稱，預設為中文描述。
+    /// </summary>
+    public string? FixTypeName { get; set; }
 
     /// <summary>
     /// 是否需留車。
@@ -338,9 +338,6 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
             writer.WriteNullValue();
         }
 
-        writer.WritePropertyName("fixTypeUid");
-        WriteNullableString(writer, target.FixTypeUid);
-
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.FixType);
 
@@ -395,7 +392,6 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
             DentStatus = ReadString(element, "dentStatus"),
             Description = ReadString(element, "description"),
             EstimatedAmount = ReadDecimal(element, "estimatedAmount"),
-            FixTypeUid = ReadString(element, "fixTypeUid"),
             FixType = ReadString(element, "fixType"),
             FixTypeName = ReadString(element, "fixTypeName")
         };

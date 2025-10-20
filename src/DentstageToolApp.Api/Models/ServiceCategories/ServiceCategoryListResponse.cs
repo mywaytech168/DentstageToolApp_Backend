@@ -25,12 +25,12 @@ public class ServiceCategoryListResponse
 public class ServiceCategoryListItem
 {
     /// <summary>
-    /// 服務類別識別碼。
+    /// 維修類型鍵值。
     /// </summary>
-    public string ServiceCategoryUid { get; set; } = string.Empty;
+    public string FixType { get; set; } = string.Empty;
 
     /// <summary>
-    /// 服務類別名稱。
+    /// 服務類別顯示名稱。
     /// </summary>
     public string CategoryName { get; set; } = string.Empty;
 }

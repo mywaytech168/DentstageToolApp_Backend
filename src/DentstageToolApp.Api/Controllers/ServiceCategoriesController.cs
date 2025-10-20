@@ -81,19 +81,19 @@ public class ServiceCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// 透過識別碼取得服務類別詳細資料。
+    /// 透過維修類型鍵值取得服務類別詳細資料。
     /// </summary>
-    /// <param name="serviceCategoryUid">服務類別識別碼。</param>
+    /// <param name="fixType">維修類型鍵值。</param>
     /// <param name="cancellationToken">取消權杖。</param>
-    [HttpGet("{serviceCategoryUid}")]
+    [HttpGet("{fixType}")]
     [ProducesResponseType(typeof(ServiceCategoryDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<ServiceCategoryDetailResponse>> GetServiceCategoryAsync(string serviceCategoryUid, CancellationToken cancellationToken)
+    public async Task<ActionResult<ServiceCategoryDetailResponse>> GetServiceCategoryAsync(string fixType, CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _serviceCategoryQueryService.GetServiceCategoryAsync(serviceCategoryUid, cancellationToken);
+            var response = await _serviceCategoryQueryService.GetServiceCategoryAsync(fixType, cancellationToken);
             return Ok(response);
         }
         catch (ServiceCategoryQueryException ex)
@@ -121,7 +121,8 @@ public class ServiceCategoriesController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "categoryName": "凹痕修復"
+          "fixType": "dent",
+          "categoryName": "凹痕"
         }
         """)]
     [ProducesResponseType(typeof(CreateServiceCategoryResponse), StatusCodes.Status201Created)]
@@ -161,12 +162,12 @@ public class ServiceCategoriesController : ControllerBase
     /// 編輯服務類別資料。
     /// </summary>
     [HttpPost("edit")]
-    // 呈現需帶入的 serviceCategoryUid 與更新後名稱，協助 Swagger 使用者理解欄位需求。
+    // 呈現需帶入的 fixType 與更新後名稱，協助 Swagger 使用者理解欄位需求。
     [SwaggerMockRequestExample(
         """
         {
-          "serviceCategoryUid": "SC_6E7F1C32-19B0-4F3B-88E2-1046868C9123",
-          "categoryName": "烤漆美容"
+          "fixType": "paint",
+          "categoryName": "鈑烤"
         }
         """)]
     [ProducesResponseType(typeof(EditServiceCategoryResponse), StatusCodes.Status200OK)]
@@ -207,11 +208,11 @@ public class ServiceCategoriesController : ControllerBase
     /// 刪除服務類別資料。
     /// </summary>
     [HttpPost("delete")]
-    // 利用範例明確告知僅需提供服務類別識別碼即可完成刪除動作。
+    // 利用範例明確告知僅需提供維修類型鍵值即可完成刪除動作。
     [SwaggerMockRequestExample(
         """
         {
-          "serviceCategoryUid": "SC_6E7F1C32-19B0-4F3B-88E2-1046868C9123"
+          "fixType": "other"
         }
         """)]
     [ProducesResponseType(typeof(DeleteServiceCategoryResponse), StatusCodes.Status200OK)]
