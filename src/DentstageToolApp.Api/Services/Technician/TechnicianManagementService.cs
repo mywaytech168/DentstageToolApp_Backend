@@ -63,7 +63,7 @@ public class TechnicianManagementService : ITechnicianManagementService
         }
 
         // ---------- 實體建立區 ----------
-        var entity = new Technician
+        var entity = new DentstageToolApp.Infrastructure.Entities.Technician
         {
             TechnicianUid = BuildTechnicianUid(),
             TechnicianName = technicianName,
@@ -186,7 +186,7 @@ public class TechnicianManagementService : ITechnicianManagementService
         // ---------- 資料檢核區 ----------
         var hasQuotations = await _dbContext.Quatations
             .AsNoTracking()
-            .AnyAsync(quotation => quotation.TechnicianUid == technicianUid, cancellationToken);
+            .AnyAsync(quotation => quotation.EstimationTechnicianUid == technicianUid, cancellationToken);
 
         if (hasQuotations)
         {
