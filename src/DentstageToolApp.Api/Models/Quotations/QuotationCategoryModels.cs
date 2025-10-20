@@ -120,6 +120,7 @@ public class QuotationDamageItem
     }
 
     private List<QuotationDamagePhoto> _photos = new();
+    private string? _fixType;
 
     /// <summary>
     /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
@@ -144,6 +145,34 @@ public class QuotationDamageItem
     {
         get => Photos;
         set => Photos = value ?? new List<QuotationDamagePhoto>();
+    }
+
+    /// <summary>
+    /// 傷痕所屬維修類型鍵值，採用 dent、beauty、paint、other 進行分類。
+    /// </summary>
+    [JsonPropertyName("fixType")]
+    public string? DisplayFixType
+    {
+        get => FixType;
+        set => FixType = value;
+    }
+
+    /// <summary>
+    /// 傷痕所屬維修類型顯示名稱，預設為中文描述供前端呈現。
+    /// </summary>
+    [JsonPropertyName("fixTypeName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FixTypeName { get; set; }
+
+    /// <summary>
+    /// 舊版 JSON 的中文欄位，避免歷史資料解析失敗。
+    /// </summary>
+    [JsonPropertyName("維修類型")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyChineseFixType
+    {
+        get => null;
+        set => FixType = value;
     }
 
     /// <summary>
@@ -270,6 +299,39 @@ public class QuotationDamageItem
     }
 
     /// <summary>
+    /// 內部使用的維修類型鍵值，提供轉換器進行分類。
+    /// </summary>
+    [JsonIgnore]
+    public string? FixType
+    {
+        get => _fixType;
+        set
+        {
+            var normalized = QuotationDamageFixTypeHelper.Normalize(value);
+            if (normalized is not null)
+            {
+                _fixType = normalized;
+                if (string.IsNullOrWhiteSpace(FixTypeName))
+                {
+                    FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(value))
+            {
+                _fixType = null;
+            }
+            else
+            {
+                _fixType = value.Trim();
+                if (string.IsNullOrWhiteSpace(FixTypeName))
+                {
+                    FixTypeName = _fixType;
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// 將主要圖片同步到舊欄位，維持舊資料格式相容。
     /// </summary>
     private void SyncLegacyPhotoFromPhotos()
@@ -353,42 +415,59 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         {
             using var document = JsonDocument.ParseValue(ref reader);
             var root = document.RootElement;
-            var item = ParseDamageItem(root, options);
 
-            return item is null
-                ? new List<QuotationDamageItem>()
-                : new List<QuotationDamageItem> { item };
+            if (LooksLikeSingleDamage(root))
+            {
+                var item = ParseDamageItem(root, options);
+                return item is null
+                    ? new List<QuotationDamageItem>()
+                    : new List<QuotationDamageItem> { item };
+            }
+
+            return ParseGroupedDamages(root, options);
         }
 
         throw new JsonException("傷痕資料格式不符，請提供物件或陣列。");
     }
 
     /// <summary>
-    /// 序列化時一律輸出陣列格式，避免前端遇到單筆資料時需要額外處理型別差異。
+    /// 序列化時依維修類型切分陣列，輸出凹痕、美容、鈑烤與其他四大群組。
     /// </summary>
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageItem> value, JsonSerializerOptions options)
     {
-        // 依最新需求統一輸出陣列格式，避免前端遇到單筆時需額外判斷物件型別。
-        writer.WriteStartArray();
+        writer.WriteStartObject();
 
-        if (value is { Count: > 0 })
+        var groups = GroupDamagesByFixType(value);
+
+        foreach (var key in QuotationDamageFixTypeHelper.CanonicalOrder)
         {
-            foreach (var item in value)
+            if (!groups.TryGetValue(key, out var damages) || damages.Count == 0)
             {
-                WriteSingleDamage(writer, item, options);
+                continue;
             }
+
+            writer.WritePropertyName(key);
+            writer.WriteStartArray();
+
+            foreach (var damage in damages)
+            {
+                WriteSingleDamage(writer, damage, options);
+            }
+
+            writer.WriteEndArray();
         }
 
-        writer.WriteEndArray();
+        writer.WriteEndObject();
     }
 
     /// <summary>
-    /// 將單一傷痕輸出為前端期待的物件格式。
+    /// 將單一傷痕輸出為前端期待的物件格式，並包含維修類型資訊。
     /// </summary>
     private static void WriteSingleDamage(Utf8JsonWriter writer, QuotationDamageItem? item, JsonSerializerOptions options)
     {
         _ = options; // 目前輸出僅需主要圖片識別碼，因此未使用額外序列化選項。
         var target = item ?? new QuotationDamageItem();
+        QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(target);
 
         writer.WriteStartObject();
 
@@ -425,6 +504,12 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
+        writer.WritePropertyName("fixType");
+        WriteNullableString(writer, target.DisplayFixType);
+
+        writer.WritePropertyName("fixTypeName");
+        WriteNullableString(writer, target.FixTypeName);
+
         writer.WriteEndObject();
     }
 
@@ -444,6 +529,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             var item = element.Deserialize<QuotationDamageItem>(options);
             if (item is not null)
             {
+                QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(item);
                 return item;
             }
         }
@@ -453,14 +539,142 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         // 以逐欄位讀取方式手動建立資料，確保舊版欄位仍可被解析。
-        return new QuotationDamageItem
+        var fallback = new QuotationDamageItem
         {
             DisplayPhotos = ReadPhotoList(element, options),
             DisplayPosition = ReadString(element, "position", "位置"),
             DisplayDentStatus = ReadString(element, "dentStatus", "凹痕狀況"),
             DisplayDescription = ReadString(element, "description", "說明"),
-            DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額")
+            DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額"),
+            DisplayFixType = ReadString(element, "fixType", "維修類型"),
+            FixTypeName = ReadString(element, "fixTypeName")
         };
+
+        QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(fallback);
+        return fallback;
+    }
+
+    /// <summary>
+    /// 解析分組格式的傷痕資料，將各維修類型陣列攤平成統一集合。
+    /// </summary>
+    private static List<QuotationDamageItem> ParseGroupedDamages(JsonElement root, JsonSerializerOptions options)
+    {
+        var result = new List<QuotationDamageItem>();
+
+        foreach (var property in root.EnumerateObject())
+        {
+            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name) ?? property.Name;
+
+            if (property.Value.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var element in property.Value.EnumerateArray())
+                {
+                    var item = ParseDamageItem(element, options);
+                    if (item is null)
+                    {
+                        continue;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(item.FixType))
+                    {
+                        item.FixType = normalizedKey;
+                    }
+
+                    QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(item, normalizedKey);
+                    result.Add(item);
+                }
+            }
+            else if (property.Value.ValueKind == JsonValueKind.Object)
+            {
+                var single = ParseDamageItem(property.Value, options);
+                if (single is null)
+                {
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(single.FixType))
+                {
+                    single.FixType = normalizedKey;
+                }
+
+                QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(single, normalizedKey);
+                result.Add(single);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 判斷物件是否為單筆傷痕資料，而非分組陣列包裝。
+    /// </summary>
+    private static bool LooksLikeSingleDamage(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var knownFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "photos",
+            "position",
+            "dentStatus",
+            "description",
+            "estimatedAmount",
+            "fixType",
+            "fixTypeName",
+            "圖片",
+            "位置",
+            "凹痕狀況",
+            "說明",
+            "預估金額",
+            "維修類型"
+        };
+
+        foreach (var property in element.EnumerateObject())
+        {
+            if (!knownFields.Contains(property.Name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// 依維修類型群組傷痕資料，方便序列化輸出為多個陣列。
+    /// </summary>
+    private static Dictionary<string, List<QuotationDamageItem>> GroupDamagesByFixType(List<QuotationDamageItem>? value)
+    {
+        var groups = new Dictionary<string, List<QuotationDamageItem>>(StringComparer.OrdinalIgnoreCase);
+
+        if (value is not { Count: > 0 })
+        {
+            return groups;
+        }
+
+        foreach (var damage in value)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
+            var key = QuotationDamageFixTypeHelper.DetermineGroupKey(damage.FixType);
+
+            if (!groups.TryGetValue(key, out var list))
+            {
+                list = new List<QuotationDamageItem>();
+                groups[key] = list;
+            }
+
+            list.Add(damage);
+        }
+
+        return groups;
     }
 
     /// <summary>
@@ -595,6 +809,133 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         writer.WriteStringValue(value);
+    }
+}
+
+/// <summary>
+/// 傷痕維修類型的共用工具，負責鍵值正規化與顯示文字處理。
+/// </summary>
+internal static class QuotationDamageFixTypeHelper
+{
+    private static readonly Dictionary<string, string> AliasMap = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["dent"] = "dent",
+        ["凹痕"] = "dent",
+        ["dentrepair"] = "dent",
+        ["beauty"] = "beauty",
+        ["美容"] = "beauty",
+        ["paint"] = "paint",
+        ["鈑烤"] = "paint",
+        ["板烤"] = "paint",
+        ["烤漆"] = "paint",
+        ["other"] = "other",
+        ["其他"] = "other"
+    };
+
+    /// <summary>
+    /// 維修類型輸出的固定順序，確保前端畫面呈現一致。
+    /// </summary>
+    public static IReadOnlyList<string> CanonicalOrder { get; } = new List<string> { "dent", "beauty", "paint", "other" };
+
+    /// <summary>
+    /// 正規化維修類型鍵值，轉換成 dent、beauty、paint 或 other。無法判斷時回傳 null。
+    /// </summary>
+    public static string? Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (AliasMap.TryGetValue(value.Trim(), out var mapped))
+        {
+            return mapped;
+        }
+
+        var lowered = value.Trim().ToLowerInvariant();
+        return AliasMap.TryGetValue(lowered, out mapped) ? mapped : null;
+    }
+
+    /// <summary>
+    /// 針對輸出提供中文顯示文字，缺省時回傳「其他」。
+    /// </summary>
+    public static string ResolveDisplayName(string? canonical)
+    {
+        return canonical switch
+        {
+            "dent" => "凹痕",
+            "beauty" => "美容",
+            "paint" => "鈑烤",
+            _ => "其他"
+        };
+    }
+
+    /// <summary>
+    /// 依據現有值決定群組索引，若無法判斷則落在 other。
+    /// </summary>
+    public static string DetermineGroupKey(string? value)
+    {
+        return Normalize(value) ?? "other";
+    }
+
+    /// <summary>
+    /// 確保傷痕物件具備正規化後的維修類型與顯示名稱。
+    /// </summary>
+    public static void EnsureFixTypeDefaults(QuotationDamageItem damage, string? fallback = null)
+    {
+        if (damage is null)
+        {
+            return;
+        }
+
+        var normalized = Normalize(damage.FixType);
+        if (normalized is null)
+        {
+            normalized = Normalize(fallback);
+        }
+
+        if (normalized is not null)
+        {
+            damage.FixType = normalized;
+            if (string.IsNullOrWhiteSpace(damage.FixTypeName))
+            {
+                damage.FixTypeName = ResolveDisplayName(normalized);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(damage.FixTypeName))
+        {
+            damage.FixType = damage.FixTypeName;
+        }
+    }
+
+    /// <summary>
+    /// 針對簡化輸出的傷痕摘要套用維修類型預設值。
+    /// </summary>
+    public static void EnsureFixTypeDefaults(QuotationDamageSummary summary, string? fallback = null)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        var normalized = Normalize(summary.FixType);
+        if (normalized is null)
+        {
+            normalized = Normalize(fallback);
+        }
+
+        if (normalized is not null)
+        {
+            summary.FixType = normalized;
+            if (string.IsNullOrWhiteSpace(summary.FixTypeName))
+            {
+                summary.FixTypeName = ResolveDisplayName(normalized);
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(summary.FixTypeName))
+        {
+            summary.FixType = summary.FixTypeName;
+        }
     }
 }
 

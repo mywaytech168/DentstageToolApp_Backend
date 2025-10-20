@@ -9,5 +9,6 @@ CREATE TABLE PhotoData (
     Photo_shape_show    VARCHAR(50),
     Cost                DECIMAL(10,2),
     Flag_Finish         BOOLEAN,
-    Finish_Cost         DECIMAL(10,2)
+    Finish_Cost         DECIMAL(10,2),
+    Fix_Type            VARCHAR(50)
 );
