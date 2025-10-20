@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Brands;
 
@@ -11,6 +12,11 @@ public class BrandListResponse
     /// 品牌資料集合。
     /// </summary>
     public List<BrandListItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 分頁資訊，協助前端掌握總頁數與總筆數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>

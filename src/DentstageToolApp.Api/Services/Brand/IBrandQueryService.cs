@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Brands;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Services.Brand;
 
@@ -12,9 +13,10 @@ public interface IBrandQueryService
     /// <summary>
     /// 取得品牌列表。
     /// </summary>
+    /// <param name="request">分頁條件設定。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>品牌列表回應。</returns>
-    Task<BrandListResponse> GetBrandsAsync(CancellationToken cancellationToken);
+    Task<BrandListResponse> GetBrandsAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 透過識別碼取得品牌詳細資料。

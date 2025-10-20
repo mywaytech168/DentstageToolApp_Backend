@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -44,12 +45,18 @@ public class TechniciansController : ControllerBase
     /// <summary>
     /// 取得目前登入者所屬門市的技師名單，供前端建立下拉選單使用。
     /// </summary>
+    /// <remarks>
+    /// GET /api/technicians?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件，預設第一頁、每頁二十筆。</param>
     /// <param name="cancellationToken">取消權杖，供前端取消請求。</param>
     [HttpGet]
     [ProducesResponseType(typeof(TechnicianListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<TechnicianListResponse>> GetTechniciansAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<TechnicianListResponse>> GetTechniciansAsync(
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
     {
         try
         {
@@ -62,7 +69,8 @@ public class TechniciansController : ControllerBase
             }
 
             _logger.LogDebug("查詢使用者 {UserUid} 所屬門市的技師名單。", userUid);
-            var response = await _technicianQueryService.GetTechniciansAsync(userUid, cancellationToken);
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _technicianQueryService.GetTechniciansAsync(userUid, paginationRequest, cancellationToken);
             return Ok(response);
         }
         catch (TechnicianQueryServiceException ex)
@@ -81,6 +89,47 @@ public class TechniciansController : ControllerBase
         {
             // 其他未預期錯誤以 500 形式告知前端稍後再試。
             _logger.LogError(ex, "查詢技師名單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢技師名單失敗");
+        }
+    }
+
+    /// <summary>
+    /// 依指定門市識別碼取得技師名單，提供跨門市查詢需求。
+    /// </summary>
+    /// <param name="storeUid">欲查詢的門市識別碼。</param>
+    /// <remarks>
+    /// GET /api/technicians/St_SAMPLE_UID?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件，預設第一頁、每頁二十筆。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    [HttpGet("{storeUid}")]
+    [ProducesResponseType(typeof(TechnicianListResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TechnicianListResponse>> GetTechniciansByStoreAsync(
+        string storeUid,
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _technicianQueryService.GetTechniciansByStoreAsync(storeUid, paginationRequest, cancellationToken);
+            return Ok(response);
+        }
+        catch (TechnicianQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "依門市查詢技師名單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "查詢技師名單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("依門市查詢技師名單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未更新。", "查詢技師名單已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "依門市查詢技師名單流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "查詢技師名單失敗");
         }
     }

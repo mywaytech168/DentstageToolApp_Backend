@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Cars;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,18 +29,26 @@ public class CarQueryService : ICarQueryService
     }
 
     /// <inheritdoc />
-    public async Task<CarListResponse> GetCarsAsync(CancellationToken cancellationToken)
+    public async Task<CarListResponse> GetCarsAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            _logger.LogDebug("開始查詢車輛列表資料。");
+            var pagination = request ?? new PaginationRequest();
+            var (page, pageSize) = pagination.Normalize();
+
+            _logger.LogDebug(
+                "開始查詢車輛列表資料，頁碼：{Page}，每頁筆數：{PageSize}。",
+                page,
+                pageSize);
 
             var items = await _dbContext.Cars
                 .AsNoTracking()
                 .OrderByDescending(car => car.CreationTimestamp)
                 .ThenBy(car => car.CarUid)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(car => new CarListItem
                 {
                     CarUid = car.CarUid,
@@ -51,11 +60,23 @@ public class CarQueryService : ICarQueryService
                 })
                 .ToListAsync(cancellationToken);
 
-            _logger.LogInformation("車輛列表查詢完成，共 {Count} 筆資料。", items.Count);
+            var totalCount = await _dbContext.Cars.CountAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "車輛列表查詢完成，頁碼：{Page}，共取得 {Count} / {Total} 筆資料。",
+                page,
+                items.Count,
+                totalCount);
 
             return new CarListResponse
             {
-                Items = items
+                Items = items,
+                Pagination = new PaginationMetadata
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                }
             };
         }
         catch (OperationCanceledException)

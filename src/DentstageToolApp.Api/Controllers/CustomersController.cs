@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -44,15 +45,22 @@ public class CustomersController : ControllerBase
     /// <summary>
     /// 取得所有客戶的概覽清單。
     /// </summary>
+    /// <remarks>
+    /// GET /api/customers?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件，預設第一頁、每頁二十筆。</param>
     /// <param name="cancellationToken">取消權杖，供前端在需要時中止請求。</param>
     [HttpGet]
     [ProducesResponseType(typeof(CustomerListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<CustomerListResponse>> GetCustomersAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<CustomerListResponse>> GetCustomersAsync(
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _customerLookupService.GetCustomersAsync(cancellationToken);
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _customerLookupService.GetCustomersAsync(paginationRequest, cancellationToken);
             return Ok(response);
         }
         catch (CustomerLookupException ex)
