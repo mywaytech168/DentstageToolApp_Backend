@@ -61,7 +61,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var ordersQuery = _dbContext.Orders
             .AsNoTracking()
             .Include(order => order.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(order => order.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .AsQueryable();
@@ -130,7 +130,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var orderEntity = await _dbContext.Orders
             .AsNoTracking()
             .Include(order => order.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(order => order.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .FirstOrDefaultAsync(order => order.OrderNo == orderNo, cancellationToken);
@@ -205,7 +205,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         var order = await _dbContext.Orders
             .Include(entity => entity.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(entity => entity.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
@@ -423,6 +423,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.DiscountPercent = quotation.DiscountPercent;
         order.Discount = quotation.Discount;
         order.DiscountReason = quotation.DiscountReason;
+        // ---------- 儲存估價技師 UID，讓維修單查詢不必再回頭查估價單 ----------
+        order.EstimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(quotation.UserUid);
+        order.CreatorTechnicianUid = quotation.CreatorTechnicianUid;
         order.Amount = amount;
         order.ModificationTimestamp = now;
         order.ModifiedBy = operatorLabel;
@@ -640,9 +644,21 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         var quotation = order.Quatation;
         var storeName = quotation?.StoreNavigation?.StoreName;
-        var estimatorName = quotation?.TechnicianNavigation?.TechnicianName
+        // ---------- 估價技師名稱以維修單優先，其次才回退估價單資料 ----------
+        var estimationTechnicianName = quotation?.EstimationTechnicianNavigation?.TechnicianName
             ?? NormalizeOptionalText(quotation?.UserName)
+            ?? NormalizeOptionalText(order.UserName)
             ?? quotation?.CurrentStatusUser;
+        // ---------- UID 先讀取維修單欄位，避免每次查詢都回頭 Join 估價單 ----------
+        var estimationTechnicianUid = NormalizeOptionalText(order.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(order.UserUid)
+            ?? NormalizeOptionalText(quotation?.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.UserUid);
+        var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid);
+
+        var creatorName = NormalizeOptionalText(quotation?.CreatedBy)
+            ?? NormalizeOptionalText(order.UserName);
 
         return new MaintenanceOrderSummaryResponse
         {
@@ -654,9 +670,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CarBrand = order.Brand,
             CarModel = order.Model,
             CarPlate = order.CarNo,
+            EstimationTechnicianUid = estimationTechnicianUid,
+            CreatorTechnicianUid = creatorUid,
             StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
-            EstimatorName = NormalizeOptionalText(estimatorName),
-            CreatorName = NormalizeOptionalText(order.UserName),
+            EstimationTechnicianName = NormalizeOptionalText(estimationTechnicianName),
+            CreatorTechnicianName = creatorName,
             CreatedAt = order.CreationTimestamp
         };
     }
@@ -715,22 +733,41 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
             ?? quotationStore?.RepairDate;
 
+        // ---------- 優先使用維修單寫入的估價技師 UID，再回退至估價單或原始請求 ----------
+        var estimationTechnicianUid = NormalizeOptionalText(order.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(order.UserUid)
+            ?? NormalizeOptionalText(quotation?.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.UserUid)
+            ?? quotationStore?.EstimationTechnicianUid
+            ?? quotationStore?.UserUid;
+        var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
+            ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid)
+            ?? quotationStore?.CreatorTechnicianUid
+            ?? quotationStore?.UserUid;
+
+        var resolvedEstimationTechnicianUid = NormalizeOptionalText(quotation?.EstimationTechnicianUid)
+            ?? estimationTechnicianUid;
+        var resolvedCreatorTechnicianUid = NormalizeOptionalText(quotation?.CreatorTechnicianUid)
+            ?? creatorUid;
+        var resolvedEstimationTechnicianName = NormalizeOptionalText(quotation?.EstimationTechnicianNavigation?.TechnicianName)
+            ?? NormalizeOptionalText(quotation?.UserName)
+            ?? NormalizeOptionalText(order.UserName)
+            ?? quotationStore?.EstimationTechnicianName;
+        var resolvedCreatorName = NormalizeOptionalText(quotation?.CreatedBy)
+            ?? NormalizeOptionalText(order.UserName)
+            ?? quotationStore?.CreatorTechnicianName;
+
         return new QuotationStoreInfo
         {
             StoreUid = NormalizeOptionalText(order.StoreUid)
                 ?? NormalizeOptionalText(quotation?.StoreUid)
                 ?? quotationStore?.StoreUid,
-            UserUid = NormalizeOptionalText(order.UserUid)
-                ?? NormalizeOptionalText(quotation?.UserUid)
-                ?? quotationStore?.UserUid,
+            UserUid = resolvedEstimationTechnicianUid,
+            EstimationTechnicianUid = resolvedEstimationTechnicianUid,
+            CreatorTechnicianUid = resolvedCreatorTechnicianUid,
             StoreName = normalizedStoreName,
-            EstimatorName = NormalizeOptionalText(quotation?.TechnicianNavigation?.TechnicianName)
-                ?? NormalizeOptionalText(quotation?.UserName)
-                ?? quotationStore?.EstimatorName,
-            CreatorName = NormalizeOptionalText(order.UserName)
-                ?? NormalizeOptionalText(quotation?.CreatedBy)
-                ?? quotationStore?.CreatorName,
-            TechnicianUid = NormalizeOptionalText(quotation?.TechnicianUid) ?? quotationStore?.TechnicianUid,
+            EstimationTechnicianName = resolvedEstimationTechnicianName,
+            CreatorTechnicianName = resolvedCreatorName,
             CreatedDate = order.CreationTimestamp
                 ?? quotation?.CreationTimestamp
                 ?? quotationStore?.CreatedDate,
@@ -1262,7 +1299,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             StoreUid = source.StoreUid,
             UserUid = source.UserUid,
             UserName = source.UserName,
-            TechnicianUid = source.TechnicianUid,
+            EstimationTechnicianUid = source.EstimationTechnicianUid,
+            CreatorTechnicianUid = source.CreatorTechnicianUid,
             Date = DateOnly.FromDateTime(timestamp),
             Status = source.Status,
             FixType = source.FixType,

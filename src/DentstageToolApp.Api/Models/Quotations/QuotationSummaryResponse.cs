@@ -48,19 +48,29 @@ public class QuotationSummaryResponse
     public string? CarPlateNumber { get; set; }
 
     /// <summary>
+    /// 估價技師識別碼，沿用舊系統 UserUID 欄位。
+    /// </summary>
+    public string? EstimationTechnicianUid { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼，提供串接使用。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
+
+    /// <summary>
     /// 店鋪名稱，優先使用門市主檔資料，若無對應則回退估價單欄位。
     /// </summary>
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價人員姓名，優先採用使用者主檔資料，若無則使用估價單原欄位。
+    /// 估價技師姓名，優先採用使用者主檔資料，若無則使用估價單原欄位。
     /// </summary>
-    public string? EstimatorName { get; set; }
+    public string? EstimationTechnicianName { get; set; }
 
     /// <summary>
     /// 製單技師或建立人員，暫以 CreatedBy 欄位呈現。
     /// </summary>
-    public string? CreatorName { get; set; }
+    public string? CreatorTechnicianName { get; set; }
 
     /// <summary>
     /// 建立日期時間，使用 CreationTimestamp 欄位資訊。

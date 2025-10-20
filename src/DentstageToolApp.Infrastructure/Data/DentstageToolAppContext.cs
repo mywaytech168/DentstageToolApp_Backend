@@ -492,8 +492,8 @@ public class DentstageToolAppContext : DbContext
             .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.Cascade);
         entity.HasMany(e => e.Quatations)
-            .WithOne(e => e.TechnicianNavigation)
-            .HasForeignKey(e => e.TechnicianUid)
+            .WithOne(e => e.EstimationTechnicianNavigation)
+            .HasForeignKey(e => e.EstimationTechnicianUid)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
@@ -516,9 +516,12 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("StoreUID");
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
-        entity.Property(e => e.TechnicianUid)
+        entity.Property(e => e.EstimationTechnicianUid)
             .HasMaxLength(100)
-            .HasColumnName("TechnicianUID");
+            .HasColumnName("EstimationTechnicianUID");
+        entity.Property(e => e.CreatorTechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("CreatorTechnicianUID");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.FixType)
             .HasMaxLength(50)
@@ -569,9 +572,9 @@ public class DentstageToolAppContext : DbContext
             .WithMany(e => e.Quatations)
             .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.SetNull);
-        entity.HasOne(e => e.TechnicianNavigation)
+        entity.HasOne(e => e.EstimationTechnicianNavigation)
             .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.TechnicianUid)
+            .HasForeignKey(e => e.EstimationTechnicianUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.Property(e => e.CustomerUid)
             .HasMaxLength(100)
@@ -710,6 +713,12 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreUid).HasMaxLength(100);
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
+        entity.Property(e => e.EstimationTechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("EstimationTechnicianUID");
+        entity.Property(e => e.CreatorTechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("CreatorTechnicianUID");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)

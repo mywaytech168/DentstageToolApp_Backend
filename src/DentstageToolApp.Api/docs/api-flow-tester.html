@@ -1426,7 +1426,8 @@
                 path: '/quotations/create',
                 template: {
                   store: {
-                    technicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    estimationTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    creatorTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
                     source: '官方網站',
                     bookMethod: 'LINE 預約',
                     reservationDate: '2024-10-15T10:00:00',
@@ -1476,7 +1477,8 @@
                 template: {
                   quotationNo: 'Q25100001',
                   store: {
-                    technicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    estimationTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    creatorTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
                     source: '官方網站',
                     bookMethod: 'LINE 預約',
                     reservationDate: '2024-10-15T10:00:00',
@@ -1619,7 +1621,7 @@
                 method: 'GET',
                 path: '/maintenance-orders?status=210&page=1&pageSize=20',
                 requiresAuth: true,
-                description: '以查詢參數取得維修單列表，預設查詢待確認資料。'
+                description: '以查詢參數取得維修單列表，預設查詢待確認資料，回應中可看到 estimationTechnicianUid 與 creatorTechnicianUid。'
               },
               {
                 name: '維修單列表 (POST)',
@@ -1643,7 +1645,7 @@
                   orderNo: 'O25100001'
                 },
                 requiresAuth: true,
-                description: '依維修單編號取得詳細資料，回傳欄位與估價單詳情相同。'
+                description: '依維修單編號取得詳細資料，store 區塊會同步帶出 estimationTechnicianUid 與 creatorTechnicianUid。'
               },
               {
                 name: '維修單回溯',
@@ -1673,7 +1675,8 @@
                   quotationNo: 'Q25100001',
                   orderNo: 'O25100001',
                   store: {
-                    technicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    estimationTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
+                    creatorTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
                     source: '官方網站',
                     reservationDate: '2024-10-15T10:00:00',
                     repairDate: '2024-10-25T09:00:00'
