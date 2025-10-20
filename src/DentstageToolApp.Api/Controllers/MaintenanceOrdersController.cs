@@ -189,8 +189,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixType": "dent",
-                "fixTypeName": "凹痕"
+                "fixType": "凹痕"
               }
             ],
             "other": [
@@ -200,8 +199,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
                 "estimatedAmount": 1200,
-                "fixType": "other",
-                "fixTypeName": "其他"
+                "fixType": "其他"
               }
             ]
           },
@@ -219,7 +217,7 @@ public class MaintenanceOrdersController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "paint",
+            "fixType": "板烤/鈑烤",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,

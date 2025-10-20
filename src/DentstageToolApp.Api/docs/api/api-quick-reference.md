@@ -188,8 +188,7 @@ Content-Type: application/json
         "dentStatus": "大面積",
         "description": "需板金搭配烤漆",
         "estimatedAmount": 4500,
-        "fixType": "dent",
-        "fixTypeName": "凹痕"
+        "fixType": "凹痕"
       }
     ],
     "paint": [
@@ -199,8 +198,7 @@ Content-Type: application/json
         "dentStatus": "烤漆",
         "description": "刮傷需補土烤漆",
         "estimatedAmount": 3200,
-        "fixType": "paint",
-        "fixTypeName": "鈑烤"
+        "fixType": "板烤/鈑烤"
       }
     ]
   },
@@ -218,7 +216,7 @@ Content-Type: application/json
     ]
   },
   "maintenance": {
-    "fixType": "dent",
+    "fixType": "凹痕",
     "reserveCar": true,
     "applyCoating": false,
     "applyWrapping": false,
@@ -241,7 +239,7 @@ Content-Type: application/json
 - `car`：可額外附上 `mileage` 更新車輛里程。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L362-L384】
 - `customer`：沿用客戶主檔資訊，建立或編輯估價單時僅需帶入 `customerUid`。
 - `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
-- `damages`：以物件包裝凹痕（dent）、美容（beauty）、鈑烤（paint）、其他（other）四種陣列，每筆資料須帶上 `fixType` 鍵值與 `fixTypeName` 顯示名稱。
+- `damages`：以物件包裝凹痕（dent）、美容（beauty）、鈑烤（paint）、其他（other）四種陣列，每筆資料僅需填入中文 `fixType` 名稱。
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
 
 **狀態操作共通欄位**
