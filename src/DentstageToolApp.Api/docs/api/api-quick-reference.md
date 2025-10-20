@@ -67,10 +67,12 @@ Authorization: Bearer {舊的AccessToken}
 - `carPlateNumber`：必填車牌號碼。 【F:src/DentstageToolApp.Api/Cars/CreateCarRequest.cs†L10-L15】
 - `brandUid`、`modelUid`：對應品牌/車型 UID。 【F:src/DentstageToolApp.Api/Cars/CreateCarRequest.cs†L17-L27】
 - `color`、`remark`：車色與備註。 【F:src/DentstageToolApp.Api/Cars/CreateCarRequest.cs†L29-L39】
+- `mileage`：最新里程數（公里），若現場量測可一併帶入。 【F:src/DentstageToolApp.Api/Models/Cars/CreateCarRequest.cs†L41-L45】
 
 **編輯車輛需加帶欄位**
 - `carUid`：欲更新的車輛識別碼。 【F:src/DentstageToolApp.Api/Cars/EditCarRequest.cs†L10-L15】
 - 其餘欄位與新增格式相同，可選擇保留或清空。 【F:src/DentstageToolApp.Api/Cars/EditCarRequest.cs†L17-L46】
+- 若需更新里程數請帶入 `mileage`，後端會同步覆寫車輛與估價單的里程欄位。 【F:src/DentstageToolApp.Api/Services/Car/CarManagementService.cs†L180-L221】
 
 ---
 
@@ -132,14 +134,17 @@ Content-Type: application/json
   "store": {
     "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
     "source": "官方網站",
+    "bookMethod": "LINE 預約",
     "reservationDate": "2024-10-15T10:00:00",
     "repairDate": "2024-10-25T09:00:00"
   },
   "car": {
-    "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
+    "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
+    "mileage": 18500
   },
   "customer": {
-    "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
+    "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A",
+    "email": "guest@example.com"
   },
   "damages": [
     {
@@ -183,7 +188,9 @@ Content-Type: application/json
   }
 }
 ```
-- `store`：需帶技師 UID、來源、預約方式與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L13-L58】
+- `store`：需帶技師 UID、來源、預約方式與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L52-L81】
+- `car`：可額外附上 `mileage` 更新車輛里程。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L362-L384】
+- `customer`：若需同步電子郵件請一併帶入 `email` 欄位。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L443-L474】
 - `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
 - `damages`：可同時帶多筆傷痕項目，格式沿用 `QuotationDamageItem`（詳見程式碼）。
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
@@ -271,6 +278,8 @@ Content-Type: application/json
 | GET | `/api/technicians` | 依登入者所屬門市取得技師名單。 | 需帶權杖，後端會從 Claims 解析使用者 UID。 |
 
 查詢時後端會從 JWT 取出 `sub` 或 `displayName` 等欄位，並回傳對應技師資訊列表。 【F:src/DentstageToolApp.Api/Controllers/TechniciansController.cs†L17-L73】
+
+- 回傳欄位包含 `jobTitle`，可直接顯示技師職稱。 【F:src/DentstageToolApp.Api/Models/Technicians/TechnicianListResponse.cs†L23-L35】
 
 ---
 
