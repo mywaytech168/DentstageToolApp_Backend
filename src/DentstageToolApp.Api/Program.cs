@@ -290,6 +290,7 @@ builder.Services.AddScoped<IServiceCategoryManagementService, ServiceCategoryMan
 builder.Services.AddScoped<IServiceCategoryQueryService, ServiceCategoryQueryService>();
 builder.Services.AddScoped<IStoreManagementService, StoreManagementService>();
 builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
+builder.Services.AddScoped<ITechnicianManagementService, TechnicianManagementService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
