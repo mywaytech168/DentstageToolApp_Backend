@@ -64,14 +64,19 @@ public class Quatation
     public Store? StoreNavigation { get; set; }
 
     /// <summary>
-    /// 建立估價單的技師識別碼（UID）。
+    /// 建立估價單的估價技師識別碼（UID）。
     /// </summary>
-    public string? TechnicianUid { get; set; }
+    public string? EstimationTechnicianUid { get; set; }
 
     /// <summary>
-    /// 導覽屬性：技師主檔資料。
+    /// 導覽屬性：估價技師主檔資料。
     /// </summary>
-    public Technician? TechnicianNavigation { get; set; }
+    public Technician? EstimationTechnicianNavigation { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼，預留與舊系統同步使用。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
     /// 報價日期。

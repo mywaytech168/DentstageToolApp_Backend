@@ -60,7 +60,12 @@ public class QuotationStoreUpdateInfo
     /// <summary>
     /// 估價技師識別碼（UID），改派時需一併更新門市與估價人員名稱。
     /// </summary>
-    public string? TechnicianUid { get; set; }
+    public string? EstimationTechnicianUid { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼（UID），允許獨立指定與估價技師不同的人員。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
     /// 維修來源，沿用建立估價單欄位。
