@@ -883,7 +883,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 Position = damage.Position,
                 DentStatus = damage.DentStatus,
                 Description = damage.Description,
-                EstimatedAmount = damage.EstimatedAmount
+                EstimatedAmount = damage.EstimatedAmount,
+                FixTypeUid = damage.FixTypeUid,
+                FixType = damage.FixType,
+                FixTypeName = damage.FixTypeName
             });
         }
 

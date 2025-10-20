@@ -10,5 +10,6 @@ CREATE TABLE PhotoData (
     Cost                DECIMAL(10,2),
     Flag_Finish         BOOLEAN,
     Finish_Cost         DECIMAL(10,2),
-    Fix_Type            VARCHAR(50)
+    -- Fix_Type 改儲存 FixTypeUID，預設長度調整為 100 以容納完整 UID。
+    Fix_Type            VARCHAR(100)
 );

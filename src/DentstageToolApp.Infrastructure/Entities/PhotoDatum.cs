@@ -63,9 +63,9 @@ public class PhotoDatum
     public decimal? FinishCost { get; set; }
 
     /// <summary>
-    /// 照片所屬維修類型，改由照片資料表儲存以支援多維修類型混用。
+    /// 照片所屬維修類型 UID，統一改由照片資料表儲存識別碼供新舊流程共用。
     /// </summary>
-    public string? FixType { get; set; }
+    public string? FixTypeUid { get; set; }
 
     /// <summary>
     /// 關聯報價單導航屬性。
