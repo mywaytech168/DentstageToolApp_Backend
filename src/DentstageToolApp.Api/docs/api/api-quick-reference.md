@@ -60,6 +60,7 @@ Authorization: Bearer {舊的AccessToken}
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
+| GET | `/api/cars?page=1&pageSize=20` | 以分頁取得車輛列表。 | Query 對應 `PaginationRequest`，預設每頁 20 筆。 |
 | POST | `/api/cars` | 新增車輛。 | Body 採 JSON，對應 `CreateCarRequest`。 |
 | POST | `/api/cars/edit` | 編輯車輛。 | Body 採 JSON，對應 `EditCarRequest`。 |
 
@@ -80,9 +81,43 @@ Authorization: Bearer {舊的AccessToken}
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
+| GET | `/api/customers?page=1&pageSize=20` | 以分頁取得客戶列表。 | Query 對應 `PaginationRequest`，回傳 `PaginationMetadata`。 |
 | POST | `/api/customers` | 新增客戶資料。 | Body 採 JSON，對應 `CreateCustomerRequest`。 |
 | POST | `/api/customers/edit` | 編輯客戶資料。 | Body 採 JSON，對應 `EditCustomerRequest`。 |
 | POST | `/api/customers/phone-search` | 依電話搜尋客戶與維修統計。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`。 |
+
+## 品牌模組（`api/brands`）
+
+| 方法 | 路徑 | 功能摘要 | 備註 |
+| --- | --- | --- | --- |
+| GET | `/api/brands?page=1&pageSize=20` | 以分頁取得品牌列表。 | Query 對應 `PaginationRequest`，依名稱排序。 |
+| POST | `/api/brands` | 新增品牌。 | Body 採 JSON，對應 `CreateBrandRequest`。 |
+| POST | `/api/brands/edit` | 編輯品牌。 | Body 採 JSON，對應 `EditBrandRequest`。 |
+| POST | `/api/brands/delete` | 刪除品牌。 | Body 採 JSON，對應 `DeleteBrandRequest`。 |
+
+> 品牌列表回應會提供 `pagination` 欄位，包含 `page`、`pageSize`、`totalCount` 與 `totalPages`，可直接驅動前端分頁元件。 【F:src/DentstageToolApp.Api/Models/Brands/BrandListResponse.cs†L8-L24】
+
+## 服務類別模組（`api/service-categories`）
+
+| 方法 | 路徑 | 功能摘要 | 備註 |
+| --- | --- | --- | --- |
+| GET | `/api/service-categories?page=1&pageSize=20` | 以分頁取得服務類別。 | Query 對應 `PaginationRequest`。 |
+| POST | `/api/service-categories` | 新增服務類別。 | Body 採 JSON，對應 `CreateServiceCategoryRequest`。 |
+| POST | `/api/service-categories/edit` | 編輯服務類別。 | Body 採 JSON，對應 `EditServiceCategoryRequest`。 |
+| POST | `/api/service-categories/delete` | 刪除服務類別。 | Body 採 JSON，對應 `DeleteServiceCategoryRequest`。 |
+
+> 回應的 `pagination` 欄位與品牌模組一致，方便統一處理分頁邏輯。 【F:src/DentstageToolApp.Api/Models/ServiceCategories/ServiceCategoryListResponse.cs†L8-L24】
+
+## 門市模組（`api/stores`）
+
+| 方法 | 路徑 | 功能摘要 | 備註 |
+| --- | --- | --- | --- |
+| GET | `/api/stores?page=1&pageSize=20` | 以分頁取得門市列表。 | Query 對應 `PaginationRequest`。 |
+| POST | `/api/stores` | 新增門市。 | Body 採 JSON，對應 `CreateStoreRequest`。 |
+| POST | `/api/stores/edit` | 編輯門市。 | Body 採 JSON，對應 `EditStoreRequest`。 |
+| POST | `/api/stores/delete` | 刪除門市。 | Body 採 JSON，對應 `DeleteStoreRequest`。 |
+
+> 門市列表同樣回傳 `pagination`，可搭配技師查詢功能使用。 【F:src/DentstageToolApp.Api/Models/Stores/StoreListResponse.cs†L8-L24】
 
 **新增／編輯欄位重點**
 - `customerName`：必填客戶名稱。 【F:src/DentstageToolApp.Api/Customers/CreateCustomerRequest.cs†L10-L15】【F:src/DentstageToolApp.Api/Customers/EditCustomerRequest.cs†L17-L22】
@@ -274,11 +309,12 @@ Content-Type: application/json
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
-| GET | `/api/technicians` | 依登入者所屬門市取得技師名單。 | 需帶權杖，後端會從 Claims 解析使用者 UID。 |
+| GET | `/api/technicians?page=1&pageSize=20` | 依登入者所屬門市取得技師名單。 | 需帶權杖，Query 對應 `PaginationRequest`。 |
+| GET | `/api/technicians/{storeUid}?page=1&pageSize=20` | 指定門市分頁查詢技師名單。 | 適合總部查詢其他門市人員。 |
 
-查詢時後端會從 JWT 取出 `sub` 或 `displayName` 等欄位，並回傳對應技師資訊列表。 【F:src/DentstageToolApp.Api/Controllers/TechniciansController.cs†L17-L73】
+查詢時後端會從 JWT 取出 `sub` 或 `displayName` 等欄位，並回傳對應技師資訊列表。 【F:src/DentstageToolApp.Api/Controllers/TechniciansController.cs†L17-L134】
 
-- 回傳欄位包含 `jobTitle`，可直接顯示技師職稱。 【F:src/DentstageToolApp.Api/Models/Technicians/TechnicianListResponse.cs†L23-L35】
+- 回傳欄位包含 `jobTitle` 與 `pagination`，可直接顯示技師職稱與分頁資訊。 【F:src/DentstageToolApp.Api/Models/Technicians/TechnicianListResponse.cs†L8-L35】
 
 ---
 

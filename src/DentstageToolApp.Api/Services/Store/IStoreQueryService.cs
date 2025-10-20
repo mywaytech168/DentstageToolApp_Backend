@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Stores;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Services.Store;
 
@@ -12,7 +13,7 @@ public interface IStoreQueryService
     /// <summary>
     /// 取得門市列表。
     /// </summary>
-    Task<StoreListResponse> GetStoresAsync(CancellationToken cancellationToken);
+    Task<StoreListResponse> GetStoresAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 透過識別碼取得門市詳細資料。

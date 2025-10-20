@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.ServiceCategories;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Services.ServiceCategory;
 
@@ -12,7 +13,7 @@ public interface IServiceCategoryQueryService
     /// <summary>
     /// 取得所有服務類別列表。
     /// </summary>
-    Task<ServiceCategoryListResponse> GetServiceCategoriesAsync(CancellationToken cancellationToken);
+    Task<ServiceCategoryListResponse> GetServiceCategoriesAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 透過識別碼取得服務類別詳細資料。

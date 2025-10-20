@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Customers;
 
@@ -12,6 +13,11 @@ public class CustomerListResponse
     /// 客戶資料列集合，依建立時間排序後回傳。
     /// </summary>
     public List<CustomerListItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// 分頁資訊，提供前端計算下一頁與總筆數。
+    /// </summary>
+    public PaginationMetadata Pagination { get; set; } = new();
 }
 
 /// <summary>

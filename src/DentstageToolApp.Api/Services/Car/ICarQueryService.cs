@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Cars;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Services.Car;
 
@@ -12,9 +13,10 @@ public interface ICarQueryService
     /// <summary>
     /// 取得車輛列表，供前端建立下拉或列表使用。
     /// </summary>
+    /// <param name="request">分頁條件，指定頁碼與每頁筆數。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>回傳整理後的車輛清單。</returns>
-    Task<CarListResponse> GetCarsAsync(CancellationToken cancellationToken);
+    Task<CarListResponse> GetCarsAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 透過車輛識別碼取得詳細資料。

@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Customers;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Services.Customer;
 
@@ -12,9 +13,10 @@ public interface ICustomerLookupService
     /// <summary>
     /// 取得客戶列表，依建立時間倒序排列以便前端展示。
     /// </summary>
+    /// <param name="request">分頁條件，指定頁碼與每頁筆數。</param>
     /// <param name="cancellationToken">取消權杖，供前端在需要時中止請求。</param>
     /// <returns>回傳整理後的客戶清單。</returns>
-    Task<CustomerListResponse> GetCustomersAsync(CancellationToken cancellationToken);
+    Task<CustomerListResponse> GetCustomersAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
     /// 透過客戶識別碼取得完整客戶資料，供詳細頁使用。

@@ -1260,8 +1260,29 @@
             ]
           },
           {
-            name: '基礎資料｜品牌與技師',
+            name: '基礎資料｜品牌、門市與技師',
             operations: [
+              {
+                name: '品牌列表 (分頁)',
+                method: 'GET',
+                path: '/brands?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '示範以 Query 參數取得品牌清單並套用分頁。'
+              },
+              {
+                name: '服務類別列表 (分頁)',
+                method: 'GET',
+                path: '/service-categories?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '列出服務類別主檔，支援指定頁碼與每頁筆數。'
+              },
+              {
+                name: '門市列表 (分頁)',
+                method: 'GET',
+                path: '/stores?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '取得門市清單，適合搭配技師查詢或門市維運。'
+              },
               {
                 name: '品牌與型號清單',
                 method: 'GET',
@@ -1270,11 +1291,18 @@
                 description: '取得品牌與車型樹狀資料供下拉選單使用。'
               },
               {
-                name: '技師名單',
+                name: '技師名單 (登入門市)',
                 method: 'GET',
-                path: '/technicians',
+                path: '/technicians?page=1&pageSize=20',
                 requiresAuth: true,
-                description: '依登入者所屬門市列出技師清單。'
+                description: '依登入者所屬門市列出技師清單，支援分頁查詢。'
+              },
+              {
+                name: '技師名單 (指定門市)',
+                method: 'GET',
+                path: '/technicians/St_SAMPLE_UID?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '提供管理者依門市 UID 交叉查詢技師人員。'
               }
             ]
           },
@@ -1306,6 +1334,13 @@
           {
             name: '客戶模組',
             operations: [
+              {
+                name: '客戶列表 (分頁)',
+                method: 'GET',
+                path: '/customers?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '快速取得客戶列表並驗證分頁資訊。'
+              },
               {
                 name: '新增客戶',
                 method: 'POST',
@@ -1360,6 +1395,13 @@
           {
             name: '車輛模組',
             operations: [
+              {
+                name: '車輛列表 (分頁)',
+                method: 'GET',
+                path: '/cars?page=1&pageSize=20',
+                requiresAuth: true,
+                description: '取得車輛清單並檢視分頁資訊。'
+              },
               {
                 name: '新增車輛',
                 method: 'POST',

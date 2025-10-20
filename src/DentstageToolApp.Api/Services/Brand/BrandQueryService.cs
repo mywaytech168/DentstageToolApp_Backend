@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Brands;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -28,15 +29,24 @@ public class BrandQueryService : IBrandQueryService
     }
 
     /// <inheritdoc />
-    public async Task<BrandListResponse> GetBrandsAsync(CancellationToken cancellationToken)
+    public async Task<BrandListResponse> GetBrandsAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var items = await _dbContext.Brands
+            var pagination = request ?? new PaginationRequest();
+            var (page, pageSize) = pagination.Normalize();
+
+            var query = _dbContext.Brands
                 .AsNoTracking()
-                .OrderBy(brand => brand.BrandName)
+                .OrderBy(brand => brand.BrandName);
+
+            var totalCount = await query.CountAsync(cancellationToken);
+
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
                 .Select(brand => new BrandListItem
                 {
                     BrandUid = brand.BrandUid,
@@ -46,7 +56,13 @@ public class BrandQueryService : IBrandQueryService
 
             return new BrandListResponse
             {
-                Items = items
+                Items = items,
+                Pagination = new PaginationMetadata
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    TotalCount = totalCount
+                }
             };
         }
         catch (OperationCanceledException)

@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -44,15 +45,22 @@ public class ServiceCategoriesController : ControllerBase
     /// <summary>
     /// 取得所有服務類別列表。
     /// </summary>
+    /// <remarks>
+    /// GET /api/service-categories?page=1&amp;pageSize=20
+    /// </remarks>
+    /// <param name="pagination">分頁條件，預設第一頁、每頁二十筆。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpGet]
     [ProducesResponseType(typeof(ServiceCategoryListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<ServiceCategoryListResponse>> GetServiceCategoriesAsync(CancellationToken cancellationToken)
+    public async Task<ActionResult<ServiceCategoryListResponse>> GetServiceCategoriesAsync(
+        [FromQuery] PaginationRequest pagination,
+        CancellationToken cancellationToken)
     {
         try
         {
-            var response = await _serviceCategoryQueryService.GetServiceCategoriesAsync(cancellationToken);
+            var paginationRequest = pagination ?? new PaginationRequest();
+            var response = await _serviceCategoryQueryService.GetServiceCategoriesAsync(paginationRequest, cancellationToken);
             return Ok(response);
         }
         catch (ServiceCategoryQueryException ex)

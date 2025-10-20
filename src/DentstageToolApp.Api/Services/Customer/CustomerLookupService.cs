@@ -5,6 +5,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Customers;
+using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -58,16 +59,24 @@ public class CustomerLookupService : ICustomerLookupService
     }
 
     /// <inheritdoc />
-    public async Task<CustomerListResponse> GetCustomersAsync(CancellationToken cancellationToken)
+    public async Task<CustomerListResponse> GetCustomersAsync(PaginationRequest request, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        _logger.LogInformation("查詢全部客戶列表，預期提供前端下拉或列表資料。");
+        var pagination = request ?? new PaginationRequest();
+        var (page, pageSize) = pagination.Normalize();
+
+        _logger.LogInformation(
+            "查詢客戶列表，頁碼：{Page}，每頁筆數：{PageSize}。",
+            page,
+            pageSize);
 
         var items = await _dbContext.Customers
             .AsNoTracking()
             .OrderByDescending(customer => customer.CreationTimestamp)
             .ThenBy(customer => customer.CustomerUid)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(customer => new CustomerListItem
             {
                 CustomerUid = customer.CustomerUid,
@@ -79,11 +88,23 @@ public class CustomerLookupService : ICustomerLookupService
             })
             .ToListAsync(cancellationToken);
 
-        _logger.LogInformation("客戶列表查詢完成，共取得 {Count} 筆資料。", items.Count);
+        var totalCount = await _dbContext.Customers.CountAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "客戶列表查詢完成，頁碼：{Page}，共取得 {Count} / {Total} 筆資料。",
+            page,
+            items.Count,
+            totalCount);
 
         return new CustomerListResponse
         {
-            Items = items
+            Items = items,
+            Pagination = new PaginationMetadata
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount
+            }
         };
     }
 
