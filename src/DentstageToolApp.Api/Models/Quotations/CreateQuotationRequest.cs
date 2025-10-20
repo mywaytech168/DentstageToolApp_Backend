@@ -52,12 +52,12 @@ public class CreateQuotationRequest
 public class CreateQuotationStoreInfo
 {
     /// <summary>
-    /// 技師識別碼，改為以 UID 字串傳遞，可自動帶出所屬門市與技師名稱。
+    /// 估價技師識別碼，改為以 UID 字串傳遞，可自動帶出所屬門市與技師名稱。
     /// （後端仍保留舊欄位，待前端改版後可進一步移除。）
     /// </summary>
     [Required(ErrorMessage = "請選擇估價技師。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
-    public string? TechnicianUid { get; set; }
+    public string? EstimationTechnicianUid { get; set; }
 
     /// <summary>
     /// 維修來源。
@@ -210,14 +210,15 @@ public class QuotationStoreInfo
     public string? UserUid { get; set; }
 
     /// <summary>
-    /// 估價技師識別碼，與 <see cref="CreateQuotationStoreInfo.TechnicianUid"/> 保持一致以利串接。
+    /// 估價技師識別碼，與 <see cref="CreateQuotationStoreInfo.EstimationTechnicianUid"/> 保持一致以利串接，
+    /// 並且提供前端回填使用。
     /// </summary>
-    public string? EstimatorUid { get; set; }
+    public string? EstimationTechnicianUid { get; set; }
 
     /// <summary>
     /// 製單技師識別碼。
     /// </summary>
-    public string? CreatorUid { get; set; }
+    public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
     /// 店鋪名稱，若未提供會依據使用者或門市主檔自動補齊。
@@ -225,19 +226,14 @@ public class QuotationStoreInfo
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價人員。
+    /// 估價技師名稱。
     /// </summary>
-    public string? EstimatorName { get; set; }
+    public string? EstimationTechnicianName { get; set; }
 
     /// <summary>
-    /// 製單技師。
+    /// 製單技師名稱。
     /// </summary>
-    public string? CreatorName { get; set; }
-
-    /// <summary>
-    /// 估價技師識別碼，回傳時需與建立估價單格式一致，方便前端直接回填。
-    /// </summary>
-    public string? TechnicianUid { get; set; }
+    public string? CreatorTechnicianName { get; set; }
 
     /// <summary>
     /// 建立日期。

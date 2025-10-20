@@ -59,9 +59,13 @@
                     "type": "object",
                     "description": "門市來源與技師資訊。",
                     "properties": {
-                      "technicianUid": {
+                      "estimationTechnicianUid": {
                         "type": "string",
                         "description": "估價技師的 UID。"
+                      },
+                      "creatorTechnicianUid": {
+                        "type": "string",
+                        "description": "製單技師的 UID，若未指定則與估價技師相同。"
                       },
                       "source": {
                         "type": "string",
@@ -144,8 +148,9 @@
                 }
               },
               "example": {
-                "store": {
-                  "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+                  "store": {
+                    "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+                    "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
                   "source": "官方網站"
                 },
                 "car": {

@@ -61,7 +61,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var ordersQuery = _dbContext.Orders
             .AsNoTracking()
             .Include(order => order.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(order => order.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .AsQueryable();
@@ -130,7 +130,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var orderEntity = await _dbContext.Orders
             .AsNoTracking()
             .Include(order => order.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(order => order.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .FirstOrDefaultAsync(order => order.OrderNo == orderNo, cancellationToken);
@@ -205,7 +205,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         var order = await _dbContext.Orders
             .Include(entity => entity.Quatation)
-                .ThenInclude(quotation => quotation.TechnicianNavigation)
+                .ThenInclude(quotation => quotation.EstimationTechnicianNavigation)
             .Include(entity => entity.Quatation)
                 .ThenInclude(quotation => quotation.StoreNavigation)
             .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
@@ -641,10 +641,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         var quotation = order.Quatation;
         var storeName = quotation?.StoreNavigation?.StoreName;
-        var estimatorName = quotation?.TechnicianNavigation?.TechnicianName
+        var estimationTechnicianName = quotation?.EstimationTechnicianNavigation?.TechnicianName
             ?? NormalizeOptionalText(quotation?.UserName)
             ?? quotation?.CurrentStatusUser;
-        var estimatorUid = NormalizeOptionalText(order.UserUid)
+        var estimationTechnicianUid = NormalizeOptionalText(order.UserUid)
             ?? NormalizeOptionalText(quotation?.UserUid);
         var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
             ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid);
@@ -662,11 +662,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CarBrand = order.Brand,
             CarModel = order.Model,
             CarPlate = order.CarNo,
-            EstimatorUid = estimatorUid,
-            CreatorUid = creatorUid,
+            EstimationTechnicianUid = estimationTechnicianUid,
+            CreatorTechnicianUid = creatorUid,
             StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
-            EstimatorName = NormalizeOptionalText(estimatorName),
-            CreatorName = creatorName,
+            EstimationTechnicianName = NormalizeOptionalText(estimationTechnicianName),
+            CreatorTechnicianName = creatorName,
             CreatedAt = order.CreationTimestamp
         };
     }
@@ -725,31 +725,37 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
             ?? quotationStore?.RepairDate;
 
-        var estimatorUid = NormalizeOptionalText(order.UserUid)
+        var estimationTechnicianUid = NormalizeOptionalText(order.UserUid)
             ?? NormalizeOptionalText(quotation?.UserUid)
-            ?? quotationStore?.EstimatorUid
+            ?? quotationStore?.EstimationTechnicianUid
             ?? quotationStore?.UserUid;
         var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
             ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid)
-            ?? quotationStore?.CreatorUid
+            ?? quotationStore?.CreatorTechnicianUid
             ?? quotationStore?.UserUid;
+
+        var resolvedEstimationTechnicianUid = NormalizeOptionalText(quotation?.EstimationTechnicianUid)
+            ?? estimationTechnicianUid;
+        var resolvedCreatorTechnicianUid = NormalizeOptionalText(quotation?.CreatorTechnicianUid)
+            ?? creatorUid;
+        var resolvedEstimationTechnicianName = NormalizeOptionalText(quotation?.EstimationTechnicianNavigation?.TechnicianName)
+            ?? NormalizeOptionalText(quotation?.UserName)
+            ?? quotationStore?.EstimationTechnicianName;
+        var resolvedCreatorName = NormalizeOptionalText(quotation?.CreatedBy)
+            ?? NormalizeOptionalText(order.UserName)
+            ?? quotationStore?.CreatorTechnicianName;
 
         return new QuotationStoreInfo
         {
             StoreUid = NormalizeOptionalText(order.StoreUid)
                 ?? NormalizeOptionalText(quotation?.StoreUid)
                 ?? quotationStore?.StoreUid,
-            UserUid = estimatorUid,
-            EstimatorUid = estimatorUid,
-            CreatorUid = creatorUid,
+            UserUid = resolvedEstimationTechnicianUid,
+            EstimationTechnicianUid = resolvedEstimationTechnicianUid,
+            CreatorTechnicianUid = resolvedCreatorTechnicianUid,
             StoreName = normalizedStoreName,
-            EstimatorName = NormalizeOptionalText(quotation?.TechnicianNavigation?.TechnicianName)
-                ?? NormalizeOptionalText(quotation?.UserName)
-                ?? quotationStore?.EstimatorName,
-            CreatorName = NormalizeOptionalText(quotation?.CreatedBy)
-                ?? NormalizeOptionalText(order.UserName)
-                ?? quotationStore?.CreatorName,
-            TechnicianUid = NormalizeOptionalText(quotation?.TechnicianUid) ?? quotationStore?.TechnicianUid,
+            EstimationTechnicianName = resolvedEstimationTechnicianName,
+            CreatorTechnicianName = resolvedCreatorName,
             CreatedDate = order.CreationTimestamp
                 ?? quotation?.CreationTimestamp
                 ?? quotationStore?.CreatedDate,
