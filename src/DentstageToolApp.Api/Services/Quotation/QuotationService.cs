@@ -118,6 +118,7 @@ public class QuotationService : IQuotationService
             Store = new CreateQuotationStoreInfo
             {
                 TechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
+                CreatorTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 Source = BuildSourceText(customer, technician, random),
                 BookMethod = BuildBookMethodText(random),
                 ReservationDate = reservationDate,
@@ -286,6 +287,35 @@ public class QuotationService : IQuotationService
             }
         }
 
+        var creatorUserUids = pagedSource
+            .Select(result => NormalizeOptionalText(result.quotation.CreatorTechnicianUid))
+            .Where(uid => uid is not null)
+            .Select(uid => uid!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var creatorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (creatorUserUids.Count > 0)
+        {
+            var creatorTechnicians = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => creatorUserUids.Contains(technician.TechnicianUid))
+                .Select(technician => new { technician.TechnicianUid, technician.TechnicianName })
+                .ToListAsync(cancellationToken);
+
+            foreach (var technician in creatorTechnicians)
+            {
+                var normalizedUid = NormalizeOptionalText(technician.TechnicianUid);
+                var normalizedName = NormalizeOptionalText(technician.TechnicianName);
+                if (normalizedUid is null || normalizedName is null)
+                {
+                    continue;
+                }
+
+                creatorMap[normalizedUid] = normalizedName;
+            }
+        }
+
         var items = pagedSource
             .Select(result =>
             {
@@ -305,6 +335,15 @@ public class QuotationService : IQuotationService
                     estimatorName = mappedName;
                 }
 
+                var normalizedCreatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid);
+                var creatorName = quotation.CreatedBy;
+                if (normalizedCreatorUid is not null &&
+                    creatorMap.TryGetValue(normalizedCreatorUid, out var mappedCreatorName) &&
+                    !string.IsNullOrWhiteSpace(mappedCreatorName))
+                {
+                    creatorName = mappedCreatorName;
+                }
+
                 return new QuotationSummaryResponse
                 {
                     QuotationNo = quotation.QuotationNo,
@@ -314,12 +353,14 @@ public class QuotationService : IQuotationService
                     CarBrand = brand != null ? brand.BrandName : quotation.Brand,
                     CarModel = model != null ? model.ModelName : quotation.Model,
                     CarPlateNumber = quotation.CarNo,
+                    EstimatorUid = normalizedEstimatorUid,
+                    CreatorUid = normalizedCreatorUid,
                     // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
                     StoreName = store != null ? store.StoreName : quotation.CurrentStatusUser,
                     // 估價人員名稱若查無主檔資料，則使用估價單建立者名稱，維持舊資料相容性。
                     EstimatorName = estimatorName,
-                    // 建立人員暫做為製單技師資訊。
-                    CreatorName = quotation.CreatedBy,
+                    // 製單技師若能對應技師主檔則使用主檔名稱。
+                    CreatorName = creatorName,
                     CreatedAt = quotation.CreationTimestamp,
                     // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
                     FixType = fixType != null ? fixType.FixTypeName : quotation.FixType
@@ -389,7 +430,9 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
         var estimatorUid = NormalizeRequiredText(technicianEntity.TechnicianUid, "估價技師識別碼");
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
-        var creatorName = operatorLabel;
+        var creatorTechnicianEntity = await GetTechnicianEntityAsync(storeInfo.CreatorTechnicianUid, cancellationToken);
+        var creatorUid = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianUid) ?? estimatorUid;
+        var creatorName = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianName) ?? estimatorName;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
         // 預約方式允許為空值，僅在前端提供時紀錄，利於後續統計。
         var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
@@ -555,6 +598,7 @@ public class QuotationService : IQuotationService
             ModificationTimestamp = createdAt,
             ModifiedBy = operatorLabel,
             UserUid = estimatorUid,
+            CreatorTechnicianUid = creatorUid,
             Date = quotationDate,
             StoreUid = storeUid,
             TechnicianUid = estimatorUid,
@@ -699,6 +743,22 @@ public class QuotationService : IQuotationService
             }
         }
 
+        var creatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid);
+        var creatorName = quotation.CreatedBy;
+        if (creatorUid is not null)
+        {
+            var creatorTechnicianName = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => technician.TechnicianUid == creatorUid)
+                .Select(technician => technician.TechnicianName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(creatorTechnicianName))
+            {
+                creatorName = creatorTechnicianName;
+            }
+        }
+
         var damages = extraData?.Damages;
         if ((damages is null || damages.Count == 0) && extraData?.ServiceCategories is not null)
         {
@@ -758,10 +818,12 @@ public class QuotationService : IQuotationService
             {
                 StoreUid = quotation.StoreUid,
                 UserUid = quotation.UserUid,
+                EstimatorUid = estimatorUid,
+                CreatorUid = creatorUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
                 // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
                 EstimatorName = estimatorName,
-                CreatorName = quotation.CreatedBy,
+                CreatorName = creatorName,
                 // 估價技師識別碼需與建立估價單時相同，方便前端直接帶入技師選項。
                 TechnicianUid = NormalizeOptionalText(quotation.TechnicianUid),
                 CreatedDate = quotation.CreationTimestamp,
@@ -990,6 +1052,24 @@ public class QuotationService : IQuotationService
                     {
                         quotation.StoreUid = technicianStoreUid;
                     }
+                }
+            }
+
+            if (storeInfo.CreatorTechnicianUid is not null)
+            {
+                var normalizedCreatorUid = NormalizeOptionalText(storeInfo.CreatorTechnicianUid);
+                if (!string.IsNullOrWhiteSpace(normalizedCreatorUid) &&
+                    !string.Equals(normalizedCreatorUid, quotation.CreatorTechnicianUid, StringComparison.OrdinalIgnoreCase))
+                {
+                    var creatorTechnicianEntity = await GetTechnicianEntityAsync(normalizedCreatorUid, cancellationToken);
+                    if (creatorTechnicianEntity is null)
+                    {
+                        throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的製單技師。");
+                    }
+
+                    quotation.CreatorTechnicianUid = NormalizeOptionalText(creatorTechnicianEntity.TechnicianUid);
+                    quotation.CreatedBy = NormalizeOptionalText(creatorTechnicianEntity.TechnicianName)
+                        ?? quotation.CreatedBy;
                 }
             }
 
@@ -1407,6 +1487,8 @@ public class QuotationService : IQuotationService
         var orderNoNew = BuildOrderNo(orderSerial, now);
         var (plainRemark, _) = ParseRemark(quotation.Remark);
         var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
+        var orderCreatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid)
+            ?? NormalizeOptionalText(quotation.UserUid);
 
         var order = new Order
         {
@@ -1419,6 +1501,7 @@ public class QuotationService : IQuotationService
             ModifiedBy = operatorLabel,
             UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.TechnicianUid ?? operatorLabel,
             UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
+            CreatorTechnicianUid = orderCreatorUid,
             StoreUid = quotation.StoreUid,
             Date = DateOnly.FromDateTime(now),
             Status = "210",

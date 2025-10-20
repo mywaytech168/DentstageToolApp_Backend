@@ -48,6 +48,16 @@ public class MaintenanceOrderSummaryResponse
     public string? CarPlate { get; set; }
 
     /// <summary>
+    /// 估價技師識別碼。
+    /// </summary>
+    public string? EstimatorUid { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼。
+    /// </summary>
+    public string? CreatorUid { get; set; }
+
+    /// <summary>
     /// 所屬店鋪名稱。
     /// </summary>
     public string? StoreName { get; set; }

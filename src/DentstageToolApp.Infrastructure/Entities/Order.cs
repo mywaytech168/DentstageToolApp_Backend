@@ -58,6 +58,11 @@ public class Order
     public string? UserName { get; set; }
 
     /// <summary>
+    /// 製單技師識別碼，提供與估價單一致的技師資訊。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
+
+    /// <summary>
     /// 工單日期。
     /// </summary>
     public DateOnly? Date { get; set; }

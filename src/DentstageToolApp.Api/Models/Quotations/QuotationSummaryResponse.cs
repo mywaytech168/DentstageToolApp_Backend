@@ -48,6 +48,16 @@ public class QuotationSummaryResponse
     public string? CarPlateNumber { get; set; }
 
     /// <summary>
+    /// 估價技師識別碼，沿用舊系統 UserUID 欄位。
+    /// </summary>
+    public string? EstimatorUid { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼，提供串接使用。
+    /// </summary>
+    public string? CreatorUid { get; set; }
+
+    /// <summary>
     /// 店鋪名稱，優先使用門市主檔資料，若無對應則回退估價單欄位。
     /// </summary>
     public string? StoreName { get; set; }

@@ -79,6 +79,11 @@ public class CreateQuotationStoreInfo
     /// 預計維修日期，允許前端依需求傳入，若為空則代表尚未排程。
     /// </summary>
     public DateTime? RepairDate { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼，若未提供則預設與估價技師相同。
+    /// </summary>
+    public string? CreatorTechnicianUid { get; set; }
 }
 
 /// <summary>
@@ -200,9 +205,19 @@ public class QuotationStoreInfo
     public string? StoreUid { get; set; }
 
     /// <summary>
-    /// 建立估價單的使用者識別碼（UID），供前端回填操作者資訊。
+    /// 建立估價單的使用者識別碼（UID），沿用舊欄位提供相容性。
     /// </summary>
     public string? UserUid { get; set; }
+
+    /// <summary>
+    /// 估價技師識別碼，與 <see cref="CreateQuotationStoreInfo.TechnicianUid"/> 保持一致以利串接。
+    /// </summary>
+    public string? EstimatorUid { get; set; }
+
+    /// <summary>
+    /// 製單技師識別碼。
+    /// </summary>
+    public string? CreatorUid { get; set; }
 
     /// <summary>
     /// 店鋪名稱，若未提供會依據使用者或門市主檔自動補齊。

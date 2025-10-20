@@ -516,6 +516,9 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("StoreUID");
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
+        entity.Property(e => e.CreatorTechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("CreatorTechnicianUID");
         entity.Property(e => e.TechnicianUid)
             .HasMaxLength(100)
             .HasColumnName("TechnicianUID");
@@ -710,6 +713,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.StoreUid).HasMaxLength(100);
         entity.Property(e => e.UserUid).HasMaxLength(100);
         entity.Property(e => e.UserName).HasMaxLength(100);
+        entity.Property(e => e.CreatorTechnicianUid)
+            .HasMaxLength(100)
+            .HasColumnName("CreatorTechnicianUID");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)
