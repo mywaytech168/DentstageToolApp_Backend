@@ -50,12 +50,12 @@ public class MaintenanceOrderSummaryResponse
     /// <summary>
     /// 估價技師識別碼。
     /// </summary>
-    public string? EstimatorUid { get; set; }
+    public string? EstimationTechnicianUid { get; set; }
 
     /// <summary>
     /// 製單技師識別碼。
     /// </summary>
-    public string? CreatorUid { get; set; }
+    public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
     /// 所屬店鋪名稱。
@@ -65,12 +65,12 @@ public class MaintenanceOrderSummaryResponse
     /// <summary>
     /// 估價技師名稱。
     /// </summary>
-    public string? EstimatorName { get; set; }
+    public string? EstimationTechnicianName { get; set; }
 
     /// <summary>
     /// 製單技師或建立人員名稱。
     /// </summary>
-    public string? CreatorName { get; set; }
+    public string? CreatorTechnicianName { get; set; }
 
     /// <summary>
     /// 建立時間。

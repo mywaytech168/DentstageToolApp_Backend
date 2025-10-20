@@ -117,7 +117,7 @@ public class QuotationService : IQuotationService
         {
             Store = new CreateQuotationStoreInfo
             {
-                TechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
+                EstimationTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 CreatorTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 Source = BuildSourceText(customer, technician, random),
                 BookMethod = BuildBookMethodText(random),
@@ -256,6 +256,13 @@ public class QuotationService : IQuotationService
             .ToListAsync(cancellationToken);
 
         // 彙整當前頁面所需的使用者 UID，僅針對有值的項目進行查詢，降低額外資料庫負擔。
+        var estimationTechnicianUids = pagedSource
+            .Select(result => NormalizeOptionalText(result.quotation.EstimationTechnicianUid))
+            .Where(uid => uid is not null)
+            .Select(uid => uid!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
         var estimatorUserUids = pagedSource
             .Select(result => NormalizeOptionalText(result.quotation.UserUid))
             .Where(uid => uid is not null)
@@ -263,7 +270,29 @@ public class QuotationService : IQuotationService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var estimatorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var estimationTechnicianMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (estimationTechnicianUids.Count > 0)
+        {
+            // 優先載入估價技師主檔名稱，若找不到再回退使用者帳號顯示名稱。
+            var estimatorTechnicians = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => estimationTechnicianUids.Contains(technician.TechnicianUid))
+                .Select(technician => new { technician.TechnicianUid, technician.TechnicianName })
+                .ToListAsync(cancellationToken);
+
+            foreach (var technician in estimatorTechnicians)
+            {
+                var normalizedUid = NormalizeOptionalText(technician.TechnicianUid);
+                var normalizedName = NormalizeOptionalText(technician.TechnicianName);
+                if (normalizedUid is null || normalizedName is null)
+                {
+                    continue;
+                }
+
+                estimationTechnicianMap[normalizedUid] = normalizedName;
+            }
+        }
+
         if (estimatorUserUids.Count > 0)
         {
             // 針對當前頁面使用到的使用者 UID 一次撈取顯示名稱，建立快取供後續查找，減少重複查詢成本。
@@ -283,7 +312,7 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                estimatorMap[normalizedUid] = normalizedName;
+                estimationTechnicianMap[normalizedUid] = normalizedName;
             }
         }
 
@@ -327,9 +356,11 @@ public class QuotationService : IQuotationService
 
                 // 優先使用使用者帳號顯示名稱，若查無對應資料則回退為估價單上的 UserName 欄位。
                 var estimatorName = quotation.UserName;
-                var normalizedEstimatorUid = NormalizeOptionalText(quotation.UserUid);
-                if (normalizedEstimatorUid is not null &&
-                    estimatorMap.TryGetValue(normalizedEstimatorUid, out var mappedName) &&
+                var normalizedUserUid = NormalizeOptionalText(quotation.UserUid);
+                var normalizedEstimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
+                    ?? normalizedUserUid;
+                if (normalizedEstimationTechnicianUid is not null &&
+                    estimationTechnicianMap.TryGetValue(normalizedEstimationTechnicianUid, out var mappedName) &&
                     !string.IsNullOrWhiteSpace(mappedName))
                 {
                     estimatorName = mappedName;
@@ -353,14 +384,14 @@ public class QuotationService : IQuotationService
                     CarBrand = brand != null ? brand.BrandName : quotation.Brand,
                     CarModel = model != null ? model.ModelName : quotation.Model,
                     CarPlateNumber = quotation.CarNo,
-                    EstimatorUid = normalizedEstimatorUid,
-                    CreatorUid = normalizedCreatorUid,
+                    EstimationTechnicianUid = normalizedEstimationTechnicianUid,
+                    CreatorTechnicianUid = normalizedCreatorUid,
                     // 門市名稱優先採用主檔資料，若關聯不存在則回落至原欄位。
                     StoreName = store != null ? store.StoreName : quotation.CurrentStatusUser,
                     // 估價人員名稱若查無主檔資料，則使用估價單建立者名稱，維持舊資料相容性。
-                    EstimatorName = estimatorName,
+                    EstimationTechnicianName = estimatorName,
                     // 製單技師若能對應技師主檔則使用主檔名稱。
-                    CreatorName = creatorName,
+                    CreatorTechnicianName = creatorName,
                     CreatedAt = quotation.CreationTimestamp,
                     // 維修類型若有主檔，回傳主檔名稱，否則回退舊有欄位。
                     FixType = fixType != null ? fixType.FixTypeName : quotation.FixType
@@ -399,7 +430,7 @@ public class QuotationService : IQuotationService
         var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
 
         // 僅透過技師識別碼即可反查門市資料，減少前端傳遞欄位。
-        var technicianEntity = await GetTechnicianEntityAsync(storeInfo.TechnicianUid, cancellationToken);
+        var technicianEntity = await GetTechnicianEntityAsync(storeInfo.EstimationTechnicianUid, cancellationToken);
         if (technicianEntity is null)
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的估價技師。");
@@ -601,7 +632,7 @@ public class QuotationService : IQuotationService
             CreatorTechnicianUid = creatorUid,
             Date = quotationDate,
             StoreUid = storeUid,
-            TechnicianUid = estimatorUid,
+            EstimationTechnicianUid = estimatorUid,
             Status = "110",
             Status110Timestamp = createdAt,
             Status110User = storeName,
@@ -725,22 +756,42 @@ public class QuotationService : IQuotationService
         var (plainRemark, extraData) = ParseRemark(quotation.Remark);
 
         // ---------- 估價人員名稱組裝 ----------
-        // 預設使用估價單上紀錄的 UserName，若 UserUid 能對應使用者主檔則改採顯示名稱。
-        var estimatorName = quotation.UserName;
-        var estimatorUid = NormalizeOptionalText(quotation.UserUid);
-        if (estimatorUid is not null)
+        // 預設使用估價單上紀錄的 UserName，若估價技師 UID 能對應技師主檔則優先採用主檔名稱。
+        var estimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
+            ?? NormalizeOptionalText(quotation.UserUid);
+        var estimationTechnicianName = quotation.UserName;
+        if (!string.IsNullOrWhiteSpace(quotation.EstimationTechnicianUid))
         {
-            // 僅在 UID 有值時才進行查詢，避免對舊資料造成額外的資料庫負擔。
+            var technicianDisplayName = await _context.Technicians
+                .AsNoTracking()
+                .Where(technician => technician.TechnicianUid == quotation.EstimationTechnicianUid)
+                .Select(technician => technician.TechnicianName)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (!string.IsNullOrWhiteSpace(technicianDisplayName))
+            {
+                estimationTechnicianName = technicianDisplayName;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(estimationTechnicianName) && !string.IsNullOrWhiteSpace(quotation.UserUid))
+        {
+            // 若估價技師主檔未能查得名稱則回退使用者帳號顯示名稱，維持相容。
             var accountDisplayName = await _context.UserAccounts
                 .AsNoTracking()
-                .Where(account => account.UserUid == estimatorUid)
+                .Where(account => account.UserUid == quotation.UserUid)
                 .Select(account => account.DisplayName)
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (!string.IsNullOrWhiteSpace(accountDisplayName))
             {
-                estimatorName = accountDisplayName;
+                estimationTechnicianName = accountDisplayName;
             }
+        }
+
+        if (string.IsNullOrWhiteSpace(estimationTechnicianName))
+        {
+            estimationTechnicianName = quotation.UserName;
         }
 
         var creatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid);
@@ -818,14 +869,15 @@ public class QuotationService : IQuotationService
             {
                 StoreUid = quotation.StoreUid,
                 UserUid = quotation.UserUid,
-                EstimatorUid = estimatorUid,
-                CreatorUid = creatorUid,
+                EstimationTechnicianUid = estimationTechnicianUid,
+                CreatorTechnicianUid = creatorUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
                 // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
-                EstimatorName = estimatorName,
-                CreatorName = creatorName,
+                EstimationTechnicianName = estimationTechnicianName,
+                CreatorTechnicianName = creatorName,
                 // 估價技師識別碼需與建立估價單時相同，方便前端直接帶入技師選項。
-                TechnicianUid = NormalizeOptionalText(quotation.TechnicianUid),
+                EstimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
+                    ?? estimationTechnicianUid,
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
                 Source = quotation.Source,
@@ -1027,12 +1079,12 @@ public class QuotationService : IQuotationService
             }
 
             // 需要改派技師時同步更新估價單的技師 UID 與顯示名稱。
-            if (!string.IsNullOrWhiteSpace(storeInfo.TechnicianUid))
+            if (!string.IsNullOrWhiteSpace(storeInfo.EstimationTechnicianUid))
             {
-                var normalizedTechnicianUid = NormalizeOptionalText(storeInfo.TechnicianUid);
+                var normalizedTechnicianUid = NormalizeOptionalText(storeInfo.EstimationTechnicianUid);
 
                 if (!string.IsNullOrWhiteSpace(normalizedTechnicianUid) &&
-                    !string.Equals(normalizedTechnicianUid, quotation.TechnicianUid, StringComparison.OrdinalIgnoreCase))
+                    !string.Equals(normalizedTechnicianUid, quotation.EstimationTechnicianUid, StringComparison.OrdinalIgnoreCase))
                 {
                     // 僅在識別碼改變時查詢主檔，避免每次更新都造訪資料庫。
                     var technicianEntity = await GetTechnicianEntityAsync(normalizedTechnicianUid, cancellationToken);
@@ -1042,7 +1094,7 @@ public class QuotationService : IQuotationService
                     }
 
                     var technicianUid = NormalizeOptionalText(technicianEntity.TechnicianUid);
-                    quotation.TechnicianUid = technicianUid;
+                    quotation.EstimationTechnicianUid = technicianUid;
                     quotation.UserUid = technicianUid ?? quotation.UserUid;
                     quotation.UserName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? quotation.UserName;
 
@@ -1499,7 +1551,7 @@ public class QuotationService : IQuotationService
             CreatedBy = operatorLabel,
             ModificationTimestamp = now,
             ModifiedBy = operatorLabel,
-            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.TechnicianUid ?? operatorLabel,
+            UserUid = NormalizeOptionalText(quotation.UserUid) ?? quotation.EstimationTechnicianUid ?? operatorLabel,
             UserName = NormalizeOptionalText(quotation.UserName) ?? operatorLabel,
             CreatorTechnicianUid = orderCreatorUid,
             StoreUid = quotation.StoreUid,
