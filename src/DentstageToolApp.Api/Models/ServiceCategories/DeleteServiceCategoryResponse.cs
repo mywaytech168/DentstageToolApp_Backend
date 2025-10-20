@@ -6,9 +6,9 @@ namespace DentstageToolApp.Api.Models.ServiceCategories;
 public class DeleteServiceCategoryResponse
 {
     /// <summary>
-    /// 已刪除的服務類別識別碼。
+    /// 已刪除的維修類型鍵值。
     /// </summary>
-    public string ServiceCategoryUid { get; set; } = string.Empty;
+    public string FixType { get; set; } = string.Empty;
 
     /// <summary>
     /// 操作結果訊息。

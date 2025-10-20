@@ -1,7 +1,9 @@
 using System;
+using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
+using DentstageToolApp.Api.Models.Quotations;
 using DentstageToolApp.Api.Models.ServiceCategories;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
@@ -36,37 +38,54 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
         var categoryName = NormalizeRequiredText(request.CategoryName, "服務類別名稱");
         var operatorLabel = NormalizeOperator(operatorName);
+
+        var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
+        if (canonicalFixType is null)
+        {
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- 資料檢核區 ----------
         var duplicate = await _dbContext.FixTypes
             .AsNoTracking()
-            .AnyAsync(type => type.FixTypeName == categoryName, cancellationToken);
+            .AnyAsync(type => type.FixType == canonicalFixType, cancellationToken);
 
         if (duplicate)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.Conflict, "服務類別名稱已存在，請勿重複建立。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.Conflict, "維修類型已存在，請勿重複建立。");
+        }
+
+        // 若名稱已被其他類別使用則拒絕建立，避免造成顯示時的混淆。
+        var displayDuplicate = await _dbContext.FixTypes
+            .AsNoTracking()
+            .AnyAsync(type => type.FixTypeName == categoryName, cancellationToken);
+
+        if (displayDuplicate)
+        {
+            throw new ServiceCategoryManagementException(HttpStatusCode.Conflict, "服務類別名稱已被其他維修類型使用，請重新命名。");
         }
 
         // ---------- 實體建立區 ----------
         var entity = new FixType
         {
-            FixTypeUid = BuildServiceCategoryUid(),
+            FixType = canonicalFixType,
             FixTypeName = categoryName
         };
 
         await _dbContext.FixTypes.AddAsync(entity, cancellationToken);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("操作人員 {Operator} 新增服務類別 {Uid} ({Name}) 成功。", operatorLabel, entity.FixTypeUid, entity.FixTypeName);
+        _logger.LogInformation("操作人員 {Operator} 新增服務類別 {FixType} ({Name}) 成功。", operatorLabel, entity.FixType, entity.FixTypeName);
 
         // ---------- 組裝回應區 ----------
         return new CreateServiceCategoryResponse
         {
-            ServiceCategoryUid = entity.FixTypeUid,
+            FixType = entity.FixType,
             CategoryName = entity.FixTypeName,
             Message = "已建立服務類別資料。"
         };
@@ -81,23 +100,29 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
-        var categoryUid = NormalizeRequiredText(request.ServiceCategoryUid, "服務類別識別碼");
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
         var categoryName = NormalizeRequiredText(request.CategoryName, "服務類別名稱");
         var operatorLabel = NormalizeOperator(operatorName);
 
+        var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
+        if (canonicalFixType is null)
+        {
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+        }
+
         var entity = await _dbContext.FixTypes
-            .FirstOrDefaultAsync(type => type.FixTypeUid == categoryUid, cancellationToken);
+            .FirstOrDefaultAsync(type => type.FixType == canonicalFixType, cancellationToken);
 
         if (entity is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認識別碼是否正確。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         var duplicate = await _dbContext.FixTypes
             .AsNoTracking()
-            .AnyAsync(type => type.FixTypeUid != categoryUid && type.FixTypeName == categoryName, cancellationToken);
+            .AnyAsync(type => type.FixType != canonicalFixType && type.FixTypeName == categoryName, cancellationToken);
 
         if (duplicate)
         {
@@ -109,12 +134,12 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         var now = DateTime.UtcNow;
-        _logger.LogInformation("操作人員 {Operator} 編輯服務類別 {Uid} ({Name}) 成功。", operatorLabel, entity.FixTypeUid, entity.FixTypeName);
+        _logger.LogInformation("操作人員 {Operator} 編輯服務類別 {FixType} ({Name}) 成功。", operatorLabel, entity.FixType, entity.FixTypeName);
 
         // ---------- 組裝回應區 ----------
         return new EditServiceCategoryResponse
         {
-            ServiceCategoryUid = entity.FixTypeUid,
+            FixType = entity.FixType,
             CategoryName = entity.FixTypeName,
             UpdatedAt = now,
             Message = "已更新服務類別資料。"
@@ -130,23 +155,48 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
-        var categoryUid = NormalizeRequiredText(request.ServiceCategoryUid, "服務類別識別碼");
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
         var operatorLabel = NormalizeOperator(operatorName);
 
+        var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
+        if (canonicalFixType is null)
+        {
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+        }
+
         var entity = await _dbContext.FixTypes
-            .FirstOrDefaultAsync(type => type.FixTypeUid == categoryUid, cancellationToken);
+            .FirstOrDefaultAsync(type => type.FixType == canonicalFixType, cancellationToken);
 
         if (entity is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認識別碼是否正確。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- 資料檢核區 ----------
+        var normalizedCategoryKey = QuotationDamageFixTypeHelper.Normalize(entity.FixTypeName)
+            ?? QuotationDamageFixTypeHelper.Normalize(entity.FixType);
+        var displayName = normalizedCategoryKey is null
+            ? NormalizeOptionalText(entity.FixTypeName)
+            : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedCategoryKey);
+        var categoryCandidates = new[]
+            {
+                NormalizeOptionalText(entity.FixTypeName),
+                NormalizeOptionalText(entity.FixType),
+                normalizedCategoryKey,
+                displayName
+            }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(value => value.ToUpperInvariant())
+            .ToList();
+
         var hasQuotations = await _dbContext.Quatations
             .AsNoTracking()
-            .AnyAsync(quotation => quotation.FixTypeUid == categoryUid, cancellationToken);
+            .AnyAsync(quotation =>
+                categoryCandidates.Contains((quotation.FixType ?? string.Empty).ToUpper()), cancellationToken);
 
         if (hasQuotations)
         {
@@ -157,24 +207,14 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         _dbContext.FixTypes.Remove(entity);
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("操作人員 {Operator} 刪除服務類別 {Uid} ({Name}) 成功。", operatorLabel, entity.FixTypeUid, entity.FixTypeName);
+        _logger.LogInformation("操作人員 {Operator} 刪除服務類別 {FixType} ({Name}) 成功。", operatorLabel, entity.FixType, entity.FixTypeName);
 
         // ---------- 組裝回應區 ----------
         return new DeleteServiceCategoryResponse
         {
-            ServiceCategoryUid = entity.FixTypeUid,
+            FixType = entity.FixType,
             Message = "已刪除服務類別資料。"
         };
-    }
-
-    // ---------- 方法區 ----------
-
-    /// <summary>
-    /// 產生服務類別識別碼，統一使用 Ft_ 前綴搭配 GUID。
-    /// </summary>
-    private static string BuildServiceCategoryUid()
-    {
-        return $"Ft_{Guid.NewGuid().ToString().ToUpperInvariant()}";
     }
 
     /// <summary>
@@ -201,6 +241,19 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         return operatorName.Trim();
+    }
+
+    /// <summary>
+    /// 將選填欄位進行修剪，若為空字串則回傳 null。
+    /// </summary>
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     // ---------- 生命週期 ----------

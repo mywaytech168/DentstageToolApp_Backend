@@ -6,12 +6,12 @@ namespace DentstageToolApp.Api.Models.ServiceCategories;
 public class CreateServiceCategoryResponse
 {
     /// <summary>
-    /// 服務類別唯一識別碼。
+    /// 維修類型鍵值，對應 dent、beauty、paint 或 other。
     /// </summary>
-    public string ServiceCategoryUid { get; set; } = string.Empty;
+    public string FixType { get; set; } = string.Empty;
 
     /// <summary>
-    /// 服務類別名稱。
+    /// 服務類別顯示名稱。
     /// </summary>
     public string CategoryName { get; set; } = string.Empty;
 

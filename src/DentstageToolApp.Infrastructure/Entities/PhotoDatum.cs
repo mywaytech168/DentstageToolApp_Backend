@@ -63,6 +63,11 @@ public class PhotoDatum
     public decimal? FinishCost { get; set; }
 
     /// <summary>
+    /// 照片所屬維修類型，使用固定鍵值（dent、beauty、paint、other）儲存分類資訊。
+    /// </summary>
+    public string? FixType { get; set; }
+
+    /// <summary>
     /// 關聯報價單導航屬性。
     /// </summary>
     public Quatation? Quatation { get; set; }
