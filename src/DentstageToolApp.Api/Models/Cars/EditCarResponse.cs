@@ -48,6 +48,11 @@ public class EditCarResponse
     public string? Remark { get; set; }
 
     /// <summary>
+    /// 車輛里程數（公里），方便前端確認最新車況。
+    /// </summary>
+    public int? Mileage { get; set; }
+
+    /// <summary>
     /// 更新時間，以 UTC 紀錄供前端轉換時區使用。
     /// </summary>
     public DateTime UpdatedAt { get; set; }

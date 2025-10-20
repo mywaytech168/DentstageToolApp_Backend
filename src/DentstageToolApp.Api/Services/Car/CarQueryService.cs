@@ -46,6 +46,7 @@ public class CarQueryService : ICarQueryService
                     CarPlateNumber = car.CarNo,
                     Brand = car.Brand,
                     Model = car.Model,
+                    Mileage = car.Milage,
                     CreatedAt = car.CreationTimestamp
                 })
                 .ToListAsync(cancellationToken);
@@ -105,6 +106,7 @@ public class CarQueryService : ICarQueryService
                 Model = entity.Model,
                 Color = entity.Color,
                 Remark = entity.CarRemark,
+                Mileage = entity.Milage,
                 CreatedAt = entity.CreationTimestamp,
                 UpdatedAt = entity.ModificationTimestamp,
                 CreatedBy = entity.CreatedBy,

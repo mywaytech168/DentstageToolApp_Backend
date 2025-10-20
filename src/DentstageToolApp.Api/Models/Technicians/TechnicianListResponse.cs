@@ -27,4 +27,9 @@ public class TechnicianItem
     /// 技師姓名，提供前端顯示。
     /// </summary>
     public string TechnicianName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 技師職稱，方便前端顯示角色資訊。
+    /// </summary>
+    public string? JobTitle { get; set; }
 }

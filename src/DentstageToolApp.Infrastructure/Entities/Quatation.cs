@@ -159,6 +159,11 @@ public class Quatation
     public string? CarRemark { get; set; }
 
     /// <summary>
+    /// 車輛里程數，以公里數記錄估價當下資料。
+    /// </summary>
+    public int? Milage { get; set; }
+
+    /// <summary>
     /// 品牌型號顯示字串。
     /// </summary>
     public string? BrandModel { get; set; }

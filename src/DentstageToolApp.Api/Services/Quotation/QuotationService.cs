@@ -43,6 +43,8 @@ public class QuotationService : IQuotationService
     private static readonly string[] TestDamageDescriptions = { "停車擦撞造成凹陷", "需板金搭配烤漆", "建議同時處理刮痕", "需另行評估內部結構" };
     // 產生測試資料時使用的來源說明範例。
     private static readonly string[] TestSourceSamples = { "官方網站", "老客戶轉介", "保險公司轉介", "粉絲團私訊" };
+    // 產生測試資料時使用的預約方式範例，方便前端展示不同來源。
+    private static readonly string[] TestBookMethodSamples = { "電話預約", "LINE 預約", "現場排程" };
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -117,6 +119,7 @@ public class QuotationService : IQuotationService
             {
                 TechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 Source = BuildSourceText(customer, technician, random),
+                BookMethod = BuildBookMethodText(random),
                 ReservationDate = reservationDate,
                 RepairDate = repairDate
             },
@@ -388,6 +391,8 @@ public class QuotationService : IQuotationService
         var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
         var creatorName = operatorLabel;
         var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
+        // 預約方式允許為空值，僅在前端提供時紀錄，利於後續統計。
+        var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
 
         // ---------- 維修設定處理 ----------
         // 依據維修類型 UID 驗證主檔，並轉換常見布林選項為資料表欄位使用的旗標文字。
@@ -445,6 +450,7 @@ public class QuotationService : IQuotationService
         var model = NormalizeOptionalText(carEntity.Model);
         var color = NormalizeOptionalText(carEntity.Color);
         var carRemark = NormalizeOptionalText(carEntity.CarRemark);
+        var carMileage = carEntity.Milage;
 
         // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
         var brandUid = NormalizeOptionalText(carInfo.BrandUid);
@@ -478,6 +484,12 @@ public class QuotationService : IQuotationService
             modelUid = NormalizeOptionalText(matchedModelUid);
         }
 
+        if (carInfo.Mileage.HasValue)
+        {
+            // 若前端提供即時里程數，優先覆寫車輛主檔的舊資料。
+            carMileage = carInfo.Mileage;
+        }
+
         // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
         var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
         var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
@@ -497,6 +509,7 @@ public class QuotationService : IQuotationService
         var customerReason = NormalizeOptionalText(customerEntity.Reason);
         var customerSource = NormalizeOptionalText(customerEntity.Source);
         var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
+        var customerEmail = NormalizeOptionalText(customerEntity.Email);
 
         var normalizedDamages = ExtractDamageList(request);
         var carBodyConfirmation = request.CarBodyConfirmation;
@@ -552,6 +565,7 @@ public class QuotationService : IQuotationService
             CurrentStatusUser = storeName,
             UserName = estimatorName,
             BookDate = reservationDate,
+            BookMethod = bookMethod,
             FixDate = repairDate,
             FixTypeUid = fixTypeUid,
             FixType = fixTypeName,
@@ -571,6 +585,7 @@ public class QuotationService : IQuotationService
             BrandModel = BuildBrandModel(brand, model),
             Color = color,
             CarRemark = carRemark,
+            Milage = carMileage,
             CustomerUid = customerUid,
             Name = customerName,
             Phone = customerPhone,
@@ -585,6 +600,7 @@ public class QuotationService : IQuotationService
             ConnectRemark = customerRemark,
             // 消息來源優先採用門市輸入，若門市未提供則以客戶主檔資料補齊。
             Source = source ?? customerSource,
+            Email = customerEmail,
             Remark = remarkPayload,
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
@@ -751,6 +767,7 @@ public class QuotationService : IQuotationService
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
                 Source = quotation.Source,
+                BookMethod = quotation.BookMethod,
                 RepairDate = quotation.FixDate?.ToDateTime(TimeOnly.MinValue)
             },
             Car = new QuotationCarInfo
@@ -762,13 +779,15 @@ public class QuotationService : IQuotationService
                 BrandUid = quotation.BrandUid,
                 ModelUid = quotation.ModelUid,
                 Color = quotation.Color,
-                Remark = quotation.CarRemark
+                Remark = quotation.CarRemark,
+                Mileage = quotation.Milage
             },
             Customer = new QuotationCustomerInfo
             {
                 CustomerUid = quotation.CustomerUid,
                 Name = quotation.Name,
                 Phone = quotation.Phone,
+                Email = quotation.Email,
                 Gender = quotation.Gender,
                 CustomerType = quotation.CustomerType,
                 County = quotation.County,
@@ -873,6 +892,12 @@ public class QuotationService : IQuotationService
             quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
         }
 
+        if (carInfo.Mileage.HasValue)
+        {
+            // 里程數以最新值覆寫，維持估價與維修流程可共用同一筆數據。
+            quotation.Milage = carInfo.Mileage;
+        }
+
         // ---------- 客戶資料同步 ----------
         quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
 
@@ -881,6 +906,12 @@ public class QuotationService : IQuotationService
             quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
             quotation.PhoneInput = quotation.Phone;
             quotation.PhoneInputGlobal = quotation.Phone;
+        }
+
+        if (customerInfo.Email is not null)
+        {
+            // 若前端補齊電子郵件，優先以最新資料覆寫估價單欄位供後續聯繫。
+            quotation.Email = NormalizeOptionalText(customerInfo.Email);
         }
 
         if (customerInfo.Gender is not null)
@@ -925,6 +956,12 @@ public class QuotationService : IQuotationService
             if (storeInfo.Source is not null)
             {
                 quotation.Source = NormalizeOptionalText(storeInfo.Source);
+            }
+
+            if (storeInfo.BookMethod is not null)
+            {
+                // 僅在前端提供預約方式時更新，避免覆寫舊資料。
+                quotation.BookMethod = NormalizeOptionalText(storeInfo.BookMethod);
             }
 
             // 需要改派技師時同步更新估價單的技師 UID 與顯示名稱。
@@ -1398,6 +1435,7 @@ public class QuotationService : IQuotationService
             Model = quotation.Model,
             Color = quotation.Color,
             CarRemark = quotation.CarRemark,
+            Milage = quotation.Milage,
             BrandModel = quotation.BrandModel,
             CustomerUid = quotation.CustomerUid,
             CustomerType = quotation.CustomerType,
@@ -2945,6 +2983,14 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
+    /// 建立測試資料用的預約方式文字，提供多樣化範例方便前端驗證畫面。
+    /// </summary>
+    private static string BuildBookMethodText(Random random)
+    {
+        return TestBookMethodSamples[random.Next(TestBookMethodSamples.Length)];
+    }
+
+    /// <summary>
     /// 建立隨機傷痕資料，並盡量帶入既有照片作為測試素材。
     /// </summary>
     private static List<QuotationDamageItem> BuildRandomDamages(IReadOnlyList<PhotoEntity> photoSamples, Random random)
@@ -3051,12 +3097,25 @@ public class QuotationService : IQuotationService
     {
         var name = NormalizeOptionalText(technician.TechnicianName) ?? "測試技師";
         var storeName = NormalizeOptionalText(technician.Store?.StoreName);
+        var jobTitle = NormalizeOptionalText(technician.JobTitle);
+
+        // 組合職稱與門市資訊，讓前端可直接顯示完整介紹文字。
+        var descriptionParts = new List<string>();
+        if (jobTitle is not null)
+        {
+            descriptionParts.Add($"職稱：{jobTitle}");
+        }
+
+        if (storeName is not null)
+        {
+            descriptionParts.Add($"所屬門市：{storeName}");
+        }
 
         return new CreateQuotationTestEntitySummary
         {
             Uid = technician.TechnicianUid,
             Name = name,
-            Description = storeName is null ? null : $"所屬門市：{storeName}"
+            Description = descriptionParts.Count == 0 ? null : string.Join("，", descriptionParts)
         };
     }
 
@@ -3181,6 +3240,11 @@ public class QuotationService : IQuotationService
         if (draft.Store?.Source is not null)
         {
             notes.Add($"來源：{draft.Store.Source}");
+        }
+
+        if (draft.Store?.BookMethod is not null)
+        {
+            notes.Add($"預約方式：{draft.Store.BookMethod}");
         }
 
         if (draft.Store?.ReservationDate is not null)
