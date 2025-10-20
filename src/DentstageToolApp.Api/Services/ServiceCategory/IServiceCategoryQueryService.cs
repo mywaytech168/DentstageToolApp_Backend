@@ -16,7 +16,7 @@ public interface IServiceCategoryQueryService
     Task<ServiceCategoryListResponse> GetServiceCategoriesAsync(PaginationRequest request, CancellationToken cancellationToken);
 
     /// <summary>
-    /// 透過識別碼取得服務類別詳細資料。
+    /// 透過維修類型鍵值取得服務類別詳細資料。
     /// </summary>
-    Task<ServiceCategoryDetailResponse> GetServiceCategoryAsync(string serviceCategoryUid, CancellationToken cancellationToken);
+    Task<ServiceCategoryDetailResponse> GetServiceCategoryAsync(string fixType, CancellationToken cancellationToken);
 }

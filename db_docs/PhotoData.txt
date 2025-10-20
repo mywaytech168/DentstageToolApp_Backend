@@ -9,5 +9,7 @@ CREATE TABLE PhotoData (
     Photo_shape_show    VARCHAR(50),
     Cost                DECIMAL(10,2),
     Flag_Finish         BOOLEAN,
-    Finish_Cost         DECIMAL(10,2)
+    Finish_Cost         DECIMAL(10,2),
+    -- Fix_Type 改儲存固定鍵值（dent、beauty、paint、other），預設長度調整為 100 以容納描述文字。
+    Fix_Type            VARCHAR(100)
 );

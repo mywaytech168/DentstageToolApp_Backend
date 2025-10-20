@@ -430,17 +430,13 @@ public class DentstageToolAppContext : DbContext
     {
         var entity = modelBuilder.Entity<FixType>();
         entity.ToTable("fix_types");
-        entity.HasKey(e => e.FixTypeUid);
-        entity.Property(e => e.FixTypeUid)
-            .HasMaxLength(100)
-            .HasColumnName("FixTypeUID");
+        entity.HasKey(e => e.FixType);
+        entity.Property(e => e.FixType)
+            .HasMaxLength(50)
+            .HasColumnName("FixType");
         entity.Property(e => e.FixTypeName)
             .IsRequired()
             .HasMaxLength(100);
-        entity.HasMany(e => e.Quatations)
-            .WithOne(e => e.FixTypeNavigation)
-            .HasForeignKey(e => e.FixTypeUid)
-            .OnDelete(DeleteBehavior.SetNull);
     }
 
     /// <summary>
@@ -524,11 +520,8 @@ public class DentstageToolAppContext : DbContext
             .HasColumnName("CreatorTechnicianUID");
         entity.Property(e => e.Status).HasMaxLength(20);
         entity.Property(e => e.FixType)
-            .HasMaxLength(50)
-            .HasColumnName("Fix_Type");
-        entity.Property(e => e.FixTypeUid)
             .HasMaxLength(100)
-            .HasColumnName("FixTypeUID");
+            .HasColumnName("Fix_Type");
         entity.Property(e => e.CarUid)
             .HasMaxLength(100)
             .HasColumnName("CarUID");
@@ -563,10 +556,6 @@ public class DentstageToolAppContext : DbContext
         entity.HasOne(e => e.ModelNavigation)
             .WithMany(e => e.Quatations)
             .HasForeignKey(e => e.ModelUid)
-            .OnDelete(DeleteBehavior.SetNull);
-        entity.HasOne(e => e.FixTypeNavigation)
-            .WithMany(e => e.Quatations)
-            .HasForeignKey(e => e.FixTypeUid)
             .OnDelete(DeleteBehavior.SetNull);
         entity.HasOne(e => e.StoreNavigation)
             .WithMany(e => e.Quatations)
@@ -781,7 +770,7 @@ public class DentstageToolAppContext : DbContext
             .HasMaxLength(255)
             .HasColumnName("Work_Date_remark");
         entity.Property(e => e.FixType)
-            .HasMaxLength(50)
+            .HasMaxLength(100)
             .HasColumnName("Fix_Type");
         entity.Property(e => e.Content).HasColumnType("text");
         entity.Property(e => e.CarReserved).HasMaxLength(50);
@@ -975,6 +964,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FinishCost)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("Finish_Cost");
+        entity.Property(e => e.FixType)
+            .HasMaxLength(100)
+            .HasColumnName("Fix_Type");
 
         entity.HasOne(d => d.Quatation)
             .WithMany(p => p.PhotoData)

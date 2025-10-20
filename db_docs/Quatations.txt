@@ -13,6 +13,7 @@ CREATE TABLE Quatations (
     CreatorTechnicianUID     VARCHAR(100),
     Date                     DATE,
     Status                   VARCHAR(20),
+    -- Fix_Type 欄位改儲存固定鍵值（dent、beauty、paint、other），照片資料會同步使用相同分類。
     Fix_Type                 VARCHAR(50),
     CarUID                   VARCHAR(100),
     CarNo_input_Global       VARCHAR(50),

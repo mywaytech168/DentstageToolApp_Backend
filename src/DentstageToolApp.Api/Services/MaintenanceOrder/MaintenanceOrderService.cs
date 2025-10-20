@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using DentstageToolApp.Api.Models.Quotations;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Text.Json;
@@ -69,7 +70,15 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (!string.IsNullOrWhiteSpace(normalizedQuery.FixType))
         {
             var fixType = normalizedQuery.FixType.Trim();
-            ordersQuery = ordersQuery.Where(order => order.FixType == fixType);
+            var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixType);
+            var displayName = normalizedFilter is null
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFilter);
+
+            ordersQuery = ordersQuery.Where(order =>
+                order.FixType == fixType ||
+                (normalizedFilter != null && order.FixType == normalizedFilter) ||
+                (displayName != null && order.FixType == displayName));
         }
 
         if (!string.IsNullOrWhiteSpace(normalizedQuery.Status) && !string.Equals(normalizedQuery.Status, "ALL", StringComparison.OrdinalIgnoreCase))
@@ -883,7 +892,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 Position = damage.Position,
                 DentStatus = damage.DentStatus,
                 Description = damage.Description,
-                EstimatedAmount = damage.EstimatedAmount
+                EstimatedAmount = damage.EstimatedAmount,
+                FixType = damage.FixType,
+                FixTypeName = damage.FixTypeName
             });
         }
 
@@ -925,7 +936,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ? new QuotationMaintenanceDetail()
             : new QuotationMaintenanceDetail
             {
-                FixTypeUid = quotationMaintenance.FixTypeUid,
+                FixType = quotationMaintenance.FixType,
+                FixTypeName = quotationMaintenance.FixTypeName,
                 ReserveCar = quotationMaintenance.ReserveCar,
                 ApplyCoating = quotationMaintenance.ApplyCoating,
                 ApplyWrapping = quotationMaintenance.ApplyWrapping,
@@ -976,6 +988,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (discountReason is not null)
         {
             maintenance.DiscountReason = discountReason;
+        }
+
+        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(maintenance.FixType);
+        if (string.IsNullOrWhiteSpace(maintenance.FixTypeName) && normalizedFixType is not null)
+        {
+            maintenance.FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
         }
 
         return maintenance;
@@ -1304,7 +1322,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Date = DateOnly.FromDateTime(timestamp),
             Status = source.Status,
             FixType = source.FixType,
-            FixTypeUid = source.FixTypeUid,
             CarUid = source.CarUid,
             CarNoInputGlobal = source.CarNoInputGlobal,
             CarNoInput = source.CarNoInput,

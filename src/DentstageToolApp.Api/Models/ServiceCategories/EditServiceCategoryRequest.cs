@@ -8,14 +8,14 @@ namespace DentstageToolApp.Api.Models.ServiceCategories;
 public class EditServiceCategoryRequest
 {
     /// <summary>
-    /// 服務類別唯一識別碼。
+    /// 維修類型鍵值，限定 dent、beauty、paint、other。
     /// </summary>
-    [Required(ErrorMessage = "請提供服務類別識別碼。")]
-    [MaxLength(100, ErrorMessage = "服務類別識別碼長度不可超過 100 個字元。")]
-    public string ServiceCategoryUid { get; set; } = string.Empty;
+    [Required(ErrorMessage = "請提供維修類型鍵值。")]
+    [MaxLength(50, ErrorMessage = "維修類型鍵值長度不可超過 50 個字元。")]
+    public string FixType { get; set; } = string.Empty;
 
     /// <summary>
-    /// 服務類別名稱。
+    /// 服務類別顯示名稱。
     /// </summary>
     [Required(ErrorMessage = "請輸入服務類別名稱。")]
     [MaxLength(100, ErrorMessage = "服務類別名稱長度不可超過 100 個字元。")]
