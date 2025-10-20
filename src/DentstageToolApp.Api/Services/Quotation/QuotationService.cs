@@ -869,7 +869,6 @@ public class QuotationService : IQuotationService
             {
                 StoreUid = quotation.StoreUid,
                 UserUid = quotation.UserUid,
-                EstimationTechnicianUid = estimationTechnicianUid,
                 CreatorTechnicianUid = creatorUid,
                 StoreName = quotation.StoreNavigation?.StoreName ?? quotation.CurrentStatusUser ?? string.Empty,
                 // 估價人員名稱優先顯示使用者主檔資料，若查無對應使用者則回退為建立者姓名。
