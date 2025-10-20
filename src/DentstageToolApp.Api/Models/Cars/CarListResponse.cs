@@ -40,6 +40,11 @@ public class CarListItem
     public string? Model { get; set; }
 
     /// <summary>
+    /// 車輛里程數（公里），方便列表直接顯示基本里程資訊。
+    /// </summary>
+    public int? Mileage { get; set; }
+
+    /// <summary>
     /// 建立時間。
     /// </summary>
     public DateTime? CreatedAt { get; set; }
