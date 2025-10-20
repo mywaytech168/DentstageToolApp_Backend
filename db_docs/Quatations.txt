@@ -13,7 +13,7 @@ CREATE TABLE Quatations (
     CreatorTechnicianUID     VARCHAR(100),
     Date                     DATE,
     Status                   VARCHAR(20),
-    -- Fix_Type 欄位保留給舊流程使用，新版維修類型請改寫入 PhotoData.Fix_Type。
+    -- Fix_Type 欄位保留給舊流程使用，新版維修類型請改寫入 PhotoData.Fix_Type（儲存 FixTypeUID）。
     Fix_Type                 VARCHAR(50),
     CarUID                   VARCHAR(100),
     CarNo_input_Global       VARCHAR(50),

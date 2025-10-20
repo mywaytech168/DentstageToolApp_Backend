@@ -2563,7 +2563,7 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount, string? FixType, string? FixTypeName)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount, string? FixTypeUid, string? FixTypeName, string? FixTypeCategory)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
 
         foreach (var damage in damages)
@@ -2578,8 +2578,23 @@ public class QuotationService : IQuotationService
             var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
             var description = NormalizeOptionalText(damage.DisplayDescription);
             var amount = damage.DisplayEstimatedAmount;
+            var fixTypeUid = NormalizeOptionalText(damage.FixTypeUid);
             var fixTypeKey = NormalizeOptionalText(damage.DisplayFixType);
             var fixTypeName = NormalizeOptionalText(damage.FixTypeName);
+
+            var normalizedCategory = QuotationDamageFixTypeHelper.Normalize(fixTypeKey)
+                ?? QuotationDamageFixTypeHelper.Normalize(fixTypeName);
+            if (string.IsNullOrWhiteSpace(fixTypeName) && normalizedCategory is not null)
+            {
+                fixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedCategory);
+            }
+
+            if (string.IsNullOrWhiteSpace(fixTypeName) && !string.IsNullOrWhiteSpace(fixTypeUid))
+            {
+                fixTypeName = fixTypeUid;
+            }
+
+            var fixTypeCategory = normalizedCategory ?? fixTypeKey;
 
             foreach (var photoUid in EnumerateDamagePhotoUids(damage))
             {
@@ -2593,7 +2608,7 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                metadata.Add((photoUid, position, dentStatus, description, amount, fixTypeKey, fixTypeName));
+                metadata.Add((photoUid, position, dentStatus, description, amount, fixTypeUid, fixTypeName, fixTypeCategory));
             }
         }
 
@@ -2652,10 +2667,10 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
-            var fixTypeDisplay = info.FixTypeName ?? info.FixType;
-            if (!string.Equals(photo.FixType, fixTypeDisplay, StringComparison.Ordinal))
+            var fixTypeUid = info.FixTypeUid ?? info.FixTypeCategory;
+            if (!string.Equals(photo.FixTypeUid, fixTypeUid, StringComparison.Ordinal))
             {
-                photo.FixType = fixTypeDisplay;
+                photo.FixTypeUid = fixTypeUid;
                 updated = true;
             }
         }
@@ -2759,11 +2774,11 @@ public class QuotationService : IQuotationService
                 continue;
             }
 
-            var photoFixType = NormalizeOptionalText(photo?.FixType);
-            var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photoFixType) ?? photoFixType;
-            var fixTypeName = photoFixType ?? (normalizedFixType is not null
+            var storedFixType = NormalizeOptionalText(photo?.FixTypeUid);
+            var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(storedFixType) ?? storedFixType;
+            var fixTypeName = normalizedFixType is not null
                 ? QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType)
-                : null);
+                : storedFixType;
 
             var damage = new QuotationDamageItem
             {
@@ -2780,6 +2795,7 @@ public class QuotationService : IQuotationService
                 DisplayDentStatus = photo?.PhotoShapeShow,
                 DisplayDescription = photo?.Comment,
                 DisplayEstimatedAmount = photo?.Cost,
+                FixTypeUid = storedFixType,
                 DisplayFixType = normalizedFixType,
                 FixTypeName = fixTypeName
             };
@@ -2838,13 +2854,19 @@ public class QuotationService : IQuotationService
                     damage.DisplayEstimatedAmount = photo.Cost;
                 }
 
-                if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixType))
+                if (string.IsNullOrWhiteSpace(damage.FixTypeUid) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
                 {
-                    damage.DisplayFixType = photo.FixType;
-                    if (string.IsNullOrWhiteSpace(damage.FixTypeName))
-                    {
-                        damage.FixTypeName = photo.FixType;
-                    }
+                    damage.FixTypeUid = photo.FixTypeUid;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
+                {
+                    damage.DisplayFixType = photo.FixTypeUid;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(photo.FixTypeUid))
+                {
+                    damage.FixTypeName = photo.FixTypeUid;
                 }
 
                 if (damage.Photos is { Count: > 0 })
@@ -2930,6 +2952,7 @@ public class QuotationService : IQuotationService
                 DentStatus = NormalizeOptionalText(damage.DentStatus),
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
+                FixTypeUid = NormalizeOptionalText(damage.FixTypeUid) ?? NormalizeOptionalText(damage.DisplayFixType),
                 FixType = fixTypeKey,
                 FixTypeName = fixTypeName
             });

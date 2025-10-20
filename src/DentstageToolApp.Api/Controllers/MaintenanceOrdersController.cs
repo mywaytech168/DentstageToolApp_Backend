@@ -189,7 +189,8 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixType": "dent",
+                "fixTypeUid": "F_DENT_SAMPLE",
+                "fixType": "F_DENT_SAMPLE",
                 "fixTypeName": "凹痕"
               }
             ],
@@ -200,7 +201,8 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
                 "estimatedAmount": 1200,
-                "fixType": "other",
+                "fixTypeUid": "F_OTHER_SAMPLE",
+                "fixType": "F_OTHER_SAMPLE",
                 "fixTypeName": "其他"
               }
             ]

@@ -121,6 +121,7 @@ public class QuotationDamageItem
 
     private List<QuotationDamagePhoto> _photos = new();
     private string? _fixType;
+    private string? _fixTypeUid;
 
     /// <summary>
     /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
@@ -148,13 +149,64 @@ public class QuotationDamageItem
     }
 
     /// <summary>
-    /// 傷痕所屬維修類型鍵值，採用 dent、beauty、paint、other 進行分類。
+    /// 傷痕所屬維修類型 UID，供前端與後端同步維修主檔的唯一識別碼。
+    /// </summary>
+    [JsonPropertyName("fixTypeUid")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? FixTypeUid
+    {
+        get => _fixTypeUid;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _fixTypeUid = null;
+                return;
+            }
+
+            var trimmed = value.Trim();
+            _fixTypeUid = trimmed;
+
+            if (string.IsNullOrWhiteSpace(_fixType))
+            {
+                var normalized = QuotationDamageFixTypeHelper.Normalize(trimmed);
+                if (normalized is not null)
+                {
+                    _fixType = normalized;
+                    if (string.IsNullOrWhiteSpace(FixTypeName))
+                    {
+                        FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 傷痕所屬維修類型鍵值，維持與舊版資料的相容性，若帶入 UID 則會自動寫入 <see cref="FixTypeUid"/>。
     /// </summary>
     [JsonPropertyName("fixType")]
     public string? DisplayFixType
     {
-        get => FixType;
-        set => FixType = value;
+        get => FixTypeUid ?? FixType;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                FixTypeUid = null;
+                FixType = null;
+                return;
+            }
+
+            var normalized = QuotationDamageFixTypeHelper.Normalize(value);
+            if (normalized is not null)
+            {
+                FixType = normalized;
+                return;
+            }
+
+            FixTypeUid = value.Trim();
+        }
     }
 
     /// <summary>
@@ -322,7 +374,12 @@ public class QuotationDamageItem
             }
             else
             {
-                _fixType = value.Trim();
+                var trimmed = value.Trim();
+                _fixType = trimmed;
+                if (string.IsNullOrWhiteSpace(FixTypeUid))
+                {
+                    FixTypeUid = trimmed;
+                }
                 if (string.IsNullOrWhiteSpace(FixTypeName))
                 {
                     FixTypeName = _fixType;
@@ -504,6 +561,9 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
+        writer.WritePropertyName("fixTypeUid");
+        WriteNullableString(writer, target.FixTypeUid);
+
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.DisplayFixType);
 
@@ -546,6 +606,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             DisplayDentStatus = ReadString(element, "dentStatus", "凹痕狀況"),
             DisplayDescription = ReadString(element, "description", "說明"),
             DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額"),
+            FixTypeUid = ReadString(element, "fixTypeUid"),
             DisplayFixType = ReadString(element, "fixType", "維修類型"),
             FixTypeName = ReadString(element, "fixTypeName")
         };
@@ -889,6 +950,10 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var normalized = Normalize(damage.FixType);
+        if (normalized is null && !string.IsNullOrWhiteSpace(damage.FixTypeName))
+        {
+            normalized = Normalize(damage.FixTypeName);
+        }
         if (normalized is null)
         {
             normalized = Normalize(fallback);
@@ -906,6 +971,16 @@ internal static class QuotationDamageFixTypeHelper
         {
             damage.FixType = damage.FixTypeName;
         }
+
+        if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(damage.FixTypeUid))
+        {
+            damage.FixTypeName = damage.FixTypeUid;
+        }
+
+        if (string.IsNullOrWhiteSpace(damage.FixTypeUid) && !string.IsNullOrWhiteSpace(damage.FixType))
+        {
+            damage.FixTypeUid = damage.FixType;
+        }
     }
 
     /// <summary>
@@ -919,6 +994,10 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var normalized = Normalize(summary.FixType);
+        if (normalized is null && !string.IsNullOrWhiteSpace(summary.FixTypeName))
+        {
+            normalized = Normalize(summary.FixTypeName);
+        }
         if (normalized is null)
         {
             normalized = Normalize(fallback);
@@ -935,6 +1014,16 @@ internal static class QuotationDamageFixTypeHelper
         else if (!string.IsNullOrWhiteSpace(summary.FixTypeName))
         {
             summary.FixType = summary.FixTypeName;
+        }
+
+        if (string.IsNullOrWhiteSpace(summary.FixTypeName) && !string.IsNullOrWhiteSpace(summary.FixTypeUid))
+        {
+            summary.FixTypeName = summary.FixTypeUid;
+        }
+
+        if (string.IsNullOrWhiteSpace(summary.FixTypeUid) && !string.IsNullOrWhiteSpace(summary.FixType))
+        {
+            summary.FixTypeUid = summary.FixType;
         }
     }
 }

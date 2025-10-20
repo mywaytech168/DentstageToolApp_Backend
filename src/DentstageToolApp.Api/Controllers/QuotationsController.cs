@@ -111,7 +111,8 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixType": "dent",
+                "fixTypeUid": "F_DENT_SAMPLE",
+                "fixType": "F_DENT_SAMPLE",
                 "fixTypeName": "凹痕"
               }
             ],
@@ -122,7 +123,8 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "烤漆",
                 "description": "刮傷需補土烤漆",
                 "estimatedAmount": 3200,
-                "fixType": "paint",
+                "fixTypeUid": "F_PAINT_SAMPLE",
+                "fixType": "F_PAINT_SAMPLE",
                 "fixTypeName": "鈑烤"
               }
             ]
@@ -271,7 +273,8 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "fixType": "dent",
+                "fixTypeUid": "F_DENT_SAMPLE",
+                "fixType": "F_DENT_SAMPLE",
                 "fixTypeName": "凹痕"
               }
             ],
@@ -282,7 +285,8 @@ public class QuotationsController : ControllerBase
                 "dentStatus": "美容拋光",
                 "description": "座椅刮痕需要美容處理",
                 "estimatedAmount": 1500,
-                "fixType": "beauty",
+                "fixTypeUid": "F_BEAUTY_SAMPLE",
+                "fixType": "F_BEAUTY_SAMPLE",
                 "fixTypeName": "美容"
               }
             ]
