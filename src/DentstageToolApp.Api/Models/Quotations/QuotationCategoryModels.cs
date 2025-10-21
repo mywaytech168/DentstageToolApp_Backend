@@ -800,7 +800,18 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var normalized = Normalize(value);
-        return normalized ?? "其他";
+        if (normalized is not null)
+        {
+            return normalized;
+        }
+
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, "簽名", StringComparison.Ordinal))
+        {
+            return "簽名";
+        }
+
+        return "其他";
     }
 
     /// <summary>
