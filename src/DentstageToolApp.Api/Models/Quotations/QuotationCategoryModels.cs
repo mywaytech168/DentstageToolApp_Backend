@@ -800,6 +800,12 @@ internal static class QuotationDamageFixTypeHelper
         ["signature"] = "簽名"
     };
 
+    // 針對多重維修類型常見的分隔符號，以統一解析流程。
+    private static readonly char[] CompositeSeparators = { '、', ',', ';', '，', '/', '\\', '|', '&' };
+
+    // 建立反向映射，提供顯示名稱對應可用別名的快速查找集合。
+    private static readonly Dictionary<string, HashSet<string>> ReverseAliasMappings = BuildReverseAliasMappings();
+
     /// <summary>
     /// 維修類型輸出的固定順序，確保前端畫面呈現一致。
     /// </summary>
@@ -843,9 +849,172 @@ internal static class QuotationDamageFixTypeHelper
     /// </summary>
     public static string ResolveDisplayName(string? value)
     {
+        // 先嘗試取得單一或多重維修類型的中文顯示名稱清單。
+        var resolvedNames = ResolveCompositeDisplayNames(value);
+
+        if (resolvedNames.Count == 0)
+        {
+            // 無法解析時一律回傳「其他」，避免前端顯示空白。
+            return "其他";
+        }
+
+        if (resolvedNames.Count == 1)
+        {
+            return resolvedNames[0];
+        }
+
+        // 多筆維修類型時以「、」串接，維持原有顯示格式。
+        return string.Join("、", resolvedNames);
+    }
+
+    /// <summary>
+    /// 將輸入字串解析為對應的中文顯示名稱清單，支援「凹痕、板烤」等多重組合。
+    /// </summary>
+    public static IReadOnlyList<string> ResolveCompositeDisplayNames(string? value)
+    {
+        var results = new List<string>();
+
         if (string.IsNullOrWhiteSpace(value))
         {
-            return "其他";
+            return results;
+        }
+
+        // 先嘗試正規化整體字串，若成功代表為單一類別即可直接回傳。
+        var normalized = Normalize(value);
+        if (normalized is not null)
+        {
+            results.Add(normalized);
+            return results;
+        }
+
+        var trimmed = value.Trim();
+        var parts = SplitCompositeValues(trimmed);
+
+        if (parts.Count == 0)
+        {
+            return results;
+        }
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var part in parts)
+        {
+            var resolved = ResolveSingleDisplayName(part);
+            if (string.IsNullOrWhiteSpace(resolved))
+            {
+                continue;
+            }
+
+            if (seen.Add(resolved))
+            {
+                results.Add(resolved);
+            }
+        }
+
+        // 若仍無任何結果，最後再嘗試以整體字串進行解析，避免完全丟失內容。
+        if (results.Count == 0)
+        {
+            var fallback = ResolveSingleDisplayName(trimmed);
+            if (!string.IsNullOrWhiteSpace(fallback))
+            {
+                results.Add(fallback);
+            }
+        }
+
+        return results;
+    }
+
+    /// <summary>
+    /// 組合搜尋時可用的關鍵字清單，涵蓋原始字串、中文顯示名稱與對應別名。
+    /// </summary>
+    public static IReadOnlyCollection<string> ResolveSearchTokens(string? value)
+    {
+        var tokens = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void AppendToken(string? token)
+        {
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
+            var trimmedToken = token.Trim();
+            if (trimmedToken.Length == 0)
+            {
+                return;
+            }
+
+            if (seen.Add(trimmedToken))
+            {
+                tokens.Add(trimmedToken);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return tokens;
+        }
+
+        var trimmed = value.Trim();
+        AppendToken(trimmed);
+
+        var normalized = Normalize(trimmed);
+        AppendToken(normalized);
+
+        // 解析多重維修類型時，將每個部分的原始與正規化結果加入關鍵字清單。
+        var parts = SplitCompositeValues(trimmed);
+        if (parts.Count > 1)
+        {
+            foreach (var part in parts)
+            {
+                AppendToken(part);
+                AppendToken(Normalize(part));
+            }
+        }
+
+        var resolvedNames = ResolveCompositeDisplayNames(trimmed);
+        foreach (var name in resolvedNames)
+        {
+            AppendToken(name);
+
+            if (ReverseAliasMappings.TryGetValue(name, out var aliases))
+            {
+                foreach (var alias in aliases)
+                {
+                    AppendToken(alias);
+                }
+            }
+        }
+
+        return tokens;
+    }
+
+    /// <summary>
+    /// 將維修類型字串分割成各別項目，移除空白字元後回傳清單。
+    /// </summary>
+    private static List<string> SplitCompositeValues(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return new List<string>();
+        }
+
+        return value
+            .Split(CompositeSeparators, StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .ToList();
+    }
+
+    /// <summary>
+    /// 嘗試將單一維修類型解析成中文顯示名稱，失敗時回傳 null。
+    /// </summary>
+    private static string? ResolveSingleDisplayName(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
         }
 
         var normalized = Normalize(value);
@@ -857,7 +1026,44 @@ internal static class QuotationDamageFixTypeHelper
         var trimmed = value.Trim();
         return AliasMappings.TryGetValue(trimmed, out var mapped)
             ? mapped
-            : "其他";
+            : null;
+    }
+
+    /// <summary>
+    /// 建立顯示名稱與別名的反向查表，用於搜尋關鍵字補強。
+    /// </summary>
+    private static Dictionary<string, HashSet<string>> BuildReverseAliasMappings()
+    {
+        var map = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+
+        foreach (var canonical in CanonicalSet)
+        {
+            map[canonical] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var pair in AliasMappings)
+        {
+            if (!map.TryGetValue(pair.Value, out var aliases))
+            {
+                aliases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                map[pair.Value] = aliases;
+            }
+
+            aliases.Add(pair.Key);
+        }
+
+        // 簽名屬於特殊顯示名稱，仍需保留其別名。
+        if (!map.ContainsKey("簽名"))
+        {
+            map["簽名"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (AliasMappings.TryGetValue("signature", out var signatureDisplay))
+        {
+            map[signatureDisplay].Add("signature");
+        }
+
+        return map;
     }
 
     /// <summary>
