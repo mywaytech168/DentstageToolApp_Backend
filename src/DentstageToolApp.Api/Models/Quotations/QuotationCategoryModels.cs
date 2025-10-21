@@ -797,6 +797,9 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
 /// </summary>
 internal static class QuotationDamageFixTypeHelper
 {
+    // 內部維護的固定順序清單，避免每次呼叫都重新建立 List 實例。
+    private static readonly List<string> CanonicalOrderList = new() { "凹痕", "美容", "板烤", "其他" };
+
     private static readonly HashSet<string> CanonicalSet = new(StringComparer.Ordinal)
     {
         "凹痕",
@@ -808,7 +811,7 @@ internal static class QuotationDamageFixTypeHelper
     /// <summary>
     /// 維修類型輸出的固定順序，確保前端畫面呈現一致。
     /// </summary>
-    public static IReadOnlyList<string> CanonicalOrder { get; } = new List<string> { "凹痕", "美容", "板烤", "其他" };
+    public static IReadOnlyList<string> CanonicalOrder => CanonicalOrderList;
 
     /// <summary>
     /// 正規化維修類型字串，僅接受中文標籤，其他內容會回傳 null 交由外部決定是否改為「其他」。
@@ -836,6 +839,17 @@ internal static class QuotationDamageFixTypeHelper
 
         var normalized = Normalize(value);
         return normalized ?? "其他";
+    }
+
+    /// <summary>
+    /// 計算維修類型於固定順序中的索引位置，用於排序時維持既定順序。
+    /// </summary>
+    public static int ResolveOrderIndex(string? value)
+    {
+        // 先嘗試正規化字串，若失敗則改用顯示名稱避免 null 影響排序。
+        var normalized = Normalize(value) ?? ResolveDisplayName(value);
+        var index = CanonicalOrderList.IndexOf(normalized);
+        return index >= 0 ? index : int.MaxValue;
     }
 
     /// <summary>
