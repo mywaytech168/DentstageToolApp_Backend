@@ -3466,7 +3466,6 @@ public class QuotationService : IQuotationService
             ?? QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
         return new CreateQuotationMaintenanceInfo
         {
-            FixType = normalizedFixType,
             ReserveCar = random.Next(2) == 0,
             ApplyCoating = random.Next(2) == 0,
             ApplyWrapping = random.Next(2) == 0,
