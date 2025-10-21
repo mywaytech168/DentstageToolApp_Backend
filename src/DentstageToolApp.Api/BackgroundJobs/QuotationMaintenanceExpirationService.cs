@@ -67,9 +67,11 @@ public class QuotationMaintenanceExpirationService : BackgroundService
         var expirationThreshold = now.AddDays(-60);
 
         // ---------- 資料查詢區 ----------
+        // 估價單需同時檢查 110(估價中)、180(估價完成) 與 190(已預約) 的 60 天超時情況。
         var quotations = await context.Quatations
             .Where(q =>
                 (q.Status != null && q.Status110Timestamp != null && q.Status == "110" && q.Status110Timestamp < expirationThreshold) ||
+                (q.Status != null && q.Status180Timestamp != null && q.Status == "180" && q.Status180Timestamp < expirationThreshold) ||
                 (q.Status != null && q.Status190Timestamp != null && q.Status == "190" && q.Status190Timestamp < expirationThreshold))
             .ToListAsync(cancellationToken);
 
@@ -88,6 +90,12 @@ public class QuotationMaintenanceExpirationService : BackgroundService
         {
             if (string.Equals(quotation.Status, "110", StringComparison.OrdinalIgnoreCase))
             {
+                ApplyExpiredQuotationStatus(quotation, "186", now);
+                expiredEstimationCount++;
+            }
+            else if (string.Equals(quotation.Status, "180", StringComparison.OrdinalIgnoreCase))
+            {
+                // 估價完成超過 60 天仍未進一步處理，同樣需轉為 186 避免久置。
                 ApplyExpiredQuotationStatus(quotation, "186", now);
                 expiredEstimationCount++;
             }
