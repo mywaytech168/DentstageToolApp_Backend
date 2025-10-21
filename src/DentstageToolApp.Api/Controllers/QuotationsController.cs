@@ -61,7 +61,7 @@ public class QuotationsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "fixType": "DentRepair",
+          "fixType": "凹痕",
           "status": "110",
           "startDate": "2024-03-01T00:00:00",
           "endDate": "2024-03-31T23:59:59",
@@ -93,16 +93,16 @@ public class QuotationsController : ControllerBase
         {
           "store": {
             "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
-            "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027896",
             "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
             "repairDate": "2024-10-25T09:00:00"
           },
           "car": {
-            "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
+            "carUid": "Ca_67E5D66A-DDDB-478E-B0CC-90975CABEC0E"
           },
           "customer": {
-            "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
+            "customerUid": "Cu_E1545903-EBBA-468C-B929-52028CAD98C3"
           },
           "photos": {
             "dent": [
