@@ -56,12 +56,13 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
                 .ToListAsync(cancellationToken);
 
             // ---------- 陣列整理區 ----------
-            // 依照系統既定的內部鍵值順序（dent、beauty、paint、other）排序，再映射成凹痕、美容、板烤或其他，避免不同資料庫排序造成顯示不一致。
+            // 依照系統既定的中文順序（凹痕、美容、板烤、其他）排序，避免不同資料庫排序造成顯示不一致。
             items = items
                 .OrderBy(item =>
                 {
-                    var normalized = QuotationDamageFixTypeHelper.Normalize(item.FixType) ?? item.FixType;
-                    var index = QuotationDamageFixTypeHelper.CanonicalOrder.IndexOf(normalized ?? string.Empty);
+                    var normalized = QuotationDamageFixTypeHelper.Normalize(item.FixType);
+                    var resolved = normalized ?? QuotationDamageFixTypeHelper.ResolveDisplayName(item.FixType);
+                    var index = QuotationDamageFixTypeHelper.CanonicalOrder.IndexOf(resolved);
                     return index >= 0 ? index : int.MaxValue;
                 })
                 .ThenBy(item => item.FixType)
@@ -107,8 +108,11 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
                 throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型中文標籤。");
             }
 
-            var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid)
-                ?? normalizedUid;
+            var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid);
+            if (canonicalFixType is null)
+            {
+                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請輸入凹痕、美容、板烤或其他中文標籤。");
+            }
 
             var entity = await _dbContext.FixTypes
                 .AsNoTracking()

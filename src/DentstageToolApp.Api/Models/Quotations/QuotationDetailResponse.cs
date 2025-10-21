@@ -157,17 +157,9 @@ public class QuotationDamageSummary
                 return;
             }
 
-            var normalized = QuotationDamageFixTypeHelper.Normalize(value);
-            if (normalized is not null)
-            {
-                _fixType = normalized;
-                _fixTypeDisplay = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
-                return;
-            }
-
-            var trimmed = value.Trim();
-            _fixType = trimmed;
-            _fixTypeDisplay = trimmed;
+            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
+            _fixType = resolved;
+            _fixTypeDisplay = resolved;
         }
     }
 
@@ -237,17 +229,9 @@ public class QuotationMaintenanceDetail
                 return;
             }
 
-            var normalized = QuotationDamageFixTypeHelper.Normalize(value);
-            if (normalized is not null)
-            {
-                _fixType = normalized;
-                _fixTypeDisplay = QuotationDamageFixTypeHelper.ResolveDisplayName(normalized);
-                return;
-            }
-
-            var trimmed = value.Trim();
-            _fixType = trimmed;
-            _fixTypeDisplay = trimmed;
+            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
+            _fixType = resolved;
+            _fixTypeDisplay = resolved;
         }
     }
 
@@ -443,7 +427,8 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
 
         foreach (var property in root.EnumerateObject())
         {
-            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name) ?? property.Name;
+            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name)
+                ?? QuotationDamageFixTypeHelper.ResolveDisplayName(property.Name);
 
             if (property.Value.ValueKind == JsonValueKind.Array)
             {
