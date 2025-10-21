@@ -2854,22 +2854,40 @@ public class QuotationService : IQuotationService
             return null;
         }
 
-        var preferred = counts
-            .Where(kvp => !string.Equals(kvp.Key, "其他", StringComparison.Ordinal))
+        // 依據原始排序規則建立排序後清單，確保統計結果與舊有邏輯一致。
+        var orderedFixTypes = counts
             .OrderByDescending(kvp => kvp.Value)
             .ThenBy(kvp => QuotationDamageFixTypeHelper.ResolveOrderIndex(kvp.Key))
-            .FirstOrDefault();
+            .ToList();
 
-        if (!string.IsNullOrWhiteSpace(preferred.Key))
+        // 先收集非「其他」類型，再將「其他」放到最後，方便閱讀。
+        var prioritizedFixTypes = new List<string>();
+        var fallbackFixTypes = new List<string>();
+
+        foreach (var kvp in orderedFixTypes)
         {
-            return preferred.Key;
+            if (string.Equals(kvp.Key, "其他", StringComparison.Ordinal))
+            {
+                // 將「其他」留待最後串接，避免混淆主要修復方式。
+                fallbackFixTypes.Add(kvp.Key);
+                continue;
+            }
+
+            prioritizedFixTypes.Add(kvp.Key);
         }
 
-        return counts
-            .OrderByDescending(kvp => kvp.Value)
-            .ThenBy(kvp => QuotationDamageFixTypeHelper.ResolveOrderIndex(kvp.Key))
-            .First()
-            .Key;
+        // 合併主要與備用清單，若清單為空則直接回傳 null。
+        var mergedFixTypes = prioritizedFixTypes
+            .Concat(fallbackFixTypes)
+            .ToList();
+
+        if (mergedFixTypes.Count == 0)
+        {
+            return null;
+        }
+
+        // 以「、」串接所有修復方式，形成「凹痕、美容」等多重分類文字描述。
+        return string.Join("、", mergedFixTypes);
     }
 
     private async Task<List<QuotationDamageItem>> NormalizeDamagesWithPhotoDataAsync(
