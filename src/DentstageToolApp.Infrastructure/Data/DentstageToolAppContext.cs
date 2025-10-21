@@ -146,11 +146,6 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<Model> Models => Set<Model>();
 
     /// <summary>
-    /// 維修類型資料集。
-    /// </summary>
-    public virtual DbSet<FixType> FixTypes => Set<FixType>();
-
-    /// <summary>
     /// 門市資料集。
     /// </summary>
     public virtual DbSet<Store> Stores => Set<Store>();
@@ -214,7 +209,6 @@ public class DentstageToolAppContext : DbContext
         ConfigureBrand(modelBuilder);
         ConfigureModel(modelBuilder);
         ConfigureCar(modelBuilder);
-        ConfigureFixType(modelBuilder);
         ConfigureStore(modelBuilder);
         ConfigureTechnician(modelBuilder);
         ConfigureQuatation(modelBuilder);
@@ -421,22 +415,6 @@ public class DentstageToolAppContext : DbContext
             .WithMany(e => e.Models)
             .HasForeignKey(e => e.BrandUid)
             .OnDelete(DeleteBehavior.Cascade);
-    }
-
-    /// <summary>
-    /// 設定維修類型主檔欄位與關聯。
-    /// </summary>
-    private static void ConfigureFixType(ModelBuilder modelBuilder)
-    {
-        var entity = modelBuilder.Entity<FixType>();
-        entity.ToTable("fix_types");
-        entity.HasKey(e => e.FixType);
-        entity.Property(e => e.FixType)
-            .HasMaxLength(50)
-            .HasColumnName("FixType");
-        entity.Property(e => e.FixTypeName)
-            .IsRequired()
-            .HasMaxLength(100);
     }
 
     /// <summary>
