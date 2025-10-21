@@ -213,7 +213,7 @@ public class MaintenanceOrdersController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "板烤/鈑烤",
+            "fixType": "板烤",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,

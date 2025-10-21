@@ -6,7 +6,7 @@ namespace DentstageToolApp.Api.Models.ServiceCategories;
 public class CreateServiceCategoryResponse
 {
     /// <summary>
-    /// 維修類型鍵值，對應 dent、beauty、paint 或 other。
+    /// 維修類型中文標籤，對應凹痕、美容、板烤或其他。
     /// </summary>
     public string FixType { get; set; } = string.Empty;
 

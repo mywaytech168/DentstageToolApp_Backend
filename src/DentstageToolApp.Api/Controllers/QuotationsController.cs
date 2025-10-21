@@ -118,7 +118,7 @@ public class QuotationsController : ControllerBase
               "dentStatus": "烤漆",
               "description": "刮傷需補土烤漆",
               "estimatedAmount": 3200,
-              "fixType": "板烤/鈑烤"
+              "fixType": "板烤"
             }
           ],
           "carBodyConfirmation": {
@@ -289,7 +289,7 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "板烤/鈑烤",
+            "fixType": "板烤",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,

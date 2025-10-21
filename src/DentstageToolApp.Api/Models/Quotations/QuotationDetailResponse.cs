@@ -133,7 +133,7 @@ public class QuotationDamageSummary
     public decimal? EstimatedAmount { get; set; }
 
     /// <summary>
-    /// 維修類型鍵值，輸出時統一為中文顯示名稱。
+    /// 維修類型中文標籤，輸出時統一為凹痕、美容、板烤或其他。
     /// </summary>
     public string? FixType
     {
@@ -213,7 +213,7 @@ public class QuotationMaintenanceDetail
     private string? _fixTypeDisplay;
 
     /// <summary>
-    /// 維修類型鍵值，供前端回填分類選項。
+    /// 維修類型中文標籤，供前端直接回填四種固定分類。
     /// </summary>
     public string? FixType
     {
@@ -390,7 +390,7 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageSummary> value, JsonSerializerOptions options)
     {
-        // 回傳結果直接使用陣列格式，避免再以維修類型鍵值進行分組，符合最新資料規格。
+        // 回傳結果直接使用陣列格式，避免再以內部維修類型識別值進行分組，符合最新資料規格。
         writer.WriteStartArray();
 
         if (value is { Count: > 0 })

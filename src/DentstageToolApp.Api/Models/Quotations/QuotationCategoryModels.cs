@@ -148,7 +148,7 @@ public class QuotationDamageItem
     }
 
     /// <summary>
-    /// 傷痕所屬維修類型鍵值，維持與舊版資料的相容性。
+    /// 傷痕所屬維修類型中文標籤，維持與舊版資料的相容性。
     /// </summary>
     [JsonPropertyName("fixType")]
     public string? DisplayFixType
@@ -342,7 +342,7 @@ public class QuotationDamageItem
     }
 
     /// <summary>
-    /// 內部使用的維修類型鍵值，提供轉換器進行分類。
+    /// 內部使用的維修類型識別值，提供轉換器進行分類並保留既有資料相容性。
     /// </summary>
     [JsonIgnore]
     public string? FixType
@@ -830,7 +830,7 @@ internal static class QuotationDamageFixTypeHelper
     public static IReadOnlyList<string> CanonicalOrder { get; } = new List<string> { "dent", "beauty", "paint", "other" };
 
     /// <summary>
-    /// 正規化維修類型鍵值，轉換成 dent、beauty、paint 或 other。無法判斷時回傳 null。
+    /// 正規化維修類型識別值，轉換成內部鍵值（dent、beauty、paint、other），以便後續再映射成中文標籤。
     /// </summary>
     public static string? Normalize(string? value)
     {
@@ -853,12 +853,21 @@ internal static class QuotationDamageFixTypeHelper
     /// </summary>
     public static string ResolveDisplayName(string? canonical)
     {
-        return canonical switch
+        if (string.IsNullOrWhiteSpace(canonical))
+        {
+            return "其他";
+        }
+
+        // 先將輸入值正規化成系統固定的鍵值，再依據鍵值輸出中文標籤，確保所有情境都能回傳凹痕、美容、板烤或其他。
+        var normalized = Normalize(canonical);
+
+        return normalized switch
         {
             "dent" => "凹痕",
             "beauty" => "美容",
-            "paint" => "板烤/鈑烤",
-            _ => "其他"
+            "paint" => "板烤",
+            "other" => "其他",
+            _ => canonical.Trim()
         };
     }
 
