@@ -93,7 +93,6 @@
       store: {
         estimationTechnicianUid: '',
         creatorTechnicianUid: '',
-        source: '',
         bookMethod: '',
         reservationDate: null,
         repairDate: null
@@ -113,7 +112,6 @@
       photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
-        fixType: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -141,7 +139,6 @@
       store: {
         estimationTechnicianUid: '',
         creatorTechnicianUid: '',
-        source: '',
         bookMethod: '',
         reservationDate: null,
         repairDate: null
@@ -161,7 +158,6 @@
       photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
-        fixType: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -198,62 +194,64 @@
       return 'other';
     };
 
-    // 說明：整合舊版字串與新版物件格式，轉換為統一的照片陣列結構。
-    const buildPhotoListFromDetailItem = (item) => {
+    // 說明：整合舊版字串與新版物件格式，回傳第一個有效的 PhotoUID 供後續組成單一 photo 欄位。
+    const extractPhotoUidFromDetailItem = (item) => {
       if (!item) {
-        return [];
+        return '';
       }
 
-      const result = [];
-      const appendPhoto = (uid, primaryFlag) => {
-        const trimmed = typeof uid === 'string' ? uid.trim() : '';
-        if (!trimmed) {
-          return;
-        }
-        result.push({
-          photoUid: trimmed,
-          isPrimary: Boolean(primaryFlag)
-        });
-      };
+      const normalize = (value) => (typeof value === 'string' ? value.trim() : '');
 
-      const processArray = (list) => {
+      const pickFromArray = (list) => {
+        if (!list) {
+          return '';
+        }
+
         if (!Array.isArray(list)) {
-          if (typeof list === 'string') {
-            appendPhoto(list, result.length === 0);
-          }
-          return;
+          return normalize(list);
         }
 
-        list.forEach((value, index) => {
-          if (!value) {
-            return;
+        for (let index = 0; index < list.length; index += 1) {
+          const entry = list[index];
+          if (!entry) {
+            continue;
           }
-          if (typeof value === 'string') {
-            appendPhoto(value, result.length === 0 && index === 0);
-            return;
+
+          if (typeof entry === 'string') {
+            const candidate = normalize(entry);
+            if (candidate) {
+              return candidate;
+            }
+            continue;
           }
-          const uid = typeof value.photoUid === 'string'
-            ? value.photoUid
-            : typeof value.file === 'string'
-              ? value.file
-              : '';
-          const primary = typeof value.isPrimary === 'boolean'
-            ? value.isPrimary
-            : result.length === 0 && index === 0;
-          appendPhoto(uid, primary);
-        });
+
+          if (typeof entry === 'object') {
+            const candidate = normalize(entry.photoUid ?? entry.file ?? entry.photo);
+            if (candidate) {
+              return candidate;
+            }
+          }
+        }
+
+        return '';
       };
 
-      processArray(item.photos);
-      processArray(item.photoUids);
-      appendPhoto(item.photoUid, result.length === 0);
-      appendPhoto(item.photo, result.length === 0);
-
-      if (result.length > 0 && !result.some((photo) => photo.isPrimary)) {
-        result[0].isPrimary = true;
+      const direct = normalize(item.photo ?? item.photoUid);
+      if (direct) {
+        return direct;
       }
 
-      return result;
+      const fromPhotos = pickFromArray(item.photos);
+      if (fromPhotos) {
+        return fromPhotos;
+      }
+
+      const fromPhotoUids = pickFromArray(item.photoUids);
+      if (fromPhotoUids) {
+        return fromPhotoUids;
+      }
+
+      return '';
     };
 
     // 說明：依據詳情資料重建 API 所需的照片分類集合。
@@ -273,22 +271,34 @@
           if (items.length > 0) {
             hasSummaryData = true;
           }
-          collection[category] = items.map((item) => ({
-            photos: buildPhotoListFromDetailItem(item),
-            position: item?.position ?? '',
-            dentStatus: item?.dentStatus ?? '',
-            description: item?.description ?? '',
-            estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
-            fixType: item?.fixType ?? item?.fixTypeName ?? ''
-          }));
+          collection[category] = items
+            .map((item) => {
+              const photo = extractPhotoUidFromDetailItem(item);
+              if (!photo) {
+                return null;
+              }
+              return {
+                photo,
+                position: item?.position ?? '',
+                dentStatus: item?.dentStatus ?? '',
+                description: item?.description ?? '',
+                estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
+                fixType: item?.fixType ?? item?.fixTypeName ?? ''
+              };
+            })
+            .filter(Boolean);
         });
       }
 
       if (!hasSummaryData && Array.isArray(detail.damages)) {
         detail.damages.forEach((item) => {
           const category = resolvePhotoCategoryKey(item?.fixType ?? item?.fixTypeName ?? '');
+          const photo = extractPhotoUidFromDetailItem(item);
+          if (!photo) {
+            return;
+          }
           collection[category].push({
-            photos: buildPhotoListFromDetailItem(item),
+            photo,
             position: item?.position ?? '',
             dentStatus: item?.dentStatus ?? '',
             description: item?.description ?? '',
@@ -314,7 +324,6 @@
       payload.store = {
         estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
         creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        source: detail.store?.source ?? '',
         bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
@@ -349,7 +358,6 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixType: detail.maintenance.fixType ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,
@@ -384,7 +392,6 @@
       payload.store = {
         estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
         creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        source: detail.store?.source ?? '',
         bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
@@ -419,7 +426,6 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixType: detail.maintenance.fixType ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,

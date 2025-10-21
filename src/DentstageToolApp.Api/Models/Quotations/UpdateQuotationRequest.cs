@@ -67,11 +67,6 @@ public class QuotationStoreUpdateInfo
     public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
-    /// 維修來源，沿用建立估價單欄位。
-    /// </summary>
-    public string? Source { get; set; }
-
-    /// <summary>
     /// 預約方式，沿用建立估價單欄位，供前端同步顯示。
     /// </summary>
     public string? BookMethod { get; set; }

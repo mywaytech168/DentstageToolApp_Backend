@@ -256,7 +256,7 @@
                   :closable="false"
                   show-icon
                   title="損傷資料可重複新增"
-                  description="系統會在 photos.dent 陣列末端新增一筆固定範例，並直接將 PhotoUID 寫入照片集合，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
+                  description="系統會在 photos.dent 陣列末端新增一筆固定範例，並直接將 PhotoUID 寫入 photo 欄位，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
                   style="margin-top: 8px;"
                 />
                 <el-alert
@@ -379,12 +379,7 @@
   "photos": {
     "dent": [
       {
-        "photos": [
-          {
-            "photoUid": "",
-            "isPrimary": true
-          }
-        ],
+        "photo": "",
         "position": "左前門",
         "dentStatus": "需烤漆",
         "description": "建議同時處理刮痕",
@@ -472,16 +467,11 @@
 
         // 建立固定的照片項目範本，符合營運提供的標準內容
         const buildPhotoItemTemplate = (photoUid) => {
-          const photos = [];
-          if (photoUid) {
-            photos.push({
-              photoUid,
-              isPrimary: true
-            });
-          }
+          // 說明：統一整理傳入的 PhotoUID，避免前後端處理差異導致空白字串
+          const normalizedPhoto = typeof photoUid === 'string' ? photoUid.trim() : '';
 
           return {
-            photos,
+            photo: normalizedPhoto,
             position: '左前門',
             dentStatus: '需烤漆',
             description: '建議同時處理刮痕',
@@ -496,12 +486,39 @@
 
           PHOTO_CATEGORY_KEYS.forEach((key) => {
             const source = Array.isArray(groups[key]) ? groups[key] : [];
-            groups[key] = source.filter((item) => {
-              if (!item || !Array.isArray(item.photos)) {
-                return false;
+            const normalizedItems = [];
+
+            source.forEach((item) => {
+              if (!item || typeof item !== 'object') {
+                return;
               }
-              return item.photos.some((photo) => photo && photo.photoUid);
+
+              // 說明：優先使用新版 photo 欄位，若仍帶入舊版陣列結構則擷取第一個有效 PhotoUID
+              const directPhoto = typeof item.photo === 'string' ? item.photo.trim() : '';
+              let photoValue = directPhoto;
+
+              if (!photoValue && typeof item.photoUid === 'string') {
+                photoValue = item.photoUid.trim();
+              }
+
+              if (!photoValue && Array.isArray(item.photos)) {
+                const legacyPhoto = item.photos.find((photo) => photo && typeof photo.photoUid === 'string' && photo.photoUid.trim());
+                if (legacyPhoto) {
+                  photoValue = legacyPhoto.photoUid.trim();
+                }
+              }
+
+              if (!photoValue) {
+                return;
+              }
+
+              const normalizedItem = { ...item, photo: photoValue };
+              delete normalizedItem.photos;
+              delete normalizedItem.photoUid;
+              normalizedItems.push(normalizedItem);
             });
+
+            groups[key] = normalizedItems;
           });
 
           target.photos = groups;

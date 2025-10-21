@@ -134,14 +134,9 @@
           <td>選填欄位，依維修類型拆分陣列，至少提供一筆資料便於估價。</td>
         </tr>
         <tr>
-          <td><code>photos.*[].photos[].photoUid</code></td>
+          <td><code>photos.*[].photo</code></td>
           <td>傷痕照片的 PhotoUID。</td>
-          <td>必填欄位，需先透過上傳 API 取得照片 UID。</td>
-        </tr>
-        <tr>
-          <td><code>photos.*[].photos[].isPrimary</code></td>
-          <td>是否為主要照片。</td>
-          <td>選填欄位，若未提供系統會將第一張視為主要照片。</td>
+          <td>必填欄位，需先透過上傳 API 取得圖片識別碼。</td>
         </tr>
         <tr>
           <td><code>photos.*[].position</code></td>
@@ -199,9 +194,8 @@
           <td>選填欄位，可描述該位置的補充說明。</td>
         </tr>
         <tr>
-          <td><code>maintenance.fixType</code></td>
-          <td>維修類型中文名稱，固定為凹痕、美容、板烤、其他。</td>
-          <td>選填欄位，若未提供後端會依傷痕內容推論，建議明確指定。</td>
+          <td>維修類型</td>
+          <td colspan="2">由後端根據傷痕照片自動統計，維修區塊不再傳入 <code>fixType</code> 欄位。</td>
         </tr>
         <tr>
           <td><code>maintenance.reserveCar</code></td>
@@ -302,7 +296,7 @@
   <section>
     <h2>常見錯誤與排除方式</h2>
     <ul>
-      <li><strong>400 驗證錯誤：</strong>確認必填欄位 <code>store.estimationTechnicianUid</code>、<code>car.carUid</code>、<code>customer.customerUid</code> 與 <code>photos.*[].photos[].photoUid</code> 是否正確。</li>
+      <li><strong>400 驗證錯誤：</strong>確認必填欄位 <code>store.estimationTechnicianUid</code>、<code>car.carUid</code>、<code>customer.customerUid</code> 與 <code>photos.*[].photo</code> 是否正確。</li>
       <li><strong>傷痕照片無法綁定：</strong>請確認照片已由上傳 API 建立，且提供正確的 <code>PhotoUID</code>。</li>
       <li><strong>流水號重複：</strong>若同時大量建立估價單，請確認系統時間或稍後再試，必要時聯繫後端檢視序號。</li>
     </ul>

@@ -786,9 +786,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 ?? quotation?.CreationTimestamp
                 ?? quotationStore?.CreatedDate,
             ReservationDate = reservationDate,
-            Source = NormalizeOptionalText(order.Source)
-                ?? NormalizeOptionalText(quotation?.Source)
-                ?? quotationStore?.Source,
             BookMethod = NormalizeOptionalText(order.BookMethod)
                 ?? NormalizeOptionalText(quotation?.BookMethod)
                 ?? quotationStore?.BookMethod,
@@ -915,7 +912,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
             clones.Add(new QuotationDamageSummary
             {
-                Photos = summary.Photos,
+                Photo = summary.Photo,
                 Position = summary.Position,
                 DentStatus = summary.DentStatus,
                 Description = summary.Description,
@@ -950,7 +947,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         return new QuotationCarBodyConfirmationResponse
         {
-            DamageMarkers = markers
+            DamageMarkers = markers,
+            SignaturePhotoUid = carBody.SignaturePhotoUid
         };
     }
 
@@ -963,8 +961,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ? new QuotationMaintenanceDetail()
             : new QuotationMaintenanceDetail
             {
-                FixType = quotationMaintenance.FixType,
-                FixTypeName = quotationMaintenance.FixTypeName,
                 ReserveCar = quotationMaintenance.ReserveCar,
                 ApplyCoating = quotationMaintenance.ApplyCoating,
                 ApplyWrapping = quotationMaintenance.ApplyWrapping,
@@ -1015,25 +1011,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (discountReason is not null)
         {
             maintenance.DiscountReason = discountReason;
-        }
-
-        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(maintenance.FixType);
-        if (normalizedFixType is not null)
-        {
-            maintenance.FixType = normalizedFixType;
-            if (string.IsNullOrWhiteSpace(maintenance.FixTypeName))
-            {
-                maintenance.FixTypeName = normalizedFixType;
-            }
-        }
-        else if (!string.IsNullOrWhiteSpace(maintenance.FixType))
-        {
-            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(maintenance.FixType);
-            maintenance.FixType = resolved;
-            if (string.IsNullOrWhiteSpace(maintenance.FixTypeName))
-            {
-                maintenance.FixTypeName = resolved;
-            }
         }
 
         return maintenance;
