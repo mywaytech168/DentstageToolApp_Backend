@@ -186,12 +186,7 @@ public class MaintenanceOrdersController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -202,12 +197,7 @@ public class MaintenanceOrdersController : ControllerBase
             "paint": [],
             "other": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
                 "position": "保桿內塑料件",
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",

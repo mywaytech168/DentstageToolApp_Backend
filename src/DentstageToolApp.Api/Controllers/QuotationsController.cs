@@ -107,12 +107,7 @@ public class QuotationsController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -122,12 +117,7 @@ public class QuotationsController : ControllerBase
             "beauty": [],
             "paint": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
                 "position": "右後葉子板",
                 "dentStatus": "刮痕",
                 "description": "刮傷需補土烤漆",
@@ -254,12 +244,7 @@ public class QuotationsController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -268,12 +253,7 @@ public class QuotationsController : ControllerBase
             ],
             "beauty": [
               {
-                "photos": [
-                  {
-                    "photoUid": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
-                    "isPrimary": true
-                  }
-                ],
+                "photo": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
                 "position": "內裝皮革",
                 "dentStatus": "美容拋光",
                 "description": "座椅刮痕需要美容處理",
