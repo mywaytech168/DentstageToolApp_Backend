@@ -94,14 +94,19 @@
       </thead>
       <tbody>
         <tr>
-          <td><code>store.technicianUid</code></td>
+          <td><code>store.estimationTechnicianUid</code></td>
           <td>估價技師的 UID，Swagger 標記為必要欄位。</td>
           <td>由前端從技師清單帶入，後端據此推算門市與建立者資訊。</td>
         </tr>
         <tr>
-          <td><code>store.source</code></td>
-          <td>客戶來源描述，Swagger 標記為必要欄位。</td>
-          <td>前端填寫來源字串，例如「官方網站」或「門市來電」。</td>
+          <td><code>store.creatorTechnicianUid</code></td>
+          <td>製單技師 UID。</td>
+          <td>選填欄位，若未提供則預設與估價技師相同。</td>
+        </tr>
+        <tr>
+          <td><code>store.bookMethod</code></td>
+          <td>預約方式（例如 LINE、電話）。</td>
+          <td>選填欄位，可用於統計來源管道。</td>
         </tr>
         <tr>
           <td><code>store.reservationDate</code></td>
@@ -124,27 +129,37 @@
           <td>必填欄位，與顧客資料綁定以便回寫歷史紀錄。</td>
         </tr>
         <tr>
-          <td><code>damages[].photos</code></td>
-          <td>主要傷痕照片的 PhotoUID。</td>
+          <td><code>photos.{dent|beauty|paint|other}[]</code></td>
+          <td>各分類的傷痕列表。</td>
+          <td>選填欄位，依維修類型拆分陣列，至少提供一筆資料便於估價。</td>
+        </tr>
+        <tr>
+          <td><code>photos.*[].photos[].photoUid</code></td>
+          <td>傷痕照片的 PhotoUID。</td>
           <td>必填欄位，需先透過上傳 API 取得照片 UID。</td>
         </tr>
         <tr>
-          <td><code>damages[].position</code></td>
+          <td><code>photos.*[].photos[].isPrimary</code></td>
+          <td>是否為主要照片。</td>
+          <td>選填欄位，若未提供系統會將第一張視為主要照片。</td>
+        </tr>
+        <tr>
+          <td><code>photos.*[].position</code></td>
           <td>傷痕位置描述。</td>
           <td>選填欄位，建議填寫以利報價判讀。</td>
         </tr>
         <tr>
-          <td><code>damages[].dentStatus</code></td>
-          <td>凹痕狀態敘述。</td>
+          <td><code>photos.*[].dentStatus</code></td>
+          <td>凹痕或傷痕狀態敘述。</td>
           <td>選填欄位，可描述凹痕大小或嚴重程度。</td>
         </tr>
         <tr>
-          <td><code>damages[].description</code></td>
+          <td><code>photos.*[].description</code></td>
           <td>備註說明。</td>
           <td>選填欄位，用於補充施工注意事項。</td>
         </tr>
         <tr>
-          <td><code>damages[].estimatedAmount</code></td>
+          <td><code>photos.*[].estimatedAmount</code></td>
           <td>預估金額，Swagger 定義為數值型別。</td>
           <td>選填欄位，可填入單筆傷痕的估價金額。</td>
         </tr>
@@ -287,7 +302,7 @@
   <section>
     <h2>常見錯誤與排除方式</h2>
     <ul>
-      <li><strong>400 驗證錯誤：</strong>確認必填欄位 <code>store.technicianUid</code>、<code>store.source</code>、<code>car.carUid</code>、<code>customer.customerUid</code> 與 <code>damages[].photos</code> 是否正確。</li>
+      <li><strong>400 驗證錯誤：</strong>確認必填欄位 <code>store.estimationTechnicianUid</code>、<code>car.carUid</code>、<code>customer.customerUid</code> 與 <code>photos.*[].photos[].photoUid</code> 是否正確。</li>
       <li><strong>傷痕照片無法綁定：</strong>請確認照片已由上傳 API 建立，且提供正確的 <code>PhotoUID</code>。</li>
       <li><strong>流水號重複：</strong>若同時大量建立估價單，請確認系統時間或稍後再試，必要時聯繫後端檢視序號。</li>
     </ul>

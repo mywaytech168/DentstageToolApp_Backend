@@ -156,7 +156,8 @@ Content-Type: application/json
 {
   "quotationNo": "Q25100001",
   "store": {
-    "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+    "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+    "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
     "source": "官方網站",
     "bookMethod": "LINE 預約",
     "reservationDate": "2024-10-15T10:00:00",
@@ -189,7 +190,8 @@ Content-Type: application/json
       {
         "photos": [
           {
-            "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0"
+            "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+            "isPrimary": true
           }
         ],
         "position": "右後葉子板",
@@ -272,7 +274,7 @@ Content-Type: application/json
 - 維修單回溯：狀態依序 295→290→220→210 逐步回退，最低回到 210。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L187-L244】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L952-L1038】
 - 續修維修單會先將原工單標記為 295，並複製估價單與圖片供後續續修作業。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L458-L546】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
 - `quotationNo`：編輯維修單時可帶入以驗證估價單關聯，沿用估價單編輯欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
-- `store`：改派技師或更新預約／維修日期時使用，欄位與估價單編輯共用（`technicianUid`、`source`、`reservationDate`、`repairDate`）。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L13-L47】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L823-L1013】
+- `store`：改派技師或更新預約／維修日期時使用，欄位與估價單編輯共用（`estimationTechnicianUid`、`creatorTechnicianUid`、`source`、`bookMethod`、`reservationDate`、`repairDate`）。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L13-L47】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L823-L1013】
 
 ---
 
