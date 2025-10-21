@@ -771,6 +771,36 @@ internal static class QuotationDamageFixTypeHelper
     };
 
     /// <summary>
+    /// 維護英文鍵值對應表，確保舊資料或 API 輸入仍能轉成既定中文標籤。
+    /// </summary>
+    private static readonly Dictionary<string, string> AliasMappings = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // -------------------- 凹痕 --------------------
+        ["dent"] = "凹痕",
+        ["dentrepair"] = "凹痕",
+        ["dent_repair"] = "凹痕",
+        ["dent-repair"] = "凹痕",
+
+        // -------------------- 美容 --------------------
+        ["beauty"] = "美容",
+        ["beautycare"] = "美容",
+        ["beauty-care"] = "美容",
+
+        // -------------------- 板烤 --------------------
+        ["paint"] = "板烤",
+        ["paintjob"] = "板烤",
+        ["paint-job"] = "板烤",
+
+        // -------------------- 其他 --------------------
+        ["other"] = "其他",
+        ["others"] = "其他",
+        ["misc"] = "其他",
+
+        // -------------------- 簽名 --------------------
+        ["signature"] = "簽名"
+    };
+
+    /// <summary>
     /// 維修類型輸出的固定順序，確保前端畫面呈現一致。
     /// </summary>
     public static IReadOnlyList<string> CanonicalOrder => CanonicalOrderList;
@@ -786,7 +816,26 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var trimmed = value.Trim();
-        return CanonicalSet.Contains(trimmed) ? trimmed : null;
+
+        // 針對既有中文類別直接回傳，避免額外查表浪費資源。
+        if (CanonicalSet.Contains(trimmed))
+        {
+            return trimmed;
+        }
+
+        // 轉換英文鍵值為既定中文標籤，維持與舊版資料或同步資料的相容性。
+        if (AliasMappings.TryGetValue(trimmed, out var mapped))
+        {
+            return mapped;
+        }
+
+        // 簽名屬於特殊類別，仍須保留原文輸出。
+        if (string.Equals(trimmed, "簽名", StringComparison.Ordinal))
+        {
+            return "簽名";
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -806,12 +855,9 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var trimmed = value.Trim();
-        if (string.Equals(trimmed, "簽名", StringComparison.Ordinal))
-        {
-            return "簽名";
-        }
-
-        return "其他";
+        return AliasMappings.TryGetValue(trimmed, out var mapped)
+            ? mapped
+            : "其他";
     }
 
     /// <summary>
