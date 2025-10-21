@@ -52,10 +52,9 @@ public class QuotationDetailResponse
     public QuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
-    /// 傷痕細項列表，採用精簡輸出格式方便前端直接使用主要欄位。
+    /// 維修照片摘要集合，依四種維修類型分類，方便前端分群展示。
     /// </summary>
-    [JsonConverter(typeof(QuotationDamageSummaryCollectionConverter))]
-    public List<QuotationDamageSummary> Damages { get; set; } = new();
+    public QuotationPhotoSummaryCollection Photos { get; set; } = new();
 
     /// <summary>
     /// 車體確認單資料。
@@ -97,6 +96,74 @@ public class QuotationAmountInfo
     /// 最終應付金額。
     /// </summary>
     public decimal? Amount { get; set; }
+}
+
+/// <summary>
+/// 依維修類型分組的照片摘要集合，提供凹痕、美容、板烤與其他四種分類。
+/// </summary>
+public class QuotationPhotoSummaryCollection
+{
+    /// <summary>
+    /// 凹痕類別的照片摘要列表。
+    /// </summary>
+    [JsonPropertyName("dent")]
+    public List<QuotationDamageSummary> Dent { get; set; } = new();
+
+    /// <summary>
+    /// 美容類別的照片摘要列表。
+    /// </summary>
+    [JsonPropertyName("beauty")]
+    public List<QuotationDamageSummary> Beauty { get; set; } = new();
+
+    /// <summary>
+    /// 板烤類別的照片摘要列表。
+    /// </summary>
+    [JsonPropertyName("paint")]
+    public List<QuotationDamageSummary> Paint { get; set; } = new();
+
+    /// <summary>
+    /// 其他類別的照片摘要列表。
+    /// </summary>
+    [JsonPropertyName("other")]
+    public List<QuotationDamageSummary> Other { get; set; } = new();
+
+    /// <summary>
+    /// 依加入順序列舉所有照片摘要，供後端流程維持既有計算行為。
+    /// </summary>
+    public IEnumerable<QuotationDamageSummary> EnumerateAll()
+    {
+        foreach (var item in Dent ?? new List<QuotationDamageSummary>())
+        {
+            if (item is not null)
+            {
+                yield return item;
+            }
+        }
+
+        foreach (var item in Beauty ?? new List<QuotationDamageSummary>())
+        {
+            if (item is not null)
+            {
+                yield return item;
+            }
+        }
+
+        foreach (var item in Paint ?? new List<QuotationDamageSummary>())
+        {
+            if (item is not null)
+            {
+                yield return item;
+            }
+        }
+
+        foreach (var item in Other ?? new List<QuotationDamageSummary>())
+        {
+            if (item is not null)
+            {
+                yield return item;
+            }
+        }
+    }
 }
 
 /// <summary>
@@ -330,198 +397,5 @@ public class QuotationMaintenanceDetail
     /// 維修相關備註。
     /// </summary>
     public string? Remark { get; set; }
-}
-
-/// <summary>
-/// 詳細資料使用的傷痕集合轉換器，與建立/更新共用分組邏輯。
-/// </summary>
-public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<QuotationDamageSummary>>
-{
-    /// <inheritdoc />
-    public override List<QuotationDamageSummary> Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType == JsonTokenType.Null)
-        {
-            return new List<QuotationDamageSummary>();
-        }
-
-        if (reader.TokenType == JsonTokenType.StartObject)
-        {
-            using var document = JsonDocument.ParseValue(ref reader);
-            return ParseGroupedSummaries(document.RootElement);
-        }
-
-        if (reader.TokenType == JsonTokenType.StartArray)
-        {
-            using var document = JsonDocument.ParseValue(ref reader);
-            var result = new List<QuotationDamageSummary>();
-
-            foreach (var element in document.RootElement.EnumerateArray())
-            {
-                var summary = ParseSummary(element, null);
-                if (summary is not null)
-                {
-                    result.Add(summary);
-                }
-            }
-
-            return result;
-        }
-
-        throw new JsonException("傷痕資料格式不符，請提供物件或陣列。");
-    }
-
-    /// <inheritdoc />
-    public override void Write(Utf8JsonWriter writer, List<QuotationDamageSummary> value, JsonSerializerOptions options)
-    {
-        // 回傳結果直接使用陣列格式，避免再以內部維修類型識別值進行分組，符合最新資料規格。
-        writer.WriteStartArray();
-
-        if (value is { Count: > 0 })
-        {
-            foreach (var summary in value)
-            {
-                WriteSingleSummary(writer, summary);
-            }
-        }
-
-        writer.WriteEndArray();
-    }
-
-    private static void WriteSingleSummary(Utf8JsonWriter writer, QuotationDamageSummary? summary)
-    {
-        var target = summary ?? new QuotationDamageSummary();
-        QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(target);
-
-        writer.WriteStartObject();
-        writer.WritePropertyName("photos");
-        WriteNullableString(writer, target.Photos);
-
-        writer.WritePropertyName("position");
-        WriteNullableString(writer, target.Position);
-
-        writer.WritePropertyName("dentStatus");
-        WriteNullableString(writer, target.DentStatus);
-
-        writer.WritePropertyName("description");
-        WriteNullableString(writer, target.Description);
-
-        writer.WritePropertyName("estimatedAmount");
-        if (target.EstimatedAmount.HasValue)
-        {
-            writer.WriteNumberValue(target.EstimatedAmount.Value);
-        }
-        else
-        {
-            writer.WriteNullValue();
-        }
-
-        writer.WritePropertyName("fixType");
-        WriteNullableString(writer, target.FixType);
-        writer.WriteEndObject();
-    }
-
-    private static List<QuotationDamageSummary> ParseGroupedSummaries(JsonElement root)
-    {
-        var result = new List<QuotationDamageSummary>();
-
-        foreach (var property in root.EnumerateObject())
-        {
-            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name)
-                ?? QuotationDamageFixTypeHelper.ResolveDisplayName(property.Name);
-
-            if (property.Value.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var element in property.Value.EnumerateArray())
-                {
-                    var summary = ParseSummary(element, normalizedKey);
-                    if (summary is not null)
-                    {
-                        result.Add(summary);
-                    }
-                }
-            }
-            else if (property.Value.ValueKind == JsonValueKind.Object)
-            {
-                var single = ParseSummary(property.Value, normalizedKey);
-                if (single is not null)
-                {
-                    result.Add(single);
-                }
-            }
-        }
-
-        return result;
-    }
-
-    private static QuotationDamageSummary? ParseSummary(JsonElement element, string? fallbackKey)
-    {
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        var summary = new QuotationDamageSummary
-        {
-            Photos = ReadString(element, "photos"),
-            Position = ReadString(element, "position"),
-            DentStatus = ReadString(element, "dentStatus"),
-            Description = ReadString(element, "description"),
-            EstimatedAmount = ReadDecimal(element, "estimatedAmount"),
-            FixType = ReadString(element, "fixType"),
-            LegacyFixTypeName = ReadString(element, "fixTypeName")
-        };
-
-        if (string.IsNullOrWhiteSpace(summary.FixType))
-        {
-            summary.FixType = fallbackKey;
-        }
-
-        QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary, fallbackKey);
-        return summary;
-    }
-
-    private static string? ReadString(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => value.GetString(),
-            JsonValueKind.Number => value.GetDecimal().ToString(CultureInfo.InvariantCulture),
-            JsonValueKind.True => bool.TrueString,
-            JsonValueKind.False => bool.FalseString,
-            _ => null
-        };
-    }
-
-    private static decimal? ReadDecimal(JsonElement element, string propertyName)
-    {
-        if (!element.TryGetProperty(propertyName, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
-            JsonValueKind.String when decimal.TryParse(value.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed) => parsed,
-            _ => null
-        };
-    }
-
-    private static void WriteNullableString(Utf8JsonWriter writer, string? value)
-    {
-        if (value is null)
-        {
-            writer.WriteNullValue();
-            return;
-        }
-
-        writer.WriteStringValue(value);
-    }
 }
 
