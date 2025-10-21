@@ -1045,6 +1045,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Status290User = NormalizeOptionalText(order.Status290User),
             Status295Date = order.Status295Timestamp,
             Status295User = NormalizeOptionalText(order.Status295User),
+            Status296Date = string.Equals(order.Status, "296", StringComparison.OrdinalIgnoreCase)
+                ? order.CurrentStatusDate
+                : null,
+            Status296User = string.Equals(order.Status, "296", StringComparison.OrdinalIgnoreCase)
+                ? NormalizeOptionalText(order.CurrentStatusUser)
+                : null,
             CurrentStatusUser = NormalizeOptionalText(order.CurrentStatusUser)
         };
     }
@@ -1054,6 +1060,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private static string? ResolvePreviousOrderStatus(Order order, string currentStatus)
     {
+        if (string.Equals(currentStatus, "296", StringComparison.OrdinalIgnoreCase))
+        {
+            return order.Status220Date.HasValue ? "220" : null;
+        }
+
         var history = new List<(string Code, DateTime? Timestamp)>
         {
             ("210", order.Status210Date),
@@ -1149,6 +1160,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             "220" => order.Status220Date,
             "290" => order.Status290Date,
             "295" => order.Status295Timestamp,
+            "296" => order.CurrentStatusDate,
             _ => order.CurrentStatusDate
         };
     }
@@ -1226,6 +1238,16 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private static string? ResolvePreviousQuotationStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
+        if (string.Equals(currentStatus, "186", StringComparison.OrdinalIgnoreCase))
+        {
+            return "110";
+        }
+
+        if (string.Equals(currentStatus, "196", StringComparison.OrdinalIgnoreCase))
+        {
+            return "190";
+        }
+
         var history = new List<(string Code, DateTime? Timestamp)>
         {
             ("195", quotation.Status199Timestamp),

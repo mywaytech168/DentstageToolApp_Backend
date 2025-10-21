@@ -14,7 +14,7 @@ public class MaintenanceOrderListQuery
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 維修單狀態碼，例如 210 待確認、220 維修中、295 取消等。
+    /// 維修單狀態碼，例如 210 待確認、220 維修中、296 維修過期、295 取消等。
     /// </summary>
     public string? Status { get; set; }
 

@@ -1360,6 +1360,7 @@ public class QuotationService : IQuotationService
 
         // 僅允許從 110(估價中) 或已是 180 狀態再標記為估價完成，避免破壞狀態流程。
         var currentStatus = NormalizeOptionalText(quotation.Status);
+
         if (currentStatus is not null && currentStatus != "110" && currentStatus != "180")
         {
             var statusLabel = string.IsNullOrWhiteSpace(quotation.Status) ? "未知" : quotation.Status;
@@ -2165,6 +2166,16 @@ public class QuotationService : IQuotationService
     private static string? ResolvePreviousStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
+
+        if (string.Equals(currentStatus, "186", StringComparison.OrdinalIgnoreCase))
+        {
+            return "110";
+        }
+
+        if (string.Equals(currentStatus, "196", StringComparison.OrdinalIgnoreCase))
+        {
+            return "190";
+        }
 
         // 依照流程定義建立狀態堆疊，確保回朔會依序往前尋找。
         // 狀態 195 的時間點仍儲存在 Status199 欄位，因此在此明確對應。
