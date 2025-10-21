@@ -47,7 +47,7 @@
           "Quotations"
         ],
         "summary": "新增估價單",
-        "description": "建立估價單時的請求格式示例，photos 物件會依凹痕、美容、板烤、其他四大類別分別提交照片與估價設定。",
+        "description": "建立估價單時的請求格式示例，photos 物件會依凹痕、美容、板烤、其他四大類別分別提交照片與估價設定，每筆傷痕僅需提供單一 photo 欄位綁定 PhotoUID。",
         "requestBody": {
           "required": true,
           "content": {
@@ -99,28 +99,28 @@
                     "properties": {
                       "dent": {
                         "type": "array",
-                        "description": "凹痕類別的照片與估價項目。",
+                        "description": "凹痕類別的照片與估價項目，每筆僅綁定一張照片。",
                         "items": {
                           "$ref": "#/components/schemas/QuotationPhotoItem"
                         }
                       },
                       "beauty": {
                         "type": "array",
-                        "description": "美容類別的照片與估價項目。",
+                        "description": "美容類別的照片與估價項目，每筆僅綁定一張照片。",
                         "items": {
                           "$ref": "#/components/schemas/QuotationPhotoItem"
                         }
                       },
                       "paint": {
                         "type": "array",
-                        "description": "板烤類別的照片與估價項目。",
+                        "description": "板烤類別的照片與估價項目，每筆僅綁定一張照片。",
                         "items": {
                           "$ref": "#/components/schemas/QuotationPhotoItem"
                         }
                       },
                       "other": {
                         "type": "array",
-                        "description": "其他類別的照片與估價項目。",
+                        "description": "其他類別的照片與估價項目，每筆僅綁定一張照片。",
                         "items": {
                           "$ref": "#/components/schemas/QuotationPhotoItem"
                         }
@@ -165,12 +165,7 @@
                 "photos": {
                   "dent": [
                     {
-                      "photos": [
-                        {
-                          "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                          "isPrimary": true
-                        }
-                      ],
+                      "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                       "position": "保桿",
                       "dentStatus": "大面積",
                       "description": "需板金搭配烤漆",
@@ -180,12 +175,7 @@
                   "beauty": [],
                   "paint": [
                     {
-                      "photos": [
-                        {
-                          "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
-                          "isPrimary": true
-                        }
-                      ],
+                      "photo": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
                       "position": "右後葉子板",
                       "dentStatus": "刮痕",
                       "description": "刮傷需補土烤漆",
@@ -242,32 +232,11 @@
       },
       "QuotationPhotoItem": {
         "type": "object",
-        "description": "估價單建立或編輯時提交的傷痕項目，內含照片與估價資訊。",
+        "description": "估價單建立或編輯時提交的傷痕項目，內含單一照片與估價資訊。",
         "properties": {
-          "photos": {
-            "type": "array",
-            "description": "此傷痕對應的照片列表。",
-            "items": {
-              "type": "object",
-              "properties": {
-                "photoUid": {
-                  "type": "string",
-                  "description": "照片的唯一識別碼。"
-                },
-                "description": {
-                  "type": "string",
-                  "description": "照片補充說明，例如拍攝角度。"
-                },
-                "isPrimary": {
-                  "type": "boolean",
-                  "description": "是否為主要展示照片。"
-                }
-              },
-              "required": [
-                "photoUid"
-              ]
-            },
-            "minItems": 1
+          "photo": {
+            "type": "string",
+            "description": "綁定傷痕的 PhotoUID 字串，僅需提供一個識別碼。"
           },
           "position": {
             "type": "string",
@@ -287,7 +256,7 @@
           }
         },
         "required": [
-          "photos"
+          "photo"
         ]
       }
     }
