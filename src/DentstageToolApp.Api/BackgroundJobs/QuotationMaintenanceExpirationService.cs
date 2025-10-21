@@ -128,8 +128,7 @@ public class QuotationMaintenanceExpirationService : BackgroundService
         quotation.Status = statusCode;
         quotation.ModificationTimestamp = timestamp;
         quotation.ModifiedBy = SchedulerOperator;
-        quotation.CurrentStatusDate = timestamp;
-        quotation.CurrentStatusUser = SchedulerOperator;
+        // 依據需求僅更新狀態本身，避免同步寫入 CurrentStatus 相關欄位。
     }
 
     /// <summary>
@@ -140,8 +139,7 @@ public class QuotationMaintenanceExpirationService : BackgroundService
         order.Status = "296";
         order.ModificationTimestamp = timestamp;
         order.ModifiedBy = SchedulerOperator;
-        order.CurrentStatusDate = timestamp;
-        order.CurrentStatusUser = SchedulerOperator;
+        // 維修單同樣只調整狀態，避免覆寫前台仍在使用的狀態時間與人員資訊。
     }
 
     /// <summary>
