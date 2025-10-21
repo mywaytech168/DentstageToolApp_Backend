@@ -702,7 +702,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var storeInfo = BuildStoreInfo(order, quotationDetail?.Store);
         var carInfo = BuildCarInfo(order, quotationDetail?.Car);
         var customerInfo = BuildCustomerInfo(order, quotationDetail?.Customer);
-        var damages = CloneDamageSummaries(quotationDetail?.Damages);
+        var photos = ClonePhotoSummaries(quotationDetail?.Photos);
         var carBody = CloneCarBodyConfirmation(quotationDetail?.CarBodyConfirmation);
         var maintenance = BuildMaintenanceDetail(order, quotationDetail?.Maintenance);
         var amountInfo = BuildAmountInfo(order);
@@ -720,7 +720,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Store = storeInfo,
             Car = carInfo,
             Customer = customerInfo,
-            Damages = damages,
+            Photos = photos,
             CarBodyConfirmation = carBody,
             Maintenance = maintenance,
             Amounts = amountInfo,
@@ -879,27 +879,49 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     }
 
     /// <summary>
-    /// 複製估價單的傷痕摘要，確保回傳資料可安全修改。
+    /// 複製估價單的照片摘要分組，確保維修單回傳的資料可安全修改。
     /// </summary>
-    private static List<QuotationDamageSummary> CloneDamageSummaries(List<QuotationDamageSummary>? damages)
+    private static QuotationPhotoSummaryCollection ClonePhotoSummaries(QuotationPhotoSummaryCollection? photos)
     {
-        if (damages is null || damages.Count == 0)
+        if (photos is null)
+        {
+            return new QuotationPhotoSummaryCollection();
+        }
+
+        return new QuotationPhotoSummaryCollection
+        {
+            Dent = CloneSummaryList(photos.Dent),
+            Beauty = CloneSummaryList(photos.Beauty),
+            Paint = CloneSummaryList(photos.Paint),
+            Other = CloneSummaryList(photos.Other)
+        };
+    }
+
+    private static List<QuotationDamageSummary> CloneSummaryList(List<QuotationDamageSummary>? summaries)
+    {
+        if (summaries is null || summaries.Count == 0)
         {
             return new List<QuotationDamageSummary>();
         }
 
-        var clones = new List<QuotationDamageSummary>(damages.Count);
-        foreach (var damage in damages)
+        var clones = new List<QuotationDamageSummary>(summaries.Count);
+        foreach (var summary in summaries)
         {
+            if (summary is null)
+            {
+                clones.Add(new QuotationDamageSummary());
+                continue;
+            }
+
             clones.Add(new QuotationDamageSummary
             {
-                Photos = damage.Photos,
-                Position = damage.Position,
-                DentStatus = damage.DentStatus,
-                Description = damage.Description,
-                EstimatedAmount = damage.EstimatedAmount,
-                FixType = damage.FixType,
-                FixTypeName = damage.FixTypeName
+                Photos = summary.Photos,
+                Position = summary.Position,
+                DentStatus = summary.DentStatus,
+                Description = summary.Description,
+                EstimatedAmount = summary.EstimatedAmount,
+                FixType = summary.FixType,
+                FixTypeName = summary.FixTypeName
             });
         }
 

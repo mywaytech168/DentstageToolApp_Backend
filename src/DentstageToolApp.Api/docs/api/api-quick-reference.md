@@ -147,7 +147,7 @@ Content-Type: application/json
 > 估價單詳情提供 `amounts` 物件，包含估價金額、折扣與應付金額欄位，維修單詳情亦沿用相同結構。 【F:src/DentstageToolApp.Api/Quotations/QuotationDetailResponse.cs†L9-L96】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L720-L748】
 
 **列表查詢常用欄位**
-- `fixType`：維修類型篩選條件，請使用凹痕、美容、板烤或其他等固定中文標籤。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L11-L18】
+- `fixType`：維修類型篩選條件，請使用凹痕、美容、板烤或其他等固定中文標籤，後端會以 LIKE 模式比對，支援多標籤照片資料。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L11-L18】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L181-L200】
 - `status`：估價單狀態碼（110/180/190/191/195）。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L16-L19】
 - `startDate`、`endDate`、`customerKeyword`、`carPlateKeyword`、`page`、`pageSize`。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L21-L51】
 
@@ -169,24 +169,37 @@ Content-Type: application/json
   "customer": {
     "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
   },
-  "damages": [
-    {
-      "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-      "position": "前保桿",
-      "dentStatus": "大面積",
-      "description": "需板金搭配烤漆",
-      "estimatedAmount": 4500,
-      "fixType": "凹痕"
-    },
-    {
-      "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
-      "position": "右後葉子板",
-      "dentStatus": "烤漆",
-      "description": "刮傷需補土烤漆",
-      "estimatedAmount": 3200,
-      "fixType": "板烤"
-    }
-  ],
+  "photos": {
+    "dent": [
+      {
+        "photos": [
+          {
+            "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+            "isPrimary": true
+          }
+        ],
+        "position": "前保桿",
+        "dentStatus": "大面積",
+        "description": "需板金搭配烤漆",
+        "estimatedAmount": 4500
+      }
+    ],
+    "beauty": [],
+    "paint": [
+      {
+        "photos": [
+          {
+            "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0"
+          }
+        ],
+        "position": "右後葉子板",
+        "dentStatus": "刮痕",
+        "description": "刮傷需補土烤漆",
+        "estimatedAmount": 3200
+      }
+    ],
+    "other": []
+  },
   "carBodyConfirmation": {
     "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
     "damageMarkers": [
@@ -201,7 +214,6 @@ Content-Type: application/json
     ]
   },
   "maintenance": {
-    "fixType": "凹痕",
     "reserveCar": true,
     "applyCoating": false,
     "applyWrapping": false,
@@ -224,7 +236,7 @@ Content-Type: application/json
 - `car`：可額外附上 `mileage` 更新車輛里程。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L362-L384】
 - `customer`：沿用客戶主檔資訊，建立或編輯估價單時僅需帶入 `customerUid`。
 - `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
-- `damages`：採單一陣列呈現傷痕，每筆資料需附上照片、位置、估價與中文 `fixType` 名稱（凹痕／美容／板烤／其他）。
+- `photos`：以 `dent`、`beauty`、`paint`、`other` 四個陣列分別承載傷痕資料，每筆需附上至少一張 `photoUid`、估價金額與位置／狀態說明，後端會依照片自動決定主分類。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L29-L120】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1165-L1338】
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
 
 **狀態操作共通欄位**
