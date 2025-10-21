@@ -2739,6 +2739,12 @@ public class QuotationService : IQuotationService
             updated = true;
         }
 
+        if (!string.Equals(photo.FixType, "簽名", StringComparison.Ordinal))
+        {
+            photo.FixType = "簽名";
+            updated = true;
+        }
+
         if (updated)
         {
             await _context.SaveChangesAsync(cancellationToken);
@@ -2901,6 +2907,9 @@ public class QuotationService : IQuotationService
         string? signaturePhotoUid,
         CancellationToken cancellationToken)
     {
+        _ = signaturePhotoUid;
+        // 簽名圖片不再自動從照片清單排除，此參數保留僅供相容舊呼叫端。
+
         var normalizedQuotationUid = NormalizeOptionalText(quotationUid);
         if (normalizedQuotationUid is null)
         {
@@ -2917,17 +2926,12 @@ public class QuotationService : IQuotationService
             return damages;
         }
 
-        var filteredPhotos = photos
-            .Where(photo => string.IsNullOrWhiteSpace(signaturePhotoUid)
-                || !string.Equals(photo.PhotoUid, signaturePhotoUid, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
         if (damages.Count == 0)
         {
-            return BuildDamagesFromPhotoData(filteredPhotos);
+            return BuildDamagesFromPhotoData(photos);
         }
 
-        EnrichDamagesFromPhotoData(damages, filteredPhotos);
+        EnrichDamagesFromPhotoData(damages, photos);
         return damages;
     }
 
@@ -3070,7 +3074,7 @@ public class QuotationService : IQuotationService
                 DentStatus = NormalizeOptionalText(damage.DentStatus),
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
-                FixType = fixTypeKey,
+                FixType = NormalizeOptionalText(damage.FixType) ?? fixTypeKey,
                 FixTypeName = fixTypeName
             });
         }
@@ -3122,7 +3126,7 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 精簡車體確認單資料，移除標註圖片與簽名字串欄位。
+    /// 精簡車體確認單資料，移除標註圖片並保留簽名 PhotoUID 供前端呈現。
     /// </summary>
     private static QuotationCarBodyConfirmationResponse? SimplifyCarBodyConfirmation(QuotationCarBodyConfirmation? source)
     {
@@ -3147,7 +3151,9 @@ public class QuotationService : IQuotationService
 
         return new QuotationCarBodyConfirmationResponse
         {
-            DamageMarkers = markers
+            DamageMarkers = markers,
+            SignaturePhotoUid = NormalizeOptionalText(source.SignaturePhotoUid)
+                ?? NormalizeOptionalText(source.Signature)
         };
     }
 

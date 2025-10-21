@@ -253,7 +253,7 @@ public class QuotationDamageSummary
 }
 
 /// <summary>
-/// 估價單車體確認單輸出結構，僅保留損傷標記資訊供前端呈現。
+/// 估價單車體確認單輸出結構，保留損傷標記與簽名照片 UID 供前端使用。
 /// </summary>
 public class QuotationCarBodyConfirmationResponse
 {
@@ -261,6 +261,11 @@ public class QuotationCarBodyConfirmationResponse
     /// 車體受損標記列表，對應前端示意圖座標與損傷狀態。
     /// </summary>
     public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
+
+    /// <summary>
+    /// 客戶簽名照片的 PhotoUID，讓前端可直接顯示簽名影像。
+    /// </summary>
+    public string? SignaturePhotoUid { get; set; }
 }
 
 /// <summary>

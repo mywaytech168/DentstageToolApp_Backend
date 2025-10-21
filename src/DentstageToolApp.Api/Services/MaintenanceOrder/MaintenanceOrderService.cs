@@ -950,7 +950,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         return new QuotationCarBodyConfirmationResponse
         {
-            DamageMarkers = markers
+            DamageMarkers = markers,
+            SignaturePhotoUid = carBody.SignaturePhotoUid
         };
     }
 
