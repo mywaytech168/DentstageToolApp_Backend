@@ -171,13 +171,51 @@ public class QuotationPhotoSummaryCollection
 /// </summary>
 public class QuotationDamageSummary
 {
+    private string? _photo;
     private string? _fixType;
     private string? _fixTypeDisplay;
 
     /// <summary>
     /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
     /// </summary>
-    public string? Photos { get; set; }
+    [JsonIgnore]
+    public string? Photo
+    {
+        get => _photo;
+        set => _photo = NormalizePhoto(value);
+    }
+
+    /// <summary>
+    /// 提供對外輸出與序列化的欄位名稱，統一採用單一 photo 欄位。
+    /// </summary>
+    [JsonPropertyName("photo")]
+    public string? DisplayPhoto
+    {
+        get => Photo;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位仍可能傳入 photos 字串，此處保留 setter 進行相容轉換。
+    /// </summary>
+    [JsonPropertyName("photos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPhotos
+    {
+        get => null;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版中文欄位「圖片」，同樣匯入主要照片欄位，避免歷史資料失效。
+    /// </summary>
+    [JsonPropertyName("圖片")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyChinesePhoto
+    {
+        get => null;
+        set => Photo = value;
+    }
 
     /// <summary>
     /// 車身部位或面板位置。
@@ -249,6 +287,14 @@ public class QuotationDamageSummary
     {
         get => null;
         set => FixType = value;
+    }
+
+    /// <summary>
+    /// 將輸入的照片識別碼進行正規化，避免空白或空字串造成判斷落差。
+    /// </summary>
+    private static string? NormalizePhoto(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }
 

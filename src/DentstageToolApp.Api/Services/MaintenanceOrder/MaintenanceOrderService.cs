@@ -912,7 +912,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
             clones.Add(new QuotationDamageSummary
             {
-                Photos = summary.Photos,
+                Photo = summary.Photo,
                 Position = summary.Position,
                 DentStatus = summary.DentStatus,
                 Description = summary.Description,

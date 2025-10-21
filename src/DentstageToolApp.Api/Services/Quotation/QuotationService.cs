@@ -3040,7 +3040,7 @@ public class QuotationService : IQuotationService
             var primaryPhotoUid = NormalizeOptionalText(ExtractPrimaryPhotoUid(damage));
             summaries.Add(new QuotationDamageSummary
             {
-                Photos = primaryPhotoUid,
+                Photo = primaryPhotoUid,
                 Position = NormalizeOptionalText(damage.Position),
                 DentStatus = NormalizeOptionalText(damage.DentStatus),
                 Description = NormalizeOptionalText(damage.Description),
