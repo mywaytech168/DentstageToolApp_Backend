@@ -109,6 +109,7 @@ public class QuotationService : IQuotationService
             .AddDays(random.Next(1, 5))
             .AddHours(random.Next(1, 4));
 
+        var randomDamages = BuildRandomDamages(photoSamples, random);
         var draft = new CreateQuotationRequest
         {
             Store = new CreateQuotationStoreInfo
@@ -130,7 +131,7 @@ public class QuotationService : IQuotationService
             {
                 CustomerUid = customer?.CustomerUid ?? BuildFallbackUid("Cu")
             },
-            Damages = BuildRandomDamages(photoSamples, random),
+            Photos = GroupDamagesForRequest(randomDamages),
             CarBodyConfirmation = BuildRandomCarBodyConfirmation(photoSamples, random),
             Maintenance = BuildRandomMaintenance(fixTypeKey, random)
         };
@@ -177,23 +178,26 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .AsQueryable();
 
-        // 篩選維修類型，限定凹痕、美容、板烤或其他中文標籤。
+        // 篩選維修類型，採用 Like 模式支援部分比對，並同步考量正規化後的中文標籤。
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
             var fixTypeFilter = query.FixType.Trim();
+            var rawPattern = $"%{fixTypeFilter}%";
             var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixTypeFilter);
-            if (normalizedFilter is null)
+            string? canonicalPattern = null;
+
+            if (!string.IsNullOrWhiteSpace(normalizedFilter))
             {
-                var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeFilter);
-                if (string.Equals(resolved, fixTypeFilter, StringComparison.Ordinal))
-                {
-                    quotationsQuery = quotationsQuery.Where(q => q.FixType == resolved);
-                }
+                canonicalPattern = $"%{normalizedFilter}%";
             }
-            else
+            else if (string.Equals(fixTypeFilter, QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeFilter), StringComparison.Ordinal))
             {
-                quotationsQuery = quotationsQuery.Where(q => q.FixType == normalizedFilter);
+                canonicalPattern = rawPattern;
             }
+
+            quotationsQuery = quotationsQuery.Where(q =>
+                EF.Functions.Like(q.FixType ?? string.Empty, rawPattern)
+                || (canonicalPattern != null && EF.Functions.Like(q.FixType ?? string.Empty, canonicalPattern)));
         }
 
         // 篩選估價單狀態。
@@ -473,16 +477,9 @@ public class QuotationService : IQuotationService
         var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
 
         // ---------- 維修設定處理 ----------
-        // 依據維修類型識別值正規化分類，並轉換常見布林選項為資料表欄位使用的旗標文字。
+        // 先整理維修設定欄位，維修類型若未提供將在綁定照片後自動推論。
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
-        var fixTypeRaw = NormalizeRequiredText(maintenanceInfo.FixType, "維修類型");
-        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
-        if (normalizedFixType is null)
-        {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "維修類型僅支援凹痕、美容、板烤或其他中文標籤。");
-        }
-
-        var fixTypeDisplayName = normalizedFixType;
+        var manualFixType = NormalizeOptionalText(maintenanceInfo.FixType);
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
@@ -596,6 +593,22 @@ public class QuotationService : IQuotationService
 
         var normalizedDamages = ExtractDamageList(request);
         var carBodyConfirmation = request.CarBodyConfirmation;
+        var photoUids = CollectPhotoUids(normalizedDamages, carBodyConfirmation);
+
+        if (photoUids.Count > 0)
+        {
+            await EnsurePhotosAvailableForCreationAsync(photoUids, cancellationToken);
+            await PopulateDamageFixTypesAsync(photoUids, normalizedDamages, cancellationToken);
+        }
+        else
+        {
+            foreach (var damage in normalizedDamages)
+            {
+                QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage, manualFixType);
+            }
+        }
+
+        var fixTypeDisplayName = DetermineOverallFixType(normalizedDamages, manualFixType);
 
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = GetTaipeiNow();
@@ -706,12 +719,8 @@ public class QuotationService : IQuotationService
         await _context.SaveChangesAsync(cancellationToken);
 
         // 將建立流程中帶入的所有 PhotoUID 一次綁定到新建立的估價單。
-        var photoUids = CollectPhotoUids(normalizedDamages, carBodyConfirmation);
         if (photoUids.Count > 0)
         {
-            // ---------- 圖片綁定前檢核 ----------
-            // 建立估價單時需確認所有圖片主檔皆存在，避免引用已被清除的資料。
-            await EnsurePhotosAvailableForCreationAsync(photoUids, cancellationToken);
             // 若圖片已綁定其他估價單則禁止重複使用，確保圖片歸屬唯一。
             await _photoService.BindToQuotationAsync(quotationEntity.QuotationUid, photoUids, cancellationToken);
         }
@@ -834,7 +843,7 @@ public class QuotationService : IQuotationService
             extraData?.CarBodyConfirmation?.SignaturePhotoUid,
             cancellationToken);
         // 依前端需求重新整理傷痕資料，只保留核心欄位並挑選主要照片。
-        var simplifiedDamages = BuildDamageSummaries(normalizedDamages);
+        var photoSummaries = BuildPhotoSummaryCollection(normalizedDamages);
         // 移除多餘欄位的車體確認單內容，僅保留必要資訊。
         var simplifiedCarBody = SimplifyCarBodyConfirmation(extraData?.CarBodyConfirmation);
         var maintenanceRemark = plainRemark;
@@ -924,7 +933,7 @@ public class QuotationService : IQuotationService
                 Source = quotation.Source,
                 Remark = quotation.ConnectRemark
             },
-            Damages = simplifiedDamages,
+            Photos = photoSummaries,
             CarBodyConfirmation = simplifiedCarBody,
             Maintenance = new QuotationMaintenanceDetail
             {
@@ -969,9 +978,10 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorName);
         var carInfo = request.Car ?? new QuotationCarInfo();
         var customerInfo = request.Customer ?? new QuotationCustomerInfo();
-        var requestedDamages = request.Damages ?? new List<QuotationDamageItem>();
+        var requestedDamages = request.Photos?.ToDamageList() ?? new List<QuotationDamageItem>();
         var (plainRemark, existingExtra) = ParseRemark(quotation.Remark);
         var maintenanceInfo = request.Maintenance;
+        var manualFixType = NormalizeOptionalText(maintenanceInfo?.FixType);
         var storeInfo = request.Store;
         DateOnly? requestedReservationDate = null;
         DateOnly? requestedRepairDate = null;
@@ -1157,6 +1167,25 @@ public class QuotationService : IQuotationService
             ? requestedDamages
             : existingExtra?.Damages ?? new List<QuotationDamageItem>();
         var carBodyConfirmation = request.CarBodyConfirmation ?? existingExtra?.CarBodyConfirmation;
+        var photoUids = CollectPhotoUids(effectiveDamages, carBodyConfirmation);
+
+        if (photoUids.Count > 0)
+        {
+            await PopulateDamageFixTypesAsync(photoUids, effectiveDamages, cancellationToken);
+        }
+        else
+        {
+            foreach (var damage in effectiveDamages)
+            {
+                QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage, manualFixType);
+            }
+        }
+
+        var resolvedFixType = DetermineOverallFixType(effectiveDamages, manualFixType);
+        if (resolvedFixType is not null)
+        {
+            quotation.FixType = resolvedFixType;
+        }
 
         var maintenanceRemark = plainRemark;
         decimal? otherFee = existingExtra?.OtherFee;
@@ -1177,30 +1206,6 @@ public class QuotationService : IQuotationService
         if (maintenanceInfo is not null)
         {
             maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark) ?? maintenanceRemark;
-
-            if (!string.IsNullOrWhiteSpace(maintenanceInfo.FixType))
-            {
-                var requestedFixType = NormalizeOptionalText(maintenanceInfo.FixType);
-                var normalizedRequested = QuotationDamageFixTypeHelper.Normalize(requestedFixType);
-                var requestedDisplay = normalizedRequested
-                    ?? (string.IsNullOrWhiteSpace(requestedFixType)
-                        ? null
-                        : QuotationDamageFixTypeHelper.ResolveDisplayName(requestedFixType));
-
-                var currentFixTypeValue = NormalizeOptionalText(quotation.FixType);
-                var currentNormalized = QuotationDamageFixTypeHelper.Normalize(currentFixTypeValue);
-                var currentKey = currentNormalized
-                    ?? (string.IsNullOrWhiteSpace(currentFixTypeValue)
-                        ? null
-                        : QuotationDamageFixTypeHelper.ResolveDisplayName(currentFixTypeValue));
-                var requestedKey = requestedDisplay;
-
-                if (!string.IsNullOrWhiteSpace(requestedKey) &&
-                    !string.Equals(requestedKey, currentKey, StringComparison.OrdinalIgnoreCase))
-                {
-                    quotation.FixType = requestedKey;
-                }
-            }
 
             if (maintenanceInfo.ReserveCar.HasValue)
             {
@@ -1344,7 +1349,6 @@ public class QuotationService : IQuotationService
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var photoUids = CollectPhotoUids(effectiveDamages, carBodyConfirmation);
         if (photoUids.Count > 0)
         {
             await _photoService.BindToQuotationAsync(quotation.QuotationUid, photoUids, cancellationToken);
@@ -2764,6 +2768,153 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 依據照片主檔補齊傷痕欄位，兼容尚未寫入 remark JSON 的舊資料。
     /// </summary>
+    private async Task PopulateDamageFixTypesAsync(
+        IEnumerable<string> photoUids,
+        List<QuotationDamageItem> damages,
+        CancellationToken cancellationToken)
+    {
+        if (damages is null || damages.Count == 0)
+        {
+            return;
+        }
+
+        var normalizedUids = photoUids?
+            .Select(NormalizeOptionalText)
+            .Where(uid => uid is not null)
+            .Select(uid => uid!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList()
+            ?? new List<string>();
+
+        var photoFixTypes = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        if (normalizedUids.Count > 0)
+        {
+            var photoRecords = await _context.PhotoData
+                .AsNoTracking()
+                .Where(photo => photo.PhotoUid != null && normalizedUids.Contains(photo.PhotoUid))
+                .Select(photo => new { photo.PhotoUid, photo.FixType })
+                .ToListAsync(cancellationToken);
+
+            photoFixTypes = photoRecords.ToDictionary(
+                photo => photo.PhotoUid!,
+                photo => NormalizeOptionalText(photo.FixType),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            string? resolvedFixType = null;
+
+            foreach (var uid in EnumerateDamagePhotoUids(damage))
+            {
+                if (uid is null)
+                {
+                    continue;
+                }
+
+                if (!photoFixTypes.TryGetValue(uid, out var fixTypeValue) || string.IsNullOrWhiteSpace(fixTypeValue))
+                {
+                    continue;
+                }
+
+                var normalized = QuotationDamageFixTypeHelper.Normalize(fixTypeValue)
+                    ?? QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeValue);
+
+                if (!string.IsNullOrWhiteSpace(normalized))
+                {
+                    resolvedFixType = normalized;
+                    break;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(resolvedFixType))
+            {
+                damage.DisplayFixType = resolvedFixType;
+                damage.FixTypeName = resolvedFixType;
+            }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
+        }
+    }
+
+    private static string? DetermineOverallFixType(IEnumerable<QuotationDamageItem> damages, string? fallbackFixType)
+    {
+        if (damages is null)
+        {
+            return NormalizeFallback(fallbackFixType);
+        }
+
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            var normalized = QuotationDamageFixTypeHelper.Normalize(damage.FixType)
+                ?? QuotationDamageFixTypeHelper.Normalize(damage.FixTypeName)
+                ?? QuotationDamageFixTypeHelper.Normalize(damage.DisplayFixType);
+
+            if (normalized is null && !string.IsNullOrWhiteSpace(damage.DisplayFixType))
+            {
+                normalized = QuotationDamageFixTypeHelper.ResolveDisplayName(damage.DisplayFixType);
+            }
+
+            if (normalized is null && !string.IsNullOrWhiteSpace(damage.FixTypeName))
+            {
+                normalized = QuotationDamageFixTypeHelper.ResolveDisplayName(damage.FixTypeName);
+            }
+
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                continue;
+            }
+
+            counts.TryGetValue(normalized, out var current);
+            counts[normalized] = current + 1;
+        }
+
+        if (counts.Count == 0)
+        {
+            return NormalizeFallback(fallbackFixType);
+        }
+
+        var preferred = counts
+            .Where(kvp => !string.Equals(kvp.Key, "其他", StringComparison.Ordinal))
+            .OrderByDescending(kvp => kvp.Value)
+            .ThenBy(kvp => QuotationDamageFixTypeHelper.ResolveOrderIndex(kvp.Key))
+            .FirstOrDefault();
+
+        if (!string.IsNullOrWhiteSpace(preferred.Key))
+        {
+            return preferred.Key;
+        }
+
+        return counts
+            .OrderByDescending(kvp => kvp.Value)
+            .ThenBy(kvp => QuotationDamageFixTypeHelper.ResolveOrderIndex(kvp.Key))
+            .First()
+            .Key;
+
+        static string? NormalizeFallback(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return QuotationDamageFixTypeHelper.Normalize(value);
+        }
+    }
+
     private async Task<List<QuotationDamageItem>> NormalizeDamagesWithPhotoDataAsync(
         string? quotationUid,
         List<QuotationDamageItem> damages,
@@ -2895,18 +3046,13 @@ public class QuotationService : IQuotationService
                     damage.DisplayEstimatedAmount = photo.Cost;
                 }
 
-                if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixType))
+                if (!string.IsNullOrWhiteSpace(photo.FixType))
                 {
-                    var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
-                    damage.DisplayFixType = normalizedFixType
+                    var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType)
                         ?? QuotationDamageFixTypeHelper.ResolveDisplayName(photo.FixType);
-                }
 
-                if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(photo.FixType))
-                {
-                    var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
-                    damage.FixTypeName = normalizedFixType
-                        ?? QuotationDamageFixTypeHelper.ResolveDisplayName(photo.FixType);
+                    damage.DisplayFixType = normalizedFixType;
+                    damage.FixTypeName = normalizedFixType;
                 }
 
                 if (damage.Photos is { Count: > 0 })
@@ -2998,6 +3144,41 @@ public class QuotationService : IQuotationService
         }
 
         return summaries;
+    }
+
+    private static QuotationPhotoSummaryCollection BuildPhotoSummaryCollection(IEnumerable<QuotationDamageItem> damages)
+    {
+        var summaries = BuildDamageSummaries(damages);
+        var result = new QuotationPhotoSummaryCollection();
+
+        foreach (var summary in summaries)
+        {
+            if (summary is null)
+            {
+                continue;
+            }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary);
+            var groupKey = QuotationDamageFixTypeHelper.DetermineGroupKey(summary.FixType);
+
+            switch (groupKey)
+            {
+                case "凹痕":
+                    result.Dent.Add(summary);
+                    break;
+                case "美容":
+                    result.Beauty.Add(summary);
+                    break;
+                case "板烤":
+                    result.Paint.Add(summary);
+                    break;
+                default:
+                    result.Other.Add(summary);
+                    break;
+            }
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -3097,12 +3278,7 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static List<QuotationDamageItem> ExtractDamageList(CreateQuotationRequest request)
     {
-        if (request.Damages is { Count: > 0 })
-        {
-            return request.Damages;
-        }
-
-        return new List<QuotationDamageItem>();
+        return request.Photos?.ToDamageList() ?? new List<QuotationDamageItem>();
     }
 
     /// <summary>
@@ -3266,6 +3442,45 @@ public class QuotationService : IQuotationService
         }
 
         return damages;
+    }
+
+    private static QuotationPhotoRequestCollection GroupDamagesForRequest(IEnumerable<QuotationDamageItem> damages)
+    {
+        var collection = new QuotationPhotoRequestCollection();
+
+        if (damages is null)
+        {
+            return collection;
+        }
+
+        foreach (var damage in damages)
+        {
+            if (damage is null)
+            {
+                continue;
+            }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
+            var groupKey = QuotationDamageFixTypeHelper.DetermineGroupKey(damage.FixType);
+
+            switch (groupKey)
+            {
+                case "凹痕":
+                    collection.Dent.Add(damage);
+                    break;
+                case "美容":
+                    collection.Beauty.Add(damage);
+                    break;
+                case "板烤":
+                    collection.Paint.Add(damage);
+                    break;
+                default:
+                    collection.Other.Add(damage);
+                    break;
+            }
+        }
+
+        return collection;
     }
 
     /// <summary>

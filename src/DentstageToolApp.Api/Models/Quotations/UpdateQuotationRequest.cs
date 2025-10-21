@@ -36,10 +36,9 @@ public class UpdateQuotationRequest : QuotationActionRequestBase
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 傷痕細項列表，沿用建立與詳情回傳的結構，確保欄位一致。
+    /// 維修照片集合，與建立估價單相同以四大類別區分。
     /// </summary>
-    [JsonConverter(typeof(QuotationDamageCollectionConverter))]
-    public List<QuotationDamageItem> Damages { get; set; } = new();
+    public QuotationPhotoRequestCollection Photos { get; set; } = new();
 
     /// <summary>
     /// 車體確認單資料，包含標記與簽名資訊。

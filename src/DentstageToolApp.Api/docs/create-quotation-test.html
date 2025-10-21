@@ -86,6 +86,15 @@
     const STORAGE_KEY = 'dentstage-create-quotation-test-settings';
     const BLANK_IMAGE_BASE64 =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
+    // 說明：定義四種維修類別鍵值，供後續自動建立與清理照片資料使用
+    const PHOTO_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
+    // 說明：對應顯示文字，讓提示訊息保有中文語意
+    const PHOTO_CATEGORY_DISPLAY = {
+      dent: '凹痕',
+      beauty: '美容',
+      paint: '板烤',
+      other: '其他'
+    };
 
     const App = {
       // ---------- 模板區 ----------
@@ -247,7 +256,7 @@
                   :closable="false"
                   show-icon
                   title="損傷資料可重複新增"
-                  description="系統會在 damages 陣列末端新增一筆固定範例，並直接將 PhotoUID 寫入 photos 欄位，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
+                  description="系統會在 photos.dent 陣列末端新增一筆固定範例，並直接將 PhotoUID 寫入照片集合，內容同步包含左前門、需烤漆與估價 4648 等欄位。"
                   style="margin-top: 8px;"
                 />
                 <el-alert
@@ -366,21 +375,30 @@
   "customer": {
     "customerUid": ""
   },
-  "damages": [
-    {
-      "photos": "",
-      "position": "左前門",
-      "dentStatus": "需烤漆",
-      "description": "建議同時處理刮痕",
-      "estimatedAmount": 4648
-    }
-  ],
+  "photos": {
+    "dent": [
+      {
+        "photos": [
+          {
+            "photoUid": "",
+            "isPrimary": true
+          }
+        ],
+        "position": "左前門",
+        "dentStatus": "需烤漆",
+        "description": "建議同時處理刮痕",
+        "estimatedAmount": 4648
+      }
+    ],
+    "beauty": [],
+    "paint": [],
+    "other": []
+  },
   "carBodyConfirmation": {
     "signaturePhotoUid": "",
     "damageMarkers": []
   },
   "maintenance": {
-    "fixType": "凹痕",
     "reserveCar": false,
     "applyCoating": false,
     "applyWrapping": false,
@@ -451,19 +469,47 @@
 
         // ---------- 工具函式區 ----------
 
-        // 建立固定的損傷資料範本，符合營運提供的標準內容
-        const buildDamageTemplate = (photoUid) => ({
-          // 說明：依照估價單 API 需求，photos 採字串儲存單一圖片 UID
-          photos: photoUid || '',
-          position: '左前門',
-          dentStatus: '需烤漆',
-          description: '建議同時處理刮痕',
-          estimatedAmount: 4648
-        });
+        // 建立固定的照片項目範本，符合營運提供的標準內容
+        const buildPhotoItemTemplate = (photoUid) => {
+          const photos = [];
+          if (photoUid) {
+            photos.push({
+              photoUid,
+              isPrimary: true
+            });
+          }
 
-        // 套用圖片至損傷陣列，允許多筆資料堆疊以模擬多處損傷
-        const updateDamageWithPhoto = (photoUid, options = {}) => {
-          const { notify = true, log = true } = options;
+          return {
+            photos,
+            position: '左前門',
+            dentStatus: '需烤漆',
+            description: '建議同時處理刮痕',
+            estimatedAmount: 4648
+          };
+        };
+
+        // 確保 photos 物件具備四大類別陣列，並清理無效資料
+        const ensurePhotoGroups = (payload) => {
+          const target = payload || {};
+          const groups = target.photos && typeof target.photos === 'object' ? target.photos : {};
+
+          PHOTO_CATEGORY_KEYS.forEach((key) => {
+            const source = Array.isArray(groups[key]) ? groups[key] : [];
+            groups[key] = source.filter((item) => {
+              if (!item || !Array.isArray(item.photos)) {
+                return false;
+              }
+              return item.photos.some((photo) => photo && photo.photoUid);
+            });
+          });
+
+          target.photos = groups;
+          return groups;
+        };
+
+        // 套用圖片至指定類別，允許多筆資料堆疊以模擬多處損傷
+        const appendPhotoItem = (photoUid, options = {}) => {
+          const { notify = true, log = true, category = 'dent' } = options;
           if (!photoUid) {
             if (notify) {
               message.warning('請先建立或輸入損傷用 PhotoUID。');
@@ -473,26 +519,30 @@
 
           try {
             const parsed = JSON.parse(createRequestText.value || '{}');
+            const groups = ensurePhotoGroups(parsed);
+            // 說明：若未指定或帶入無效類別則回退至凹痕分類，確保資料結構一致
+            const normalizedCategory = PHOTO_CATEGORY_KEYS.includes(category) ? category : 'dent';
 
-            if (!Array.isArray(parsed.damages)) {
-              parsed.damages = [];
-            }
-
-            // 若預設模板尚未填寫照片，先移除占位資料避免送出無效項目
-            parsed.damages = parsed.damages.filter((item) => item && item.photos);
-
-            const payload = buildDamageTemplate(photoUid);
-            parsed.damages.push(payload);
+            const payload = buildPhotoItemTemplate(photoUid);
+            groups[normalizedCategory] = groups[normalizedCategory] || [];
+            groups[normalizedCategory].push(payload);
 
             createRequestText.value = JSON.stringify(parsed, null, 2);
             persistSettings();
 
+            const displayName = PHOTO_CATEGORY_DISPLAY[normalizedCategory] || normalizedCategory;
+
             if (notify) {
-              message.success('已新增一筆固定損傷資料並套用指定圖片。');
+              message.success(`已新增一筆${displayName}類別照片資料並套用指定圖片。`);
             }
 
             if (log) {
-              appendLog('success', '新增固定損傷資料並套用圖片', { photoUid, damage: payload });
+              appendLog('success', '新增分類照片資料並套用圖片', {
+                photoUid,
+                category: normalizedCategory,
+                displayName,
+                item: payload
+              });
             }
 
             return { success: true, payload };
@@ -501,7 +551,7 @@
               message.warning('JSON 解析失敗，請確認內容格式是否正確。');
             }
             if (log) {
-              appendLog('warning', '新增損傷資料失敗', { message: error.message });
+              appendLog('warning', '新增分類照片資料失敗', { message: error.message });
             }
             return { success: false, error };
           }
@@ -773,7 +823,7 @@
               damagePhotoUid.value = photoUid;
               message.success('已建立損傷空白圖片並取得 PhotoUID。');
               appendLog('success', '建立損傷空白圖片成功', data);
-              const result = updateDamageWithPhoto(photoUid, { notify: false });
+              const result = appendPhotoItem(photoUid, { notify: false });
               if (result.success) {
                 appendLog('success', '損傷空白圖片已自動新增損傷資料', { photoUid });
               }
@@ -787,7 +837,7 @@
 
         // 透過最新損傷圖片新增損傷陣列資料
         const appendDamageWithPhoto = () => {
-          updateDamageWithPhoto(damagePhotoUid.value, {});
+          appendPhotoItem(damagePhotoUid.value, {});
         };
 
         // 透過最新簽名圖片套用簽名照片 UID
