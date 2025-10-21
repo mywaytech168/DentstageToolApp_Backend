@@ -60,10 +60,8 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
             items = items
                 .OrderBy(item =>
                 {
-                    var normalized = QuotationDamageFixTypeHelper.Normalize(item.FixType);
-                    var resolved = normalized ?? QuotationDamageFixTypeHelper.ResolveDisplayName(item.FixType);
-                    var index = QuotationDamageFixTypeHelper.CanonicalOrder.IndexOf(resolved);
-                    return index >= 0 ? index : int.MaxValue;
+                    // 利用共用方法決定排序索引，確保維修類型依固定順序呈現。
+                    return QuotationDamageFixTypeHelper.ResolveOrderIndex(item.FixType);
                 })
                 .ThenBy(item => item.FixType)
                 .ToList();

@@ -397,7 +397,8 @@ public class QuotationService : IQuotationService
                     CreatorTechnicianName = creatorName,
                     CreatedAt = quotation.CreationTimestamp,
                     // 維修類型輸出時優先回傳中文顯示名稱，若無法解析則保留原值。
-                    FixType = ResolveQuotationFixTypeDisplayName(quotation.FixType)
+                    // 以中文標籤呈現維修類型，確保前端無需額外轉換。
+                    FixType = QuotationDamageFixTypeHelper.ResolveDisplayName(quotation.FixType)
                 };
             })
             .ToList();
