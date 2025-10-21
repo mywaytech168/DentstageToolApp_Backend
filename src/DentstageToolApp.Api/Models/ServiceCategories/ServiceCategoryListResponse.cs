@@ -25,7 +25,7 @@ public class ServiceCategoryListResponse
 public class ServiceCategoryListItem
 {
     /// <summary>
-    /// 維修類型鍵值。
+    /// 維修類型中文標籤。
     /// </summary>
     public string FixType { get; set; } = string.Empty;
 

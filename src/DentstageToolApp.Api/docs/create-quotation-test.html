@@ -205,9 +205,8 @@
                   </div>
                   <div class="summary-item" v-if="randomSummary.fixType">
                     <h4>維修類型</h4>
-                    <p>UID：{{ randomSummary.fixType.uid }}</p>
-                    <p>名稱：{{ randomSummary.fixType.name }}</p>
-                    <p>描述：{{ randomSummary.fixType.description || '無' }}</p>
+                    <p>名稱：{{ randomSummary.fixType }}</p>
+                    <p>說明：系統僅提供「凹痕」「美容」「板烤」「其他」四種中文名稱。</p>
                   </div>
                 </div>
                 <el-alert
@@ -381,8 +380,7 @@
     "damageMarkers": []
   },
   "maintenance": {
-    "fixType": "dent",
-    "fixTypeName": "凹痕",
+    "fixType": "凹痕",
     "reserveCar": false,
     "applyCoating": false,
     "applyWrapping": false,
@@ -403,7 +401,7 @@
           store: null,
           customer: null,
           car: null,
-          fixType: null,
+          fixType: '',
           notes: [],
           generatedAt: ''
         });
@@ -706,7 +704,7 @@
             randomSummary.store = normalizeSummary(data.store);
             randomSummary.customer = normalizeSummary(data.customer);
             randomSummary.car = normalizeSummary(data.car);
-            randomSummary.fixType = normalizeSummary(data.fixType);
+            randomSummary.fixType = typeof data.fixType === 'string' ? data.fixType : '';
             randomSummary.generatedAt = data.generatedAt;
             randomSummary.notes = Array.isArray(data.notes) ? data.notes : [];
             message.success('已取得隨機測試資料並套用至 JSON。');

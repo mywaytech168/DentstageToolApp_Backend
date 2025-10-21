@@ -56,13 +56,12 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
                 .ToListAsync(cancellationToken);
 
             // ---------- 陣列整理區 ----------
-            // 依照系統既定的 dent、beauty、paint、other 順序排序，避免不同資料庫排序造成顯示不一致。
+            // 依照系統既定的中文順序（凹痕、美容、板烤、其他）排序，避免不同資料庫排序造成顯示不一致。
             items = items
                 .OrderBy(item =>
                 {
-                    var normalized = QuotationDamageFixTypeHelper.Normalize(item.FixType) ?? item.FixType;
-                    var index = QuotationDamageFixTypeHelper.CanonicalOrder.IndexOf(normalized ?? string.Empty);
-                    return index >= 0 ? index : int.MaxValue;
+                    // 利用共用方法決定排序索引，確保維修類型依固定順序呈現。
+                    return QuotationDamageFixTypeHelper.ResolveOrderIndex(item.FixType);
                 })
                 .ThenBy(item => item.FixType)
                 .ToList();
@@ -104,11 +103,14 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
             var normalizedUid = (fixType ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalizedUid))
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型鍵值。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型中文標籤。");
             }
 
-            var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid)
-                ?? normalizedUid;
+            var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid);
+            if (canonicalFixType is null)
+            {
+                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請輸入凹痕、美容、板烤或其他中文標籤。");
+            }
 
             var entity = await _dbContext.FixTypes
                 .AsNoTracking()
@@ -116,7 +118,7 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
 
             if (entity is null)
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型中文標籤是否正確。");
             }
 
             return new ServiceCategoryDetailResponse

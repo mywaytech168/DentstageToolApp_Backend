@@ -92,7 +92,7 @@ public class CreateQuotationStoreInfo
 public class CreateQuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型鍵值，限定使用 dent、beauty、paint、other 等固定分類。
+    /// 維修類型中文標籤，限定使用凹痕、美容、板烤或其他四種固定選項。
     /// </summary>
     [Required(ErrorMessage = "請選擇維修類型。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
@@ -267,7 +267,7 @@ public class QuotationStoreInfo
 public class QuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型鍵值，使用固定分類字串（dent、beauty、paint、other）。
+    /// 維修類型中文標籤，使用凹痕、美容、板烤或其他四種固定選項。
     /// </summary>
     public string? FixType { get; set; }
 
