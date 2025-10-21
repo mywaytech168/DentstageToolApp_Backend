@@ -171,13 +171,51 @@ public class QuotationPhotoSummaryCollection
 /// </summary>
 public class QuotationDamageSummary
 {
+    private string? _photo;
     private string? _fixType;
     private string? _fixTypeDisplay;
 
     /// <summary>
     /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
     /// </summary>
-    public string? Photos { get; set; }
+    [JsonIgnore]
+    public string? Photo
+    {
+        get => _photo;
+        set => _photo = NormalizePhoto(value);
+    }
+
+    /// <summary>
+    /// 提供對外輸出與序列化的欄位名稱，統一採用單一 photo 欄位。
+    /// </summary>
+    [JsonPropertyName("photo")]
+    public string? DisplayPhoto
+    {
+        get => Photo;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位仍可能傳入 photos 字串，此處保留 setter 進行相容轉換。
+    /// </summary>
+    [JsonPropertyName("photos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPhotos
+    {
+        get => null;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版中文欄位「圖片」，同樣匯入主要照片欄位，避免歷史資料失效。
+    /// </summary>
+    [JsonPropertyName("圖片")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyChinesePhoto
+    {
+        get => null;
+        set => Photo = value;
+    }
 
     /// <summary>
     /// 車身部位或面板位置。
@@ -250,10 +288,18 @@ public class QuotationDamageSummary
         get => null;
         set => FixType = value;
     }
+
+    /// <summary>
+    /// 將輸入的照片識別碼進行正規化，避免空白或空字串造成判斷落差。
+    /// </summary>
+    private static string? NormalizePhoto(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 }
 
 /// <summary>
-/// 估價單車體確認單輸出結構，僅保留損傷標記資訊供前端呈現。
+/// 估價單車體確認單輸出結構，保留損傷標記與簽名照片 UID 供前端使用。
 /// </summary>
 public class QuotationCarBodyConfirmationResponse
 {
@@ -261,6 +307,11 @@ public class QuotationCarBodyConfirmationResponse
     /// 車體受損標記列表，對應前端示意圖座標與損傷狀態。
     /// </summary>
     public List<QuotationCarBodyDamageMarker> DamageMarkers { get; set; } = new();
+
+    /// <summary>
+    /// 客戶簽名照片的 PhotoUID，讓前端可直接顯示簽名影像。
+    /// </summary>
+    public string? SignaturePhotoUid { get; set; }
 }
 
 /// <summary>
@@ -268,61 +319,6 @@ public class QuotationCarBodyConfirmationResponse
 /// </summary>
 public class QuotationMaintenanceDetail
 {
-    private string? _fixType;
-    private string? _fixTypeDisplay;
-
-    /// <summary>
-    /// 維修類型中文標籤，供前端直接回填四種固定分類。
-    /// </summary>
-    public string? FixType
-    {
-        get
-        {
-            if (!string.IsNullOrWhiteSpace(_fixTypeDisplay))
-            {
-                return _fixTypeDisplay;
-            }
-
-            return string.IsNullOrWhiteSpace(_fixType)
-                ? null
-                : QuotationDamageFixTypeHelper.ResolveDisplayName(_fixType);
-        }
-        set
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                _fixType = null;
-                _fixTypeDisplay = null;
-                return;
-            }
-
-            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
-            _fixType = resolved;
-            _fixTypeDisplay = resolved;
-        }
-    }
-
-    /// <summary>
-    /// 維修類型顯示名稱，預設為中文描述。
-    /// </summary>
-    [JsonIgnore]
-    public string? FixTypeName
-    {
-        get => _fixTypeDisplay;
-        set => _fixTypeDisplay = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
-    /// <summary>
-    /// 舊版欄位：維修類型顯示名稱。
-    /// </summary>
-    [JsonPropertyName("fixTypeName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? LegacyFixTypeName
-    {
-        get => null;
-        set => FixType = value;
-    }
-
     /// <summary>
     /// 是否需留車。
     /// </summary>

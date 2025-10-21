@@ -101,50 +101,49 @@ public class QuotationCategoryOverallInfo
 /// </summary>
 public class QuotationDamageItem
 {
-    /// <summary>
-    /// 傳統版本僅支援單張照片，保留此欄位以維持相容性。
-    /// </summary>
-    [Obsolete("請改用 Photos 集合傳遞多張傷痕圖片。")]
-    [JsonIgnore]
-    public string? Photo { get; private set; }
-
-    /// <summary>
-    /// 舊欄位別名，允許仍以 photo 傳值，但輸出時隱藏英文欄位。
-    /// </summary>
-    [JsonPropertyName("photo")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? LegacyPhoto
-    {
-        get => null;
-        set => SetPrimaryPhoto(value);
-    }
-
-    private List<QuotationDamagePhoto> _photos = new();
+    private string? _photo;
     private string? _fixType;
 
     /// <summary>
-    /// 內部使用的圖片清單，作為舊欄位與新欄位的共用儲存。
+    /// 主要圖片的 PhotoUID，作為傷痕與照片的唯一對應。所有輸入都會先行去除空白。
     /// </summary>
     [JsonIgnore]
-    public List<QuotationDamagePhoto> Photos
+    public string? Photo
     {
-        get => _photos;
-        set
-        {
-            _photos = value ?? new List<QuotationDamagePhoto>();
-            SyncLegacyPhotoFromPhotos();
-        }
+        get => _photo;
+        set => _photo = NormalizePhotoValue(value);
     }
 
     /// <summary>
-    /// 新欄位：提供前端使用英文欄位「photos」，並將資料寫入共用清單。
-    /// 序列化回傳時會輸出主要圖片的 PhotoUID 字串，以符合新版欄位需求。
+    /// 提供對外序列化使用的 photo 欄位，維持欄位名稱一致並同步寫入內部值。
+    /// </summary>
+    [JsonPropertyName("photo")]
+    public string? DisplayPhoto
+    {
+        get => Photo;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位「photos」仍可能由前端傳入字串，為維持相容性仍接受並轉換成單一 photo。
     /// </summary>
     [JsonPropertyName("photos")]
-    public List<QuotationDamagePhoto> DisplayPhotos
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyPhotos
     {
-        get => Photos;
-        set => Photos = value ?? new List<QuotationDamagePhoto>();
+        get => null;
+        set => Photo = value;
+    }
+
+    /// <summary>
+    /// 舊版中文欄位「圖片」，解析時同樣導入主要圖片欄位。
+    /// </summary>
+    [JsonPropertyName("圖片")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyChinesePhoto
+    {
+        get => null;
+        set => Photo = value;
     }
 
     /// <summary>
@@ -210,21 +209,6 @@ public class QuotationDamageItem
     {
         get => null;
         set => FixType = value;
-    }
-
-    /// <summary>
-    /// 舊資料的中文欄位「圖片」，僅用於解析舊版 JSON，輸出時一律改用英文欄位。
-    /// </summary>
-    [JsonPropertyName("圖片")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public List<QuotationDamagePhoto>? LegacyChinesePhotos
-    {
-        get => null;
-        set
-        {
-            // 若舊版資料帶入中文欄位仍需寫入共用集合，避免遺失照片資訊。
-            Photos = value ?? new List<QuotationDamagePhoto>();
-        }
     }
 
     /// <summary>
@@ -359,49 +343,11 @@ public class QuotationDamageItem
     }
 
     /// <summary>
-    /// 將主要圖片同步到舊欄位，維持舊資料格式相容。
+    /// 將輸入的照片識別碼正規化，統一去除頭尾空白並處理空字串情境。
     /// </summary>
-    private void SyncLegacyPhotoFromPhotos()
+    private static string? NormalizePhotoValue(string? value)
     {
-        var primaryPhotoUid = _photos.FirstOrDefault()?.PhotoUid;
-        if (string.IsNullOrWhiteSpace(primaryPhotoUid))
-        {
-            Photo = null;
-            return;
-        }
-
-        Photo = primaryPhotoUid.Trim();
-    }
-
-    /// <summary>
-    /// 設定主要圖片，同步更新內部圖片集合與舊欄位。
-    /// </summary>
-    private void SetPrimaryPhoto(string? value)
-    {
-        var normalized = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-        if (normalized is null)
-        {
-            Photo = null;
-            if (_photos.Count > 0)
-            {
-                _photos = new List<QuotationDamagePhoto>();
-            }
-
-            return;
-        }
-
-        if (_photos.Count == 0)
-        {
-            _photos.Add(new QuotationDamagePhoto { PhotoUid = normalized });
-        }
-        else
-        {
-            var primary = _photos[0] ?? new QuotationDamagePhoto();
-            primary.PhotoUid = normalized;
-            _photos[0] = primary;
-        }
-
-        Photo = normalized;
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }
 
@@ -487,14 +433,11 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
 
         writer.WriteStartObject();
 
-        writer.WritePropertyName("photos");
-        var photos = target.Photos ?? new List<QuotationDamagePhoto>();
-
-        // 對外僅回傳主要圖片的 PhotoUID，確保欄位型別為字串符合前端期待。
-        var primaryPhotoUid = photos.FirstOrDefault(static p => !string.IsNullOrWhiteSpace(p?.PhotoUid))?.PhotoUid;
+        writer.WritePropertyName("photo");
+        var primaryPhotoUid = NormalizePhoto(target.Photo);
         if (!string.IsNullOrWhiteSpace(primaryPhotoUid))
         {
-            writer.WriteStringValue(primaryPhotoUid!.Trim());
+            writer.WriteStringValue(primaryPhotoUid!);
         }
         else
         {
@@ -554,7 +497,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         // 以逐欄位讀取方式手動建立資料，確保舊版欄位仍可被解析。
         var fallback = new QuotationDamageItem
         {
-            DisplayPhotos = ReadPhotoList(element, options),
+            DisplayPhoto = ReadPhotoValue(element),
             DisplayPosition = ReadString(element, "position", "位置"),
             DisplayDentStatus = ReadString(element, "dentStatus", "凹痕狀況"),
             DisplayDescription = ReadString(element, "description", "說明"),
@@ -631,6 +574,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
 
         var knownFields = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
+            "photo",
             "photos",
             "position",
             "dentStatus",
@@ -658,25 +602,73 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
     }
 
     /// <summary>
-    /// 讀取圖片集合，支援陣列與單一物件寫法。
+    /// 讀取圖片欄位，若為陣列或物件則取第一筆 PhotoUID，維持與單一欄位一致。
     /// </summary>
-    private static List<QuotationDamagePhoto> ReadPhotoList(JsonElement root, JsonSerializerOptions options)
+    private static string? ReadPhotoValue(JsonElement root)
     {
-        if (!TryGetProperty(root, out var element, "photos", "圖片", "photo"))
+        if (!TryGetProperty(root, out var element, "photo", "photos", "圖片"))
         {
-            return new List<QuotationDamagePhoto>();
+            return null;
         }
 
         return element.ValueKind switch
         {
-            JsonValueKind.Array => DeserializePhotoArray(element, options),
-            JsonValueKind.Object => new List<QuotationDamagePhoto>
-            {
-                element.Deserialize<QuotationDamagePhoto>(options) ?? new QuotationDamagePhoto()
-            },
-            JsonValueKind.String => CreatePhotoListFromString(element.GetString()),
-            _ => new List<QuotationDamagePhoto>()
+            JsonValueKind.String => NormalizePhoto(element.GetString()),
+            JsonValueKind.Object => ReadPhotoFromObject(element),
+            JsonValueKind.Array => ReadPhotoFromArray(element),
+            _ => null
         };
+    }
+
+    /// <summary>
+    /// 從物件欄位中擷取 PhotoUID，支援 photoUid 與 file 兩種欄位名稱。
+    /// </summary>
+    private static string? ReadPhotoFromObject(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        if (element.TryGetProperty("photoUid", out var uidElement) && uidElement.ValueKind == JsonValueKind.String)
+        {
+            return NormalizePhoto(uidElement.GetString());
+        }
+
+        if (element.TryGetProperty("file", out var fileElement) && fileElement.ValueKind == JsonValueKind.String)
+        {
+            return NormalizePhoto(fileElement.GetString());
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 讀取陣列形式的圖片欄位，回傳第一筆有效的 PhotoUID。
+    /// </summary>
+    private static string? ReadPhotoFromArray(JsonElement element)
+    {
+        if (element.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var item in element.EnumerateArray())
+        {
+            var value = item.ValueKind switch
+            {
+                JsonValueKind.String => NormalizePhoto(item.GetString()),
+                JsonValueKind.Object => ReadPhotoFromObject(item),
+                _ => null
+            };
+
+            if (value is not null)
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -740,44 +732,6 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
     }
 
     /// <summary>
-    /// 將圖片陣列轉換為物件列表。
-    /// </summary>
-    private static List<QuotationDamagePhoto> DeserializePhotoArray(JsonElement element, JsonSerializerOptions options)
-    {
-        var photos = new List<QuotationDamagePhoto>();
-
-        foreach (var photoElement in element.EnumerateArray())
-        {
-            if (photoElement.ValueKind == JsonValueKind.Object)
-            {
-                var photo = photoElement.Deserialize<QuotationDamagePhoto>(options);
-                if (photo is not null)
-                {
-                    photos.Add(photo);
-                }
-            }
-        }
-
-        return photos;
-    }
-
-    /// <summary>
-    /// 將字串型式的圖片欄位轉換為標準照片清單。
-    /// </summary>
-    private static List<QuotationDamagePhoto> CreatePhotoListFromString(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return new List<QuotationDamagePhoto>();
-        }
-
-        return new List<QuotationDamagePhoto>
-        {
-            new() { PhotoUid = value.Trim() }
-        };
-    }
-
-    /// <summary>
     /// 依據字串是否為 null 決定輸出空值或實際內容。
     /// </summary>
     private static void WriteNullableString(Utf8JsonWriter writer, string? value)
@@ -789,6 +743,14 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         writer.WriteStringValue(value);
+    }
+
+    /// <summary>
+    /// 正規化圖片識別碼字串，避免包含空白或空值。
+    /// </summary>
+    private static string? NormalizePhoto(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }
 
@@ -838,7 +800,18 @@ internal static class QuotationDamageFixTypeHelper
         }
 
         var normalized = Normalize(value);
-        return normalized ?? "其他";
+        if (normalized is not null)
+        {
+            return normalized;
+        }
+
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, "簽名", StringComparison.Ordinal))
+        {
+            return "簽名";
+        }
+
+        return "其他";
     }
 
     /// <summary>
@@ -957,38 +930,6 @@ internal static class QuotationDamageFixTypeHelper
         summary.FixTypeName = normalized;
         // 確保摘要輸出時維持中文顯示同步，提供前端直接使用。
     }
-}
-
-/// <summary>
-/// 傷痕影像的補充資訊，可記錄拍攝角度或描述說明。
-/// </summary>
-public class QuotationDamagePhoto
-{
-    /// <summary>
-    /// 舊版欄位，改為傳遞 PhotoUID，保留以相容既有流程。
-    /// </summary>
-    [Obsolete("請改用 PhotoUid 傳遞圖片識別碼。")]
-    [JsonPropertyName("file")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? File { get; set; }
-
-    /// <summary>
-    /// 圖片唯一識別碼，對應圖片上傳 API 回傳的 PhotoUID。
-    /// </summary>
-    [JsonPropertyName("photoUid")]
-    public string? PhotoUid { get; set; }
-
-    /// <summary>
-    /// 圖片描述，說明拍攝角度或重點標註。
-    /// </summary>
-    [JsonPropertyName("description")]
-    public string? Description { get; set; }
-
-    /// <summary>
-    /// 是否為主要展示圖片，可協助前端挑選封面影像。
-    /// </summary>
-    [JsonPropertyName("isPrimary")]
-    public bool? IsPrimary { get; set; }
 }
 
 /// <summary>
