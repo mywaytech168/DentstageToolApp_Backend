@@ -14,6 +14,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Linq;
+using System.Linq.Expressions;
 using System.Net;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -179,22 +180,22 @@ public class QuotationService : IQuotationService
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
             var fixTypeFilter = query.FixType.Trim();
-            var rawPattern = $"%{fixTypeFilter}%";
-            var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixTypeFilter);
-            string? canonicalPattern = null;
 
-            if (!string.IsNullOrWhiteSpace(normalizedFilter))
+            // 建立查詢樣式集合，涵蓋原始輸入、拆分後的個別項目與中文顯示名稱。
+            var likePatterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                canonicalPattern = $"%{normalizedFilter}%";
-            }
-            else if (string.Equals(fixTypeFilter, QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeFilter), StringComparison.Ordinal))
+                $"%{fixTypeFilter}%"
+            };
+
+            var searchTokens = QuotationDamageFixTypeHelper.ResolveSearchTokens(fixTypeFilter);
+            foreach (var token in searchTokens)
             {
-                canonicalPattern = rawPattern;
+                likePatterns.Add($"%{token}%");
             }
 
-            quotationsQuery = quotationsQuery.Where(q =>
-                EF.Functions.Like(q.FixType ?? string.Empty, rawPattern)
-                || (canonicalPattern != null && EF.Functions.Like(q.FixType ?? string.Empty, canonicalPattern)));
+            // 將所有候選樣式整合為單一 Where 條件，確保 EF Core 可轉換為 SQL。
+            var predicate = BuildFixTypeLikePredicate(likePatterns);
+            quotationsQuery = quotationsQuery.Where(predicate);
         }
 
         // 篩選估價單狀態。
@@ -3058,6 +3059,45 @@ public class QuotationService : IQuotationService
         {
             yield return primary;
         }
+    }
+
+    /// <summary>
+    /// 將多組 Like 樣式組合成單一查詢條件，確保 EF Core 能轉換為有效 SQL。
+    /// </summary>
+    private static Expression<Func<Quatation, bool>> BuildFixTypeLikePredicate(IEnumerable<string> patterns)
+    {
+        var patternList = patterns?
+            .Where(pattern => !string.IsNullOrWhiteSpace(pattern))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? new List<string>();
+
+        if (patternList.Count == 0)
+        {
+            // 無可用樣式時直接回傳永遠為真，避免 Where 條件產生例外。
+            return quotation => true;
+        }
+
+        var parameter = Expression.Parameter(typeof(Quatation), "quotation");
+        var fixTypeProperty = Expression.Property(parameter, nameof(Quatation.FixType));
+        var coalesce = Expression.Coalesce(fixTypeProperty, Expression.Constant(string.Empty, typeof(string)));
+
+        Expression? body = null;
+
+        foreach (var pattern in patternList)
+        {
+            // 透過 EF.Functions.Like 產生 SQL Like 條件，確保資料庫可利用索引搜尋。
+            var likeCall = Expression.Call(
+                typeof(DbFunctionsExtensions),
+                nameof(DbFunctionsExtensions.Like),
+                Type.EmptyTypes,
+                Expression.Constant(EF.Functions),
+                coalesce,
+                Expression.Constant(pattern));
+
+            body = body is null ? likeCall : Expression.OrElse(body, likeCall);
+        }
+
+        return Expression.Lambda<Func<Quatation, bool>>(body!, parameter);
     }
 
     /// <summary>
