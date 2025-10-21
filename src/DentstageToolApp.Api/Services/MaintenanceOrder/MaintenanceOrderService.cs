@@ -1054,6 +1054,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private static string? ResolvePreviousOrderStatus(Order order, string currentStatus)
     {
+        if (string.Equals(currentStatus, "296", StringComparison.OrdinalIgnoreCase))
+        {
+            // 維修過期僅需回溯到已開工狀態，避免清除先前預約等歷程。
+            return order.Status220Date.HasValue ? "220" : null;
+        }
+
         var history = new List<(string Code, DateTime? Timestamp)>
         {
             ("210", order.Status210Date),
@@ -1226,6 +1232,16 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private static string? ResolvePreviousQuotationStatus(Quatation quotation)
     {
         var currentStatus = NormalizeOptionalText(quotation.Status);
+        if (string.Equals(currentStatus, "186", StringComparison.OrdinalIgnoreCase))
+        {
+            return "110";
+        }
+
+        if (string.Equals(currentStatus, "196", StringComparison.OrdinalIgnoreCase))
+        {
+            return "190";
+        }
+
         var history = new List<(string Code, DateTime? Timestamp)>
         {
             ("195", quotation.Status199Timestamp),
