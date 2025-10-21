@@ -238,8 +238,9 @@ public class QuotationDamageSummary
     public decimal? EstimatedAmount { get; set; }
 
     /// <summary>
-    /// 維修類型中文標籤，輸出時統一為凹痕、美容、板烤或其他。
+    /// 維修類型中文標籤，僅供後端內部判斷分群與歷史資料相容，不再直接輸出至 API。
     /// </summary>
+    [JsonIgnore]
     public string? FixType
     {
         get
@@ -266,6 +267,20 @@ public class QuotationDamageSummary
             _fixType = resolved;
             _fixTypeDisplay = resolved;
         }
+    }
+
+    /// <summary>
+    /// 舊版欄位：維修類型代碼，保留 setter 供歷史資料解析。
+    /// </summary>
+    /// <remarks>
+    /// 這裡仍接收舊欄位寫入，並在序列化時回傳 null，確保回應不再出現 fixType 屬性。
+    /// </remarks>
+    [JsonPropertyName("fixType")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyFixType
+    {
+        get => null;
+        set => FixType = value;
     }
 
     /// <summary>
