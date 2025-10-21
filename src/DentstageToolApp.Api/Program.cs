@@ -299,6 +299,7 @@ builder.Services.AddHttpClient<IRemoteSyncApiClient, RemoteSyncApiClient>(client
     }
 });
 builder.Services.AddHostedService<RefreshTokenCleanupService>();
+builder.Services.AddHostedService<QuotationMaintenanceExpirationService>();
 if (!syncOptions.IsCentralRole)
 {
     // ---------- 直營或連盟門市背景同步排程 ----------
