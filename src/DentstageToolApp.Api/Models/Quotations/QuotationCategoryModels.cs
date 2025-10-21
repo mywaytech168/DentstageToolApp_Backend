@@ -474,29 +474,18 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
     /// </summary>
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageItem> value, JsonSerializerOptions options)
     {
-        writer.WriteStartObject();
+        // 最新規格改為僅輸出傷痕陣列，讓前端僅需讀取 FixType 即可判斷中文維修類型。
+        writer.WriteStartArray();
 
-        var groups = GroupDamagesByFixType(value);
-
-        foreach (var key in QuotationDamageFixTypeHelper.CanonicalOrder)
+        if (value is { Count: > 0 })
         {
-            if (!groups.TryGetValue(key, out var damages) || damages.Count == 0)
-            {
-                continue;
-            }
-
-            writer.WritePropertyName(key);
-            writer.WriteStartArray();
-
-            foreach (var damage in damages)
+            foreach (var damage in value)
             {
                 WriteSingleDamage(writer, damage, options);
             }
-
-            writer.WriteEndArray();
         }
 
-        writer.WriteEndObject();
+        writer.WriteEndArray();
     }
 
     /// <summary>
@@ -677,40 +666,6 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// 依維修類型群組傷痕資料，方便序列化輸出為多個陣列。
-    /// </summary>
-    private static Dictionary<string, List<QuotationDamageItem>> GroupDamagesByFixType(List<QuotationDamageItem>? value)
-    {
-        var groups = new Dictionary<string, List<QuotationDamageItem>>(StringComparer.OrdinalIgnoreCase);
-
-        if (value is not { Count: > 0 })
-        {
-            return groups;
-        }
-
-        foreach (var damage in value)
-        {
-            if (damage is null)
-            {
-                continue;
-            }
-
-            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
-            var key = QuotationDamageFixTypeHelper.DetermineGroupKey(damage.FixType);
-
-            if (!groups.TryGetValue(key, out var list))
-            {
-                list = new List<QuotationDamageItem>();
-                groups[key] = list;
-            }
-
-            list.Add(damage);
-        }
-
-        return groups;
     }
 
     /// <summary>

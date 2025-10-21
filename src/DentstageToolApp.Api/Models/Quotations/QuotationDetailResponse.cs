@@ -390,29 +390,18 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageSummary> value, JsonSerializerOptions options)
     {
-        writer.WriteStartObject();
+        // 回傳結果直接使用陣列格式，避免再以維修類型鍵值進行分組，符合最新資料規格。
+        writer.WriteStartArray();
 
-        var groups = GroupSummariesByFixType(value);
-
-        foreach (var key in QuotationDamageFixTypeHelper.CanonicalOrder)
+        if (value is { Count: > 0 })
         {
-            if (!groups.TryGetValue(key, out var summaries) || summaries.Count == 0)
-            {
-                continue;
-            }
-
-            writer.WritePropertyName(key);
-            writer.WriteStartArray();
-
-            foreach (var summary in summaries)
+            foreach (var summary in value)
             {
                 WriteSingleSummary(writer, summary);
             }
-
-            writer.WriteEndArray();
         }
 
-        writer.WriteEndObject();
+        writer.WriteEndArray();
     }
 
     private static void WriteSingleSummary(Utf8JsonWriter writer, QuotationDamageSummary? summary)
@@ -505,37 +494,6 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
 
         QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary, fallbackKey);
         return summary;
-    }
-
-    private static Dictionary<string, List<QuotationDamageSummary>> GroupSummariesByFixType(List<QuotationDamageSummary>? value)
-    {
-        var groups = new Dictionary<string, List<QuotationDamageSummary>>(StringComparer.OrdinalIgnoreCase);
-
-        if (value is not { Count: > 0 })
-        {
-            return groups;
-        }
-
-        foreach (var summary in value)
-        {
-            if (summary is null)
-            {
-                continue;
-            }
-
-            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary);
-            var key = QuotationDamageFixTypeHelper.DetermineGroupKey(summary.FixType);
-
-            if (!groups.TryGetValue(key, out var list))
-            {
-                list = new List<QuotationDamageSummary>();
-                groups[key] = list;
-            }
-
-            list.Add(summary);
-        }
-
-        return groups;
     }
 
     private static string? ReadString(JsonElement element, string propertyName)
