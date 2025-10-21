@@ -2531,22 +2531,6 @@ public class QuotationService : IQuotationService
                 }
 
                 TryAdd(uniqueUids, damage.Photo);
-
-                if (damage.Photos is not { Count: > 0 })
-                {
-                    continue;
-                }
-
-                foreach (var photo in damage.Photos)
-                {
-                    if (photo is null)
-                    {
-                        continue;
-                    }
-
-                    TryAdd(uniqueUids, photo.PhotoUid);
-                    TryAdd(uniqueUids, photo.File);
-                }
             }
         }
 
@@ -2971,15 +2955,7 @@ public class QuotationService : IQuotationService
 
             var damage = new QuotationDamageItem
             {
-                DisplayPhotos = new List<QuotationDamagePhoto>
-                {
-                    new()
-                    {
-                        PhotoUid = photoUid,
-                        Description = photo?.Comment,
-                        IsPrimary = true
-                    }
-                },
+                DisplayPhoto = photoUid,
                 DisplayPosition = photo?.Posion,
                 DisplayDentStatus = photo?.PhotoShapeShow,
                 DisplayDescription = photo?.Comment,
@@ -3051,27 +3027,6 @@ public class QuotationService : IQuotationService
                     damage.FixTypeName = normalizedFixType;
                 }
 
-                if (damage.Photos is { Count: > 0 })
-                {
-                    foreach (var photoInfo in damage.Photos)
-                    {
-                        if (photoInfo is null)
-                        {
-                            continue;
-                        }
-
-                        var normalizedUid = NormalizeOptionalText(photoInfo.PhotoUid) ?? NormalizeOptionalText(photoInfo.File);
-                        if (normalizedUid is null || !string.Equals(normalizedUid, photo.PhotoUid, StringComparison.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        if (string.IsNullOrWhiteSpace(photoInfo.Description) && !string.IsNullOrWhiteSpace(photo.Comment))
-                        {
-                            photoInfo.Description = photo.Comment;
-                        }
-                    }
-                }
             }
         }
     }
@@ -3085,25 +3040,6 @@ public class QuotationService : IQuotationService
         if (primary is not null)
         {
             yield return primary;
-        }
-
-        if (damage.Photos is not { Count: > 0 })
-        {
-            yield break;
-        }
-
-        foreach (var photo in damage.Photos)
-        {
-            if (photo is null)
-            {
-                continue;
-            }
-
-            var uid = NormalizeOptionalText(photo.PhotoUid) ?? NormalizeOptionalText(photo.File);
-            if (uid is not null)
-            {
-                yield return uid;
-            }
         }
     }
 
@@ -3182,31 +3118,7 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static string? ExtractPrimaryPhotoUid(QuotationDamageItem damage)
     {
-        if (damage.Photos is { Count: > 0 })
-        {
-            var primary = damage.Photos
-                .FirstOrDefault(photo => photo?.IsPrimary == true && !string.IsNullOrWhiteSpace(photo.PhotoUid));
-            if (primary?.PhotoUid is { } primaryUid && !string.IsNullOrWhiteSpace(primaryUid))
-            {
-                return primaryUid;
-            }
-
-            var fallback = damage.Photos
-                .FirstOrDefault(photo => !string.IsNullOrWhiteSpace(photo?.PhotoUid));
-            if (fallback?.PhotoUid is { } fallbackUid && !string.IsNullOrWhiteSpace(fallbackUid))
-            {
-                return fallbackUid;
-            }
-
-            var legacy = damage.Photos
-                .FirstOrDefault(photo => !string.IsNullOrWhiteSpace(photo?.File));
-            if (legacy?.File is { } legacyFile && !string.IsNullOrWhiteSpace(legacyFile))
-            {
-                return legacyFile;
-            }
-        }
-
-        return damage.Photo;
+        return NormalizeOptionalText(damage.Photo);
     }
 
     /// <summary>
@@ -3403,15 +3315,7 @@ public class QuotationService : IQuotationService
             var photoUid = PickRandomPhotoUid(photoSamples, random);
             if (photoUid is not null)
             {
-                damage.DisplayPhotos = new List<QuotationDamagePhoto>
-                {
-                    new()
-                    {
-                        PhotoUid = photoUid,
-                        Description = "測試傷痕照片",
-                        IsPrimary = true
-                    }
-                };
+                damage.DisplayPhoto = photoUid;
             }
 
             damages.Add(damage);
