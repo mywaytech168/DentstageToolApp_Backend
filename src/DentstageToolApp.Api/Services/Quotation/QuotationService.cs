@@ -40,8 +40,6 @@ public class QuotationService : IQuotationService
     private static readonly string[] TestDamageStatuses = { "輕微凹痕", "中度凹痕", "需烤漆", "待確認" };
     // 產生測試資料時使用的敘述範例。
     private static readonly string[] TestDamageDescriptions = { "停車擦撞造成凹陷", "需板金搭配烤漆", "建議同時處理刮痕", "需另行評估內部結構" };
-    // 產生測試資料時使用的來源說明範例。
-    private static readonly string[] TestSourceSamples = { "官方網站", "老客戶轉介", "保險公司轉介", "粉絲團私訊" };
     // 產生測試資料時使用的預約方式範例，方便前端展示不同來源。
     private static readonly string[] TestBookMethodSamples = { "電話預約", "LINE 預約", "現場排程" };
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
@@ -116,7 +114,6 @@ public class QuotationService : IQuotationService
             {
                 EstimationTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 CreatorTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
-                Source = BuildSourceText(customer, technician, random),
                 BookMethod = BuildBookMethodText(random),
                 ReservationDate = reservationDate,
                 RepairDate = repairDate
@@ -472,7 +469,6 @@ public class QuotationService : IQuotationService
         var creatorTechnicianEntity = await GetTechnicianEntityAsync(storeInfo.CreatorTechnicianUid, cancellationToken);
         var creatorUid = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianUid) ?? estimatorUid;
         var creatorName = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianName) ?? estimatorName;
-        var source = NormalizeRequiredText(storeInfo.Source, "維修來源");
         // 預約方式允許為空值，僅在前端提供時紀錄，利於後續統計。
         var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
 
@@ -694,8 +690,8 @@ public class QuotationService : IQuotationService
             Township = customerTownship,
             Reason = customerReason,
             ConnectRemark = customerRemark,
-            // 消息來源優先採用門市輸入，若門市未提供則以客戶主檔資料補齊。
-            Source = source ?? customerSource,
+            // 消息來源改由客戶主檔統一帶入，避免前端重複傳遞同一資料。
+            Source = customerSource,
             Email = customerEmail,
             Remark = remarkPayload,
             Discount = roundingDiscount,
@@ -3375,26 +3371,6 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 建立估價單時，以客戶來源或門市資訊決定測試資料的來源描述。
-    /// </summary>
-    private static string BuildSourceText(CustomerEntity? customer, TechnicianEntity? technician, Random random)
-    {
-        var customerSource = NormalizeOptionalText(customer?.Source);
-        if (customerSource is not null)
-        {
-            return customerSource;
-        }
-
-        var storeName = NormalizeOptionalText(technician?.Store?.StoreName);
-        if (storeName is not null)
-        {
-            return $"{storeName} 來電";
-        }
-
-        return TestSourceSamples[random.Next(TestSourceSamples.Length)];
-    }
-
-    /// <summary>
     /// 建立測試資料用的預約方式文字，提供多樣化範例方便前端驗證畫面。
     /// </summary>
     private static string BuildBookMethodText(Random random)
@@ -3679,11 +3655,6 @@ public class QuotationService : IQuotationService
         notes.Add(usedExistingData
             ? "部分欄位取用資料庫既有資料，請於送出前確認是否符合測試情境。"
             : "目前資料庫缺少樣本，所有欄位皆由系統隨機填入。");
-
-        if (draft.Store?.Source is not null)
-        {
-            notes.Add($"來源：{draft.Store.Source}");
-        }
 
         if (draft.Store?.BookMethod is not null)
         {

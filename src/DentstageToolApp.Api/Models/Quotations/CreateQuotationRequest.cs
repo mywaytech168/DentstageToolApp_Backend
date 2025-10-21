@@ -11,7 +11,7 @@ namespace DentstageToolApp.Api.Models.Quotations;
 public class CreateQuotationRequest
 {
     /// <summary>
-    /// 店家相關資訊，包含估價技師 UID、來源與預約排程設定，對應 <see cref="CreateQuotationStoreInfo"/> 結構。
+    /// 店家相關資訊，包含估價技師 UID 與預約排程設定，對應 <see cref="CreateQuotationStoreInfo"/> 結構。
     /// </summary>
     [Required]
     public CreateQuotationStoreInfo Store { get; set; } = new();
@@ -45,7 +45,7 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 建立估價單時，僅需提供操作者與來源資訊的店家欄位。
+/// 建立估價單時，僅需提供操作者與排程資訊的店家欄位，維修來源將由系統依顧客資料自動補齊。
 /// </summary>
 public class CreateQuotationStoreInfo
 {
@@ -56,12 +56,6 @@ public class CreateQuotationStoreInfo
     [Required(ErrorMessage = "請選擇估價技師。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
     public string? EstimationTechnicianUid { get; set; }
-
-    /// <summary>
-    /// 維修來源。
-    /// </summary>
-    [Required(ErrorMessage = "請輸入維修來源。")]
-    public string? Source { get; set; }
 
     /// <summary>
     /// 預約方式（例如電話、線上填單），提供後端統計來源使用。
