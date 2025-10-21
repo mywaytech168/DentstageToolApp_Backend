@@ -170,8 +170,10 @@ public class MaintenanceOrdersController : ControllerBase
           "quotationNo": "Q25100001",
           "orderNo": "O25100001",
           "store": {
-            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
             "source": "官方網站",
+            "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
             "repairDate": "2024-10-25T09:00:00"
           },
@@ -184,7 +186,12 @@ public class MaintenanceOrdersController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                "photos": [
+                  {
+                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -195,7 +202,12 @@ public class MaintenanceOrdersController : ControllerBase
             "paint": [],
             "other": [
               {
-                "photos": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
+                "photos": [
+                  {
+                    "photoUid": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "保桿內塑料件",
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
@@ -217,6 +229,7 @@ public class MaintenanceOrdersController : ControllerBase
             ]
           },
           "maintenance": {
+            "fixType": "其他",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
