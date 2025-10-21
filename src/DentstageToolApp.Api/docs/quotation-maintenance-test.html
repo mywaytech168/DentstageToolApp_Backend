@@ -75,16 +75,26 @@
 
     // ---------- 常數區 ----------
     const STORAGE_KEY = 'dentstage-quotation-maintenance-test-settings';
+    const PHOTO_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
 
     // ---------- 輔助函式區 ----------
     /**
      * 說明：建立預設的估價單編輯請求範本，協助使用者快速填寫必填欄位。
      */
+    const createEmptyPhotoCollection = () => ({
+      dent: [],
+      beauty: [],
+      paint: [],
+      other: []
+    });
+
     const createBlankQuotationPayload = () => ({
       quotationNo: '',
       store: {
-        technicianUid: '',
+        estimationTechnicianUid: '',
+        creatorTechnicianUid: '',
         source: '',
+        bookMethod: '',
         reservationDate: null,
         repairDate: null
       },
@@ -100,7 +110,7 @@
         other: ''
       },
       remark: '',
-      damages: [],
+      photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
         fixType: '',
@@ -129,8 +139,10 @@
       orderNo: '',
       quotationNo: '',
       store: {
-        technicianUid: '',
+        estimationTechnicianUid: '',
+        creatorTechnicianUid: '',
         source: '',
+        bookMethod: '',
         reservationDate: null,
         repairDate: null
       },
@@ -146,7 +158,7 @@
         other: ''
       },
       remark: '',
-      damages: [],
+      photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
         fixType: '',
@@ -168,6 +180,127 @@
       }
     });
 
+    // 說明：將維修類型文字轉換為照片分類鍵值，方便對應 API 需求。
+    const resolvePhotoCategoryKey = (fixType) => {
+      const normalized = typeof fixType === 'string' ? fixType.trim().toLowerCase() : '';
+      if (!normalized) {
+        return 'other';
+      }
+      if (['凹痕', 'dent', 'dentrepair'].includes(normalized)) {
+        return 'dent';
+      }
+      if (['美容', 'beauty'].includes(normalized)) {
+        return 'beauty';
+      }
+      if (['板烤', '烤漆', 'paint'].includes(normalized)) {
+        return 'paint';
+      }
+      return 'other';
+    };
+
+    // 說明：整合舊版字串與新版物件格式，轉換為統一的照片陣列結構。
+    const buildPhotoListFromDetailItem = (item) => {
+      if (!item) {
+        return [];
+      }
+
+      const result = [];
+      const appendPhoto = (uid, primaryFlag) => {
+        const trimmed = typeof uid === 'string' ? uid.trim() : '';
+        if (!trimmed) {
+          return;
+        }
+        result.push({
+          photoUid: trimmed,
+          isPrimary: Boolean(primaryFlag)
+        });
+      };
+
+      const processArray = (list) => {
+        if (!Array.isArray(list)) {
+          if (typeof list === 'string') {
+            appendPhoto(list, result.length === 0);
+          }
+          return;
+        }
+
+        list.forEach((value, index) => {
+          if (!value) {
+            return;
+          }
+          if (typeof value === 'string') {
+            appendPhoto(value, result.length === 0 && index === 0);
+            return;
+          }
+          const uid = typeof value.photoUid === 'string'
+            ? value.photoUid
+            : typeof value.file === 'string'
+              ? value.file
+              : '';
+          const primary = typeof value.isPrimary === 'boolean'
+            ? value.isPrimary
+            : result.length === 0 && index === 0;
+          appendPhoto(uid, primary);
+        });
+      };
+
+      processArray(item.photos);
+      processArray(item.photoUids);
+      appendPhoto(item.photoUid, result.length === 0);
+      appendPhoto(item.photo, result.length === 0);
+
+      if (result.length > 0 && !result.some((photo) => photo.isPrimary)) {
+        result[0].isPrimary = true;
+      }
+
+      return result;
+    };
+
+    // 說明：依據詳情資料重建 API 所需的照片分類集合。
+    const buildPhotoCollectionFromDetail = (detail) => {
+      const collection = createEmptyPhotoCollection();
+
+      if (!detail) {
+        return collection;
+      }
+
+      const summary = detail.photos && typeof detail.photos === 'object' ? detail.photos : null;
+      let hasSummaryData = false;
+
+      if (summary) {
+        PHOTO_CATEGORY_KEYS.forEach((category) => {
+          const items = Array.isArray(summary[category]) ? summary[category] : [];
+          if (items.length > 0) {
+            hasSummaryData = true;
+          }
+          collection[category] = items.map((item) => ({
+            photos: buildPhotoListFromDetailItem(item),
+            position: item?.position ?? '',
+            dentStatus: item?.dentStatus ?? '',
+            description: item?.description ?? '',
+            estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
+            fixType: item?.fixType ?? item?.fixTypeName ?? ''
+          }));
+        });
+      }
+
+      if (!hasSummaryData && Array.isArray(detail.damages)) {
+        detail.damages.forEach((item) => {
+          const category = resolvePhotoCategoryKey(item?.fixType ?? item?.fixTypeName ?? '');
+          collection[category].push({
+            photos: buildPhotoListFromDetailItem(item),
+            position: item?.position ?? '',
+            dentStatus: item?.dentStatus ?? '',
+            description: item?.description ?? '',
+            estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
+            fixType: item?.fixType ?? item?.fixTypeName ?? ''
+          });
+        });
+      }
+
+      return collection;
+    };
+
     /**
      * 說明：由估價單詳情資料建立編輯請求，盡量保留既有欄位避免遺失資訊。
      */
@@ -179,8 +312,10 @@
       const payload = createBlankQuotationPayload();
       payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
       payload.store = {
-        technicianUid: detail.store?.technicianUid ?? '',
+        estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
+        creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
         source: detail.store?.source ?? '',
+        bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
       };
@@ -196,15 +331,7 @@
         other: detail.categoryRemarks?.other ?? ''
       };
       payload.remark = detail.remark ?? '';
-      payload.damages = Array.isArray(detail.damages)
-        ? detail.damages.map((item) => ({
-            photos: item.photos ?? '',
-            position: item.position ?? '',
-            dentStatus: item.dentStatus ?? '',
-            description: item.description ?? '',
-            estimatedAmount: item.estimatedAmount ?? 0
-          }))
-        : [];
+      payload.photos = buildPhotoCollectionFromDetail(detail);
       payload.carBodyConfirmation = detail.carBodyConfirmation
         ? {
             signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
@@ -255,8 +382,10 @@
       payload.orderNo = detail.orderNo ?? payload.orderNo;
       payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
       payload.store = {
-        technicianUid: detail.store?.technicianUid ?? '',
+        estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
+        creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
         source: detail.store?.source ?? '',
+        bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
       };
@@ -272,15 +401,7 @@
         other: detail.categoryRemarks?.other ?? ''
       };
       payload.remark = detail.remark ?? '';
-      payload.damages = Array.isArray(detail.damages)
-        ? detail.damages.map((item) => ({
-            photos: item.photos ?? '',
-            position: item.position ?? '',
-            dentStatus: item.dentStatus ?? '',
-            description: item.description ?? '',
-            estimatedAmount: item.estimatedAmount ?? 0
-          }))
-        : [];
+      payload.photos = buildPhotoCollectionFromDetail(detail);
       payload.carBodyConfirmation = detail.carBodyConfirmation
         ? {
             signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',

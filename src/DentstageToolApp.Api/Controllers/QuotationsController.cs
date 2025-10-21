@@ -92,8 +92,9 @@ public class QuotationsController : ControllerBase
         """
         {
           "store": {
-            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
-            "source": "官方網站",
+            "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
             "repairDate": "2024-10-25T09:00:00"
           },
@@ -106,7 +107,12 @@ public class QuotationsController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                "photos": [
+                  {
+                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -116,43 +122,26 @@ public class QuotationsController : ControllerBase
             "beauty": [],
             "paint": [
               {
-                "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+                "photos": [
+                  {
+                    "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "右後葉子板",
-                "dentStatus": "烤漆",
+                "dentStatus": "刮痕",
                 "description": "刮傷需補土烤漆",
                 "estimatedAmount": 3200
               }
             ],
             "other": []
           },
-          "carBodyConfirmation": {
-            "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
-            "damageMarkers": [
-              {
-                "x": 0.42,
-                "y": 0.63,
-                "hasDent": true,
-                "hasScratch": false,
-                "hasPaintPeel": false,
-                "remark": "主要凹痕"
-              }
-            ]
-          },
           "maintenance": {
+            "fixType": "凹痕",
             "reserveCar": true,
-            "applyCoating": false,
-            "applyWrapping": false,
-            "hasRepainted": false,
-            "needToolEvaluation": true,
-            "otherFee": 800,
-            "roundingDiscount": 200,
-            "percentageDiscount": 10,
-            "discountReason": "回饋老客戶",
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,
-            "suggestedPaintReason": null,
-            "unrepairableReason": null,
             "remark": "請於修復後通知客戶取車"
           }
         }
@@ -249,8 +238,10 @@ public class QuotationsController : ControllerBase
         {
           "quotationNo": "Q25100001",
           "store": {
-            "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
             "source": "官方網站",
+            "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
             "repairDate": "2024-10-25T09:00:00"
           },
@@ -263,7 +254,12 @@ public class QuotationsController : ControllerBase
           "photos": {
             "dent": [
               {
-                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                "photos": [
+                  {
+                    "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
@@ -272,7 +268,12 @@ public class QuotationsController : ControllerBase
             ],
             "beauty": [
               {
-                "photos": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
+                "photos": [
+                  {
+                    "photoUid": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
+                    "isPrimary": true
+                  }
+                ],
                 "position": "內裝皮革",
                 "dentStatus": "美容拋光",
                 "description": "座椅刮痕需要美容處理",
@@ -296,6 +297,7 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
+            "fixType": "美容",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
