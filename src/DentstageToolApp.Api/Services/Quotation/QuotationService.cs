@@ -147,7 +147,8 @@ public class QuotationService : IQuotationService
             Store = technician?.Store is null ? null : CreateStoreSummary(technician.Store),
             Customer = customer is null ? null : CreateCustomerSummary(customer),
             Car = car is null ? null : CreateCarSummary(car),
-            FixType = CreateFixTypeSummary(fixTypeKey, fixTypeDisplayName),
+            // 維修類型僅需提供中文名稱，方便測試頁直接呈現。
+            FixType = fixTypeDisplayName,
             UsedExistingData = usedExistingData,
             GeneratedAt = DateTimeOffset.Now,
             Notes = BuildTestNotes(draft, usedExistingData)
@@ -3425,19 +3426,6 @@ public class QuotationService : IQuotationService
             Uid = car.CarUid,
             Name = plate,
             Description = descriptionParts.Count > 0 ? string.Join("，", descriptionParts) : null
-        };
-    }
-
-    /// <summary>
-    /// 建立維修類型摘要資訊。
-    /// </summary>
-    private static CreateQuotationTestEntitySummary CreateFixTypeSummary(string fixTypeKey, string fixTypeDisplayName)
-    {
-        return new CreateQuotationTestEntitySummary
-        {
-            Uid = fixTypeKey,
-            Name = fixTypeDisplayName,
-            Description = "測試資料用維修類型"
         };
     }
 
