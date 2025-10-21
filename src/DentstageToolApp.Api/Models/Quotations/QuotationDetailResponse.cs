@@ -273,61 +273,6 @@ public class QuotationCarBodyConfirmationResponse
 /// </summary>
 public class QuotationMaintenanceDetail
 {
-    private string? _fixType;
-    private string? _fixTypeDisplay;
-
-    /// <summary>
-    /// 維修類型中文標籤，供前端直接回填四種固定分類。
-    /// </summary>
-    public string? FixType
-    {
-        get
-        {
-            if (!string.IsNullOrWhiteSpace(_fixTypeDisplay))
-            {
-                return _fixTypeDisplay;
-            }
-
-            return string.IsNullOrWhiteSpace(_fixType)
-                ? null
-                : QuotationDamageFixTypeHelper.ResolveDisplayName(_fixType);
-        }
-        set
-        {
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                _fixType = null;
-                _fixTypeDisplay = null;
-                return;
-            }
-
-            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
-            _fixType = resolved;
-            _fixTypeDisplay = resolved;
-        }
-    }
-
-    /// <summary>
-    /// 維修類型顯示名稱，預設為中文描述。
-    /// </summary>
-    [JsonIgnore]
-    public string? FixTypeName
-    {
-        get => _fixTypeDisplay;
-        set => _fixTypeDisplay = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    }
-
-    /// <summary>
-    /// 舊版欄位：維修類型顯示名稱。
-    /// </summary>
-    [JsonPropertyName("fixTypeName")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? LegacyFixTypeName
-    {
-        get => null;
-        set => FixType = value;
-    }
-
     /// <summary>
     /// 是否需留車。
     /// </summary>

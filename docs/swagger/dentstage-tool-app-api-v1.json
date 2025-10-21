@@ -57,7 +57,7 @@
                 "properties": {
                   "store": {
                     "type": "object",
-                    "description": "門市來源與技師資訊。",
+                    "description": "門市技師與排程資訊，由後端依登入門市自動補齊來源欄位。",
                     "properties": {
                       "estimationTechnicianUid": {
                         "type": "string",
@@ -66,10 +66,6 @@
                       "creatorTechnicianUid": {
                         "type": "string",
                         "description": "製單技師的 UID，若未指定則與估價技師相同，同步存入維修單 CreatorTechnicianUID。"
-                      },
-                      "source": {
-                        "type": "string",
-                        "description": "客戶來源描述。"
                       }
                     }
                   },
@@ -153,8 +149,7 @@
                   "store": {
                     "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
                     "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
-                    "bookMethod": "LINE 預約",
-                    "source": "官方網站"
+                    "bookMethod": "LINE 預約"
                   },
                   "car": {
                   "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
