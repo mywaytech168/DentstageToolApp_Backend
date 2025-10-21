@@ -97,17 +97,6 @@ Authorization: Bearer {舊的AccessToken}
 
 > 品牌列表回應會提供 `pagination` 欄位，包含 `page`、`pageSize`、`totalCount` 與 `totalPages`，可直接驅動前端分頁元件。 【F:src/DentstageToolApp.Api/Models/Brands/BrandListResponse.cs†L8-L24】
 
-## 服務類別模組（`api/service-categories`）
-
-| 方法 | 路徑 | 功能摘要 | 備註 |
-| --- | --- | --- | --- |
-| GET | `/api/service-categories?page=1&pageSize=20` | 以分頁取得服務類別。 | Query 對應 `PaginationRequest`。 |
-| POST | `/api/service-categories` | 新增服務類別。 | Body 採 JSON，對應 `CreateServiceCategoryRequest`。 |
-| POST | `/api/service-categories/edit` | 編輯服務類別。 | Body 採 JSON，對應 `EditServiceCategoryRequest`。 |
-| POST | `/api/service-categories/delete` | 刪除服務類別。 | Body 採 JSON，對應 `DeleteServiceCategoryRequest`。 |
-
-> 回應的 `pagination` 欄位與品牌模組一致，方便統一處理分頁邏輯。 【F:src/DentstageToolApp.Api/Models/ServiceCategories/ServiceCategoryListResponse.cs†L8-L24】
-
 ## 門市模組（`api/stores`）
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
