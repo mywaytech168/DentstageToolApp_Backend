@@ -1045,12 +1045,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             Status290User = NormalizeOptionalText(order.Status290User),
             Status295Date = order.Status295Timestamp,
             Status295User = NormalizeOptionalText(order.Status295User),
-            Status296Date = string.Equals(order.Status, "296", StringComparison.OrdinalIgnoreCase)
-                ? order.CurrentStatusDate
-                : null,
-            Status296User = string.Equals(order.Status, "296", StringComparison.OrdinalIgnoreCase)
-                ? NormalizeOptionalText(order.CurrentStatusUser)
-                : null,
             CurrentStatusUser = NormalizeOptionalText(order.CurrentStatusUser)
         };
     }
@@ -1062,6 +1056,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         if (string.Equals(currentStatus, "296", StringComparison.OrdinalIgnoreCase))
         {
+            // 維修過期僅需回溯到已開工狀態，避免清除先前預約等歷程。
             return order.Status220Date.HasValue ? "220" : null;
         }
 
@@ -1160,7 +1155,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             "220" => order.Status220Date,
             "290" => order.Status290Date,
             "295" => order.Status295Timestamp,
-            "296" => order.CurrentStatusDate,
             _ => order.CurrentStatusDate
         };
     }
