@@ -124,6 +124,7 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
 builder.Services.Configure<PhotoStorageOptions>(builder.Configuration.GetSection("PhotoStorage"));
+builder.Services.Configure<AppReleaseOptions>(builder.Configuration.GetSection("AppRelease"));
 var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
@@ -134,6 +135,27 @@ var tesseractOptions = builder.Configuration.GetSection("TesseractOcr").Get<Tess
 if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessDataPath))
 {
     throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
+}
+
+var appReleaseOptions = builder.Configuration.GetSection("AppRelease").Get<AppReleaseOptions>();
+if (appReleaseOptions is null)
+{
+    throw new InvalidOperationException("未設定 AppRelease 組態，無法提供 APK 版本資訊。");
+}
+
+if (string.IsNullOrWhiteSpace(appReleaseOptions.ApkFileName))
+{
+    throw new InvalidOperationException("AppRelease.ApkFileName 未設定，請填寫 APK 檔名。");
+}
+
+if (string.IsNullOrWhiteSpace(appReleaseOptions.StorageRootPath))
+{
+    throw new InvalidOperationException("AppRelease.StorageRootPath 未設定，請指定 APK 儲存目錄。");
+}
+
+if (string.IsNullOrWhiteSpace(appReleaseOptions.DownloadBasePath))
+{
+    throw new InvalidOperationException("AppRelease.DownloadBasePath 未設定，請指定 APK 下載網址前綴。");
 }
 
 var syncOptionsSection = builder.Configuration.GetSection("Sync");
@@ -326,6 +348,39 @@ if (swaggerEnabled)
 
 // 啟用 HTTPS 重新導向，確保外部存取使用安全通道
 app.UseHttpsRedirection();
+
+// 針對 APK 目錄提供靜態檔案服務，讓行動端可以直接下載最新安裝檔
+var apkPhysicalDirectory = Path.IsPathRooted(appReleaseOptions.StorageRootPath)
+    ? appReleaseOptions.StorageRootPath
+    : Path.Combine(app.Environment.ContentRootPath, appReleaseOptions.StorageRootPath);
+if (!Directory.Exists(apkPhysicalDirectory))
+{
+    // 若目錄尚未建立則自動建立，避免部署後漏建資料夾
+    Directory.CreateDirectory(apkPhysicalDirectory);
+}
+
+// 下載路徑需確保包含前導斜線，才可被 UseStaticFiles 正確辨識
+var normalizedApkRequestPath = appReleaseOptions.DownloadBasePath.Trim();
+if (!normalizedApkRequestPath.StartsWith('/'))
+{
+    normalizedApkRequestPath = $"/{normalizedApkRequestPath.Trim('/')}";
+}
+else
+{
+    normalizedApkRequestPath = $"/{normalizedApkRequestPath.Trim('/')}";
+}
+
+// 當 DownloadBasePath 設為根路徑時，避免產生空字串導致靜態檔案對應失敗
+if (string.IsNullOrWhiteSpace(normalizedApkRequestPath) || normalizedApkRequestPath == "/")
+{
+    normalizedApkRequestPath = "/downloads/apk";
+}
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(apkPhysicalDirectory),
+    RequestPath = normalizedApkRequestPath
+});
 
 // 針對 docs 目錄提供靜態檔案服務，讓估價單流程說明頁面可直接透過瀏覽器檢視
 var documentationDirectory = Path.Combine(app.Environment.ContentRootPath, "docs");
