@@ -93,7 +93,6 @@
       store: {
         estimationTechnicianUid: '',
         creatorTechnicianUid: '',
-        source: '',
         bookMethod: '',
         reservationDate: null,
         repairDate: null
@@ -113,7 +112,6 @@
       photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
-        fixType: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -141,7 +139,6 @@
       store: {
         estimationTechnicianUid: '',
         creatorTechnicianUid: '',
-        source: '',
         bookMethod: '',
         reservationDate: null,
         repairDate: null
@@ -161,7 +158,6 @@
       photos: createEmptyPhotoCollection(),
       carBodyConfirmation: null,
       maintenance: {
-        fixType: '',
         reserveCar: false,
         applyCoating: false,
         applyWrapping: false,
@@ -328,7 +324,6 @@
       payload.store = {
         estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
         creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        source: detail.store?.source ?? '',
         bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
@@ -363,7 +358,6 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixType: detail.maintenance.fixType ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,
@@ -398,7 +392,6 @@
       payload.store = {
         estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
         creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        source: detail.store?.source ?? '',
         bookMethod: detail.store?.bookMethod ?? '',
         reservationDate: detail.store?.reservationDate ?? null,
         repairDate: detail.store?.repairDate ?? null
@@ -433,7 +426,6 @@
         : null;
       payload.maintenance = detail.maintenance
         ? {
-            fixType: detail.maintenance.fixType ?? '',
             reserveCar: detail.maintenance.reserveCar ?? false,
             applyCoating: detail.maintenance.applyCoating ?? false,
             applyWrapping: detail.maintenance.applyWrapping ?? false,

@@ -45,7 +45,7 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 建立估價單時，僅需提供操作者與排程資訊的店家欄位，維修來源將由系統依顧客資料自動補齊。
+/// 建立估價單時，僅需提供操作者與排程資訊的店家欄位，其餘來源相關欄位改由後端自動帶入。
 /// </summary>
 public class CreateQuotationStoreInfo
 {
@@ -79,16 +79,10 @@ public class CreateQuotationStoreInfo
 }
 
 /// <summary>
-/// 建立估價單時需指定的維修設定欄位，統一定義維修類型與相關選項。
+/// 建立估價單時需指定的維修設定欄位，統一整理留車、折扣與估工等設定，由後端自行判斷維修類型。
 /// </summary>
 public class CreateQuotationMaintenanceInfo
 {
-    /// <summary>
-    /// 維修類型中文標籤，若未提供將改由系統依據照片分類自動推論。
-    /// </summary>
-    [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
-    public string? FixType { get; set; }
-
     /// <summary>
     /// 是否需留車，True 代表需要留車。
     /// </summary>
@@ -237,11 +231,6 @@ public class QuotationStoreInfo
     public DateTime? ReservationDate { get; set; }
 
     /// <summary>
-    /// 維修來源。
-    /// </summary>
-    public string? Source { get; set; }
-
-    /// <summary>
     /// 預約方式（例如電話預約、LINE 訊息）。
     /// </summary>
     public string? BookMethod { get; set; }
@@ -257,11 +246,6 @@ public class QuotationStoreInfo
 /// </summary>
 public class QuotationMaintenanceInfo
 {
-    /// <summary>
-    /// 維修類型中文標籤，使用凹痕、美容、板烤或其他四種固定選項。
-    /// </summary>
-    public string? FixType { get; set; }
-
     /// <summary>
     /// 是否需留車。
     /// </summary>

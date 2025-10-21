@@ -224,10 +224,10 @@ Content-Type: application/json
   }
 }
 ```
-- `store`：需帶技師 UID、來源、預約方式與可選的預約／維修日期。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L52-L81】
+- `store`：僅需帶技師 UID、預約方式與可選的預約／維修日期，來源會由後端依門市自動補齊。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L52-L81】
 - `car`：可額外附上 `mileage` 更新車輛里程。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L362-L384】
 - `customer`：沿用客戶主檔資訊，建立或編輯估價單時僅需帶入 `customerUid`。
-- `maintenance`：含維修類型、留車、折扣、估工等設定。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】
+- `maintenance`：含留車、折扣、估工等設定，維修類型會由後端根據照片自動統計。 【F:src/DentstageToolApp.Api/Quotations/CreateQuotationRequest.cs†L34-L120】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L552-L684】
 - `photos`：以 `dent`、`beauty`、`paint`、`other` 四個陣列分別承載傷痕資料，每筆僅需帶入 `photo`（PhotoUID 字串）、估價金額與位置／狀態說明，後端會依照片自動決定主分類。 【F:src/DentstageToolApp.Api/Models/Quotations/CreateQuotationRequest.cs†L29-L120】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1165-L1338】
 - 編輯時需額外帶入 `quotationNo`，其餘欄位結構相同。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
 
