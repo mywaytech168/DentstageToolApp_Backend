@@ -180,28 +180,24 @@ Content-Type: application/json
   "customer": {
     "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
   },
-  "damages": {
-    "dent": [
-      {
-        "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-        "position": "前保桿",
-        "dentStatus": "大面積",
-        "description": "需板金搭配烤漆",
-        "estimatedAmount": 4500,
-        "fixType": "凹痕"
-      }
-    ],
-    "paint": [
-      {
-        "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
-        "position": "右後葉子板",
-        "dentStatus": "烤漆",
-        "description": "刮傷需補土烤漆",
-        "estimatedAmount": 3200,
-        "fixType": "板烤/鈑烤"
-      }
-    ]
-  },
+  "damages": [
+    {
+      "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+      "position": "前保桿",
+      "dentStatus": "大面積",
+      "description": "需板金搭配烤漆",
+      "estimatedAmount": 4500,
+      "fixType": "凹痕"
+    },
+    {
+      "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+      "position": "右後葉子板",
+      "dentStatus": "烤漆",
+      "description": "刮傷需補土烤漆",
+      "estimatedAmount": 3200,
+      "fixType": "板烤/鈑烤"
+    }
+  ],
   "carBodyConfirmation": {
     "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
     "damageMarkers": [

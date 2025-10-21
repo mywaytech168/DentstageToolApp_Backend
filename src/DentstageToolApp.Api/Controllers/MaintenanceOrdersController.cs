@@ -181,28 +181,24 @@ public class MaintenanceOrdersController : ControllerBase
           "customer": {
             "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
-          "damages": {
-            "dent": [
-              {
-                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                "position": "前保桿",
-                "dentStatus": "大面積",
-                "description": "需板金搭配烤漆",
-                "estimatedAmount": 4500,
-                "fixType": "凹痕"
-              }
-            ],
-            "other": [
-              {
-                "photos": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
-                "position": "保桿內塑料件",
-                "dentStatus": "拆件檢測",
-                "description": "需確認內部樑是否受損",
-                "estimatedAmount": 1200,
-                "fixType": "其他"
-              }
-            ]
-          },
+          "damages": [
+            {
+              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+              "position": "前保桿",
+              "dentStatus": "大面積",
+              "description": "需板金搭配烤漆",
+              "estimatedAmount": 4500,
+              "fixType": "凹痕"
+            },
+            {
+              "photos": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
+              "position": "保桿內塑料件",
+              "dentStatus": "拆件檢測",
+              "description": "需確認內部樑是否受損",
+              "estimatedAmount": 1200,
+              "fixType": "其他"
+            }
+          ],
           "carBodyConfirmation": {
             "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
             "damageMarkers": [
