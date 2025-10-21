@@ -103,24 +103,28 @@ public class QuotationsController : ControllerBase
           "customer": {
             "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
-          "damages": [
-            {
-              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-              "position": "前保桿",
-              "dentStatus": "大面積",
-              "description": "需板金搭配烤漆",
-              "estimatedAmount": 4500,
-              "fixType": "凹痕"
-            },
-            {
-              "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
-              "position": "右後葉子板",
-              "dentStatus": "烤漆",
-              "description": "刮傷需補土烤漆",
-              "estimatedAmount": 3200,
-              "fixType": "板烤"
-            }
-          ],
+          "photos": {
+            "dent": [
+              {
+                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                "position": "前保桿",
+                "dentStatus": "大面積",
+                "description": "需板金搭配烤漆",
+                "estimatedAmount": 4500
+              }
+            ],
+            "beauty": [],
+            "paint": [
+              {
+                "photos": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+                "position": "右後葉子板",
+                "dentStatus": "烤漆",
+                "description": "刮傷需補土烤漆",
+                "estimatedAmount": 3200
+              }
+            ],
+            "other": []
+          },
           "carBodyConfirmation": {
             "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
             "damageMarkers": [
@@ -135,7 +139,6 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "凹痕",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
@@ -257,24 +260,28 @@ public class QuotationsController : ControllerBase
           "customer": {
             "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
           },
-          "damages": [
-            {
-              "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-              "position": "前保桿",
-              "dentStatus": "大面積",
-              "description": "需板金搭配烤漆",
-              "estimatedAmount": 4500,
-              "fixType": "凹痕"
-            },
-            {
-              "photos": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
-              "position": "內裝皮革",
-              "dentStatus": "美容拋光",
-              "description": "座椅刮痕需要美容處理",
-              "estimatedAmount": 1500,
-              "fixType": "美容"
-            }
-          ],
+          "photos": {
+            "dent": [
+              {
+                "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                "position": "前保桿",
+                "dentStatus": "大面積",
+                "description": "需板金搭配烤漆",
+                "estimatedAmount": 4500
+              }
+            ],
+            "beauty": [
+              {
+                "photos": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
+                "position": "內裝皮革",
+                "dentStatus": "美容拋光",
+                "description": "座椅刮痕需要美容處理",
+                "estimatedAmount": 1500
+              }
+            ],
+            "paint": [],
+            "other": []
+          },
           "carBodyConfirmation": {
             "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
             "damageMarkers": [
@@ -289,7 +296,6 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "板烤",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,

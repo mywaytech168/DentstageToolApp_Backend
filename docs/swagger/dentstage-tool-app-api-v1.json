@@ -47,7 +47,7 @@
           "Quotations"
         ],
         "summary": "新增估價單",
-        "description": "建立估價單時的請求格式示例，其中 damages.photos 僅需填入主要照片的 PhotoUID 字串。",
+        "description": "建立估價單時的請求格式示例，photos 物件會依凹痕、美容、板烤、其他四大類別分別提交照片與估價設定。",
         "requestBody": {
           "required": true,
           "content": {
@@ -93,36 +93,38 @@
                       }
                     }
                   },
-                  "damages": {
-                    "type": "array",
-                    "description": "傷痕列表，每筆僅回傳主要照片 UID。",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "photos": {
-                          "type": "string",
-                          "description": "主要傷痕照片的 PhotoUID 字串。"
-                        },
-                        "position": {
-                          "type": "string",
-                          "description": "傷痕位置描述。"
-                        },
-                        "dentStatus": {
-                          "type": "string",
-                          "description": "凹痕狀態敘述。"
-                        },
-                        "description": {
-                          "type": "string",
-                          "description": "備註說明。"
-                        },
-                        "estimatedAmount": {
-                          "type": "number",
-                          "description": "預估金額。"
+                  "photos": {
+                    "type": "object",
+                    "description": "依維修類型分組的照片集合，四大類別會自動對應凹痕、美容、板烤與其他。",
+                    "properties": {
+                      "dent": {
+                        "type": "array",
+                        "description": "凹痕類別的照片與估價項目。",
+                        "items": {
+                          "$ref": "#/components/schemas/QuotationPhotoItem"
                         }
                       },
-                      "required": [
-                        "photos"
-                      ]
+                      "beauty": {
+                        "type": "array",
+                        "description": "美容類別的照片與估價項目。",
+                        "items": {
+                          "$ref": "#/components/schemas/QuotationPhotoItem"
+                        }
+                      },
+                      "paint": {
+                        "type": "array",
+                        "description": "板烤類別的照片與估價項目。",
+                        "items": {
+                          "$ref": "#/components/schemas/QuotationPhotoItem"
+                        }
+                      },
+                      "other": {
+                        "type": "array",
+                        "description": "其他類別的照片與估價項目。",
+                        "items": {
+                          "$ref": "#/components/schemas/QuotationPhotoItem"
+                        }
+                      }
                     }
                   },
                   "carBodyConfirmation": {
@@ -159,15 +161,38 @@
                 "customer": {
                   "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A"
                 },
-                "damages": [
-                  {
-                    "photos": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
-                    "position": "保桿",
-                    "dentStatus": "大面積",
-                    "description": "需板金搭配烤漆",
-                    "estimatedAmount": 4500
-                  }
-                ],
+                "photos": {
+                  "dent": [
+                    {
+                      "photos": [
+                        {
+                          "photoUid": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
+                          "isPrimary": true
+                        }
+                      ],
+                      "position": "保桿",
+                      "dentStatus": "大面積",
+                      "description": "需板金搭配烤漆",
+                      "estimatedAmount": 4500
+                    }
+                  ],
+                  "beauty": [],
+                  "paint": [
+                    {
+                      "photos": [
+                        {
+                          "photoUid": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
+                          "isPrimary": true
+                        }
+                      ],
+                      "position": "右後葉子板",
+                      "dentStatus": "刮痕",
+                      "description": "刮傷需補土烤漆",
+                      "estimatedAmount": 3200
+                    }
+                  ],
+                  "other": []
+                },
                 "carBodyConfirmation": {
                   "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8"
                 },
@@ -212,6 +237,56 @@
           "status",
           "message",
           "timestamp"
+        ]
+      },
+      "QuotationPhotoItem": {
+        "type": "object",
+        "description": "估價單建立或編輯時提交的傷痕項目，內含照片與估價資訊。",
+        "properties": {
+          "photos": {
+            "type": "array",
+            "description": "此傷痕對應的照片列表。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "photoUid": {
+                  "type": "string",
+                  "description": "照片的唯一識別碼。"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "照片補充說明，例如拍攝角度。"
+                },
+                "isPrimary": {
+                  "type": "boolean",
+                  "description": "是否為主要展示照片。"
+                }
+              },
+              "required": [
+                "photoUid"
+              ]
+            },
+            "minItems": 1
+          },
+          "position": {
+            "type": "string",
+            "description": "損傷位置或部位描述。"
+          },
+          "dentStatus": {
+            "type": "string",
+            "description": "損傷狀態描述，例如大面積或刮痕。"
+          },
+          "description": {
+            "type": "string",
+            "description": "估價備註。"
+          },
+          "estimatedAmount": {
+            "type": "number",
+            "description": "預估金額 (元)。"
+          }
+        },
+        "required": [
+          "photos"
         ]
       }
     }

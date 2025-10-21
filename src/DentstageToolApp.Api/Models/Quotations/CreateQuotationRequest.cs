@@ -11,7 +11,7 @@ namespace DentstageToolApp.Api.Models.Quotations;
 public class CreateQuotationRequest
 {
     /// <summary>
-    /// 店家相關資訊，包含估價技師 UID、來源與預約排程設定，對應 <see cref="CreateQuotationStoreInfo"/> 結構。
+    /// 店家相關資訊，包含估價技師 UID 與預約排程設定，對應 <see cref="CreateQuotationStoreInfo"/> 結構。
     /// </summary>
     [Required]
     public CreateQuotationStoreInfo Store { get; set; } = new();
@@ -29,11 +29,9 @@ public class CreateQuotationRequest
     public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
-    /// 傷痕細項列表，改為獨立於類別之外集中管理，便於前端統一渲染表格。
-    /// 透過自訂轉換器支援舊版單物件與新版陣列格式，降低前端調整負擔。
+    /// 維修照片依維修類型分組的集合，改以 photos 承載四種固定分類，方便前端依類別呈現。
     /// </summary>
-    [JsonConverter(typeof(QuotationDamageCollectionConverter))]
-    public List<QuotationDamageItem> Damages { get; set; } = new();
+    public QuotationPhotoRequestCollection Photos { get; set; } = new();
 
     /// <summary>
     /// 車體確認單資料，對應 <see cref="QuotationCarBodyConfirmation"/>，可選擇帶入受損標記、簽名影像等延伸欄位。
@@ -47,7 +45,7 @@ public class CreateQuotationRequest
 }
 
 /// <summary>
-/// 建立估價單時，僅需提供操作者與來源資訊的店家欄位。
+/// 建立估價單時，僅需提供操作者與排程資訊的店家欄位，維修來源將由系統依顧客資料自動補齊。
 /// </summary>
 public class CreateQuotationStoreInfo
 {
@@ -58,12 +56,6 @@ public class CreateQuotationStoreInfo
     [Required(ErrorMessage = "請選擇估價技師。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
     public string? EstimationTechnicianUid { get; set; }
-
-    /// <summary>
-    /// 維修來源。
-    /// </summary>
-    [Required(ErrorMessage = "請輸入維修來源。")]
-    public string? Source { get; set; }
 
     /// <summary>
     /// 預約方式（例如電話、線上填單），提供後端統計來源使用。
@@ -92,9 +84,8 @@ public class CreateQuotationStoreInfo
 public class CreateQuotationMaintenanceInfo
 {
     /// <summary>
-    /// 維修類型中文標籤，限定使用凹痕、美容、板烤或其他四種固定選項。
+    /// 維修類型中文標籤，若未提供將改由系統依據照片分類自動推論。
     /// </summary>
-    [Required(ErrorMessage = "請選擇維修類型。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的維修類型。")]
     public string? FixType { get; set; }
 
@@ -365,6 +356,74 @@ public class QuotationMaintenanceInfo
     /// 維修相關備註。
     /// </summary>
     public string? Remark { get; set; }
+}
+
+/// <summary>
+/// 依維修類型拆分的照片集合，方便建立與編輯流程共用同一資料格式。
+/// </summary>
+public class QuotationPhotoRequestCollection
+{
+    /// <summary>
+    /// 凹痕類別的維修照片列表。
+    /// </summary>
+    [JsonPropertyName("dent")]
+    public List<QuotationDamageItem> Dent { get; set; } = new();
+
+    /// <summary>
+    /// 美容類別的維修照片列表。
+    /// </summary>
+    [JsonPropertyName("beauty")]
+    public List<QuotationDamageItem> Beauty { get; set; } = new();
+
+    /// <summary>
+    /// 板烤類別的維修照片列表。
+    /// </summary>
+    [JsonPropertyName("paint")]
+    public List<QuotationDamageItem> Paint { get; set; } = new();
+
+    /// <summary>
+    /// 其他類別的維修照片列表。
+    /// </summary>
+    [JsonPropertyName("other")]
+    public List<QuotationDamageItem> Other { get; set; } = new();
+
+    /// <summary>
+    /// 將所有分類的照片集合展平成單一傷痕清單，維持舊有流程使用的資料結構。
+    /// </summary>
+    public List<QuotationDamageItem> ToDamageList()
+    {
+        var result = new List<QuotationDamageItem>();
+        AppendCategory(result, Dent, "凹痕");
+        AppendCategory(result, Beauty, "美容");
+        AppendCategory(result, Paint, "板烤");
+        AppendCategory(result, Other, "其他");
+        return result;
+    }
+
+    private static void AppendCategory(List<QuotationDamageItem> target, List<QuotationDamageItem>? source, string fallbackFixType)
+    {
+        if (source is not { Count: > 0 })
+        {
+            return;
+        }
+
+        foreach (var item in source)
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(item.DisplayFixType))
+            {
+                // 若前端未指定維修類型，先以分組類別作為預設，後續仍會再以照片資料覆寫。
+                item.DisplayFixType = fallbackFixType;
+                item.FixTypeName = fallbackFixType;
+            }
+
+            target.Add(item);
+        }
+    }
 }
 
 /// <summary>
