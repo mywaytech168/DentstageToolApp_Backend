@@ -56,7 +56,7 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
                 .ToListAsync(cancellationToken);
 
             // ---------- 陣列整理區 ----------
-            // 依照系統既定的 dent、beauty、paint、other 順序排序，避免不同資料庫排序造成顯示不一致。
+            // 依照系統既定的內部鍵值順序（dent、beauty、paint、other）排序，再映射成凹痕、美容、板烤或其他，避免不同資料庫排序造成顯示不一致。
             items = items
                 .OrderBy(item =>
                 {
@@ -104,7 +104,7 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
             var normalizedUid = (fixType ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(normalizedUid))
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型鍵值。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.BadRequest, "請提供維修類型中文標籤。");
             }
 
             var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(normalizedUid)
@@ -116,7 +116,7 @@ public class ServiceCategoryQueryService : IServiceCategoryQueryService
 
             if (entity is null)
             {
-                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
+                throw new ServiceCategoryQueryException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型中文標籤是否正確。");
             }
 
             return new ServiceCategoryDetailResponse

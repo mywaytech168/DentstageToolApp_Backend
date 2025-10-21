@@ -468,7 +468,7 @@ public class QuotationService : IQuotationService
         var bookMethod = NormalizeOptionalText(storeInfo.BookMethod);
 
         // ---------- 維修設定處理 ----------
-        // 依據維修類型鍵值正規化分類，並轉換常見布林選項為資料表欄位使用的旗標文字。
+        // 依據維修類型識別值正規化分類，並轉換常見布林選項為資料表欄位使用的旗標文字。
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
         var fixTypeRaw = NormalizeRequiredText(maintenanceInfo.FixType, "維修類型");
         var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);

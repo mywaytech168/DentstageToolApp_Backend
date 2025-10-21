@@ -9,7 +9,7 @@ namespace DentstageToolApp.Api.Models.Quotations;
 public class QuotationListQuery
 {
     /// <summary>
-    /// 指定維修類型，優先傳入維修類型主檔識別碼，亦保留舊有文字對應。
+    /// 指定維修類型，可直接傳入凹痕、美容、板烤或其他等中文標籤，亦保留既有鍵值轉換機制。
     /// </summary>
     public string? FixType { get; set; }
 
