@@ -2887,6 +2887,14 @@ public class QuotationService : IQuotationService
             return damages;
         }
 
+        var quotationFixTypeRaw = await _context.Quatations
+            .AsNoTracking()
+            .Where(quotation => quotation.QuotationUid == normalizedQuotationUid)
+            .Select(quotation => quotation.FixType)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var fallbackFixType = ExtractPrimaryQuotationFixType(quotationFixTypeRaw);
+
         var photos = await _context.PhotoData
             .AsNoTracking()
             .Where(photo => photo.QuotationUid == normalizedQuotationUid)
@@ -2899,17 +2907,17 @@ public class QuotationService : IQuotationService
 
         if (damages.Count == 0)
         {
-            return BuildDamagesFromPhotoData(photos);
+            return BuildDamagesFromPhotoData(photos, fallbackFixType);
         }
 
-        EnrichDamagesFromPhotoData(damages, photos);
+        EnrichDamagesFromPhotoData(damages, photos, fallbackFixType);
         return damages;
     }
 
     /// <summary>
     /// 由照片資料建立傷痕清單，供舊資料回傳使用。
     /// </summary>
-    private static List<QuotationDamageItem> BuildDamagesFromPhotoData(IEnumerable<PhotoDatum> photos)
+    private static List<QuotationDamageItem> BuildDamagesFromPhotoData(IEnumerable<PhotoDatum> photos, string? fallbackFixType)
     {
         var result = new List<QuotationDamageItem>();
 
@@ -2923,7 +2931,12 @@ public class QuotationService : IQuotationService
 
             var storedFixType = NormalizeOptionalText(photo?.FixType);
             var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(storedFixType);
+            // 若照片主檔未帶出維修類型，改用估價單紀錄的第一個維修類型補值。
+            var fallbackDisplay = string.IsNullOrWhiteSpace(storedFixType) && !string.IsNullOrWhiteSpace(fallbackFixType)
+                ? QuotationDamageFixTypeHelper.ResolveDisplayName(fallbackFixType)
+                : null;
             var fixTypeDisplay = normalizedFixType
+                ?? fallbackDisplay
                 ?? (string.IsNullOrWhiteSpace(storedFixType)
                     ? null
                     : QuotationDamageFixTypeHelper.ResolveDisplayName(storedFixType));
@@ -2939,6 +2952,8 @@ public class QuotationService : IQuotationService
                 FixTypeName = fixTypeDisplay
             };
 
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage, fallbackFixType);
+
             result.Add(damage);
         }
 
@@ -2948,7 +2963,7 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 使用照片主檔補齊現有傷痕欄位，避免資料遺失。
     /// </summary>
-    private static void EnrichDamagesFromPhotoData(List<QuotationDamageItem> damages, IReadOnlyCollection<PhotoDatum> photos)
+    private static void EnrichDamagesFromPhotoData(List<QuotationDamageItem> damages, IReadOnlyCollection<PhotoDatum> photos, string? fallbackFixType)
     {
         if (damages.Count == 0 || photos.Count == 0)
         {
@@ -3001,8 +3016,17 @@ public class QuotationService : IQuotationService
                     damage.DisplayFixType = normalizedFixType;
                     damage.FixTypeName = normalizedFixType;
                 }
+                else if (!string.IsNullOrWhiteSpace(fallbackFixType))
+                {
+                    // 估價單既有維修類型可作為空白照片紀錄的預設值，避免前端顯示空白類型。
+                    var normalizedFallback = QuotationDamageFixTypeHelper.ResolveDisplayName(fallbackFixType);
+                    damage.DisplayFixType ??= normalizedFallback;
+                    damage.FixTypeName ??= normalizedFallback;
+                }
 
             }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage, fallbackFixType);
         }
     }
 
@@ -3016,6 +3040,49 @@ public class QuotationService : IQuotationService
         {
             yield return primary;
         }
+    }
+
+    /// <summary>
+    /// 從估價單紀錄的維修類型字串中，擷取第一個可辨識的維修類型做為預設值。
+    /// </summary>
+    private static string? ExtractPrimaryQuotationFixType(string? quotationFixType)
+    {
+        if (string.IsNullOrWhiteSpace(quotationFixType))
+        {
+            return null;
+        }
+
+        // 估價單歷史資料可能以「、」或逗號分隔多個維修類型，因此先切割後逐一檢查。
+        var parts = quotationFixType
+            .Split(new[] { '、', ',', ';', '，' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(part => part.Trim())
+            .Where(part => !string.IsNullOrWhiteSpace(part))
+            .ToList();
+
+        if (parts.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var part in parts)
+        {
+            var normalized = QuotationDamageFixTypeHelper.Normalize(part);
+            if (!string.IsNullOrWhiteSpace(normalized))
+            {
+                return normalized;
+            }
+        }
+
+        foreach (var part in parts)
+        {
+            if (string.Equals(part, "簽名", StringComparison.Ordinal))
+            {
+                return "簽名";
+            }
+        }
+
+        // 若皆無法正規化，仍回傳第一個值的顯示名稱，確保前端能顯示內容。
+        return QuotationDamageFixTypeHelper.ResolveDisplayName(parts[0]);
     }
 
     /// <summary>
