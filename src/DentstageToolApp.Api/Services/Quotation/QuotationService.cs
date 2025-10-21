@@ -177,19 +177,23 @@ public class QuotationService : IQuotationService
             .AsNoTracking()
             .AsQueryable();
 
-        // 篩選維修類型，允許以舊版中文或新版鍵值查詢。
+        // 篩選維修類型，限定凹痕、美容、板烤或其他中文標籤。
         if (!string.IsNullOrWhiteSpace(query.FixType))
         {
             var fixTypeFilter = query.FixType.Trim();
             var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixTypeFilter);
-            var displayName = normalizedFilter is null
-                ? null
-                : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFilter);
-
-            quotationsQuery = quotationsQuery.Where(q =>
-                q.FixType == fixTypeFilter ||
-                (normalizedFilter != null && q.FixType == normalizedFilter) ||
-                (displayName != null && q.FixType == displayName));
+            if (normalizedFilter is null)
+            {
+                var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeFilter);
+                if (string.Equals(resolved, fixTypeFilter, StringComparison.Ordinal))
+                {
+                    quotationsQuery = quotationsQuery.Where(q => q.FixType == resolved);
+                }
+            }
+            else
+            {
+                quotationsQuery = quotationsQuery.Where(q => q.FixType == normalizedFilter);
+            }
         }
 
         // 篩選估價單狀態。
@@ -472,9 +476,12 @@ public class QuotationService : IQuotationService
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
         var fixTypeRaw = NormalizeRequiredText(maintenanceInfo.FixType, "維修類型");
         var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
-        var fixTypeDisplayName = normalizedFixType is null
-            ? fixTypeRaw
-            : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
+        if (normalizedFixType is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "維修類型僅支援凹痕、美容、板烤或其他中文標籤。");
+        }
+
+        var fixTypeDisplayName = normalizedFixType;
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
@@ -847,10 +854,11 @@ public class QuotationService : IQuotationService
 
         var maintenanceFixTypeValue = NormalizeOptionalText(quotation.FixType);
         var maintenanceFixTypeNormalized = QuotationDamageFixTypeHelper.Normalize(maintenanceFixTypeValue);
-        var maintenanceFixTypeName = maintenanceFixTypeNormalized is null
-            ? maintenanceFixTypeValue
-            : QuotationDamageFixTypeHelper.ResolveDisplayName(maintenanceFixTypeNormalized);
-        var maintenanceFixTypeKey = maintenanceFixTypeNormalized ?? maintenanceFixTypeValue;
+        var maintenanceFixTypeName = maintenanceFixTypeNormalized
+            ?? (string.IsNullOrWhiteSpace(maintenanceFixTypeValue)
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(maintenanceFixTypeValue));
+        var maintenanceFixTypeKey = maintenanceFixTypeName;
 
         // 透過現有估價金額與折扣計算應付金額，避免直接存取缺少對應欄位的實體屬性。
         var amount = CalculateOrderAmount(quotation.Valuation, quotation.Discount);
@@ -1173,19 +1181,23 @@ public class QuotationService : IQuotationService
             {
                 var requestedFixType = NormalizeOptionalText(maintenanceInfo.FixType);
                 var normalizedRequested = QuotationDamageFixTypeHelper.Normalize(requestedFixType);
-                var requestedDisplay = normalizedRequested is null
-                    ? requestedFixType
-                    : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedRequested);
+                var requestedDisplay = normalizedRequested
+                    ?? (string.IsNullOrWhiteSpace(requestedFixType)
+                        ? null
+                        : QuotationDamageFixTypeHelper.ResolveDisplayName(requestedFixType));
 
                 var currentFixTypeValue = NormalizeOptionalText(quotation.FixType);
                 var currentNormalized = QuotationDamageFixTypeHelper.Normalize(currentFixTypeValue);
-                var currentKey = currentNormalized ?? currentFixTypeValue;
-                var requestedKey = normalizedRequested ?? requestedFixType;
+                var currentKey = currentNormalized
+                    ?? (string.IsNullOrWhiteSpace(currentFixTypeValue)
+                        ? null
+                        : QuotationDamageFixTypeHelper.ResolveDisplayName(currentFixTypeValue));
+                var requestedKey = requestedDisplay;
 
                 if (!string.IsNullOrWhiteSpace(requestedKey) &&
                     !string.Equals(requestedKey, currentKey, StringComparison.OrdinalIgnoreCase))
                 {
-                    quotation.FixType = requestedDisplay ?? requestedKey;
+                    quotation.FixType = requestedKey;
                 }
             }
 
@@ -2578,9 +2590,18 @@ public class QuotationService : IQuotationService
 
             var normalizedCategory = QuotationDamageFixTypeHelper.Normalize(fixTypeKey)
                 ?? QuotationDamageFixTypeHelper.Normalize(fixTypeName);
+            if (normalizedCategory is null && !string.IsNullOrWhiteSpace(fixTypeKey))
+            {
+                normalizedCategory = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
+            }
+            if (normalizedCategory is null && !string.IsNullOrWhiteSpace(fixTypeName))
+            {
+                normalizedCategory = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeName);
+            }
+
             if (string.IsNullOrWhiteSpace(fixTypeName) && normalizedCategory is not null)
             {
-                fixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedCategory);
+                fixTypeName = normalizedCategory;
             }
 
             var fixTypeCategory = normalizedCategory ?? fixTypeKey;
@@ -2591,7 +2612,7 @@ public class QuotationService : IQuotationService
 
             if (string.IsNullOrWhiteSpace(fixTypeName))
             {
-                fixTypeName = fixTypeCategory;
+                fixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeCategory);
             }
 
             foreach (var photoUid in EnumerateDamagePhotoUids(damage))
@@ -2665,27 +2686,26 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
-            var normalizedFixType = info.FixTypeKey;
-            var displayFixType = info.FixTypeName;
-            if (!string.IsNullOrWhiteSpace(normalizedFixType))
+            var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(info.FixTypeKey)
+                ?? QuotationDamageFixTypeHelper.Normalize(info.FixTypeName);
+
+            if (normalizedFixType is null && !string.IsNullOrWhiteSpace(info.FixTypeKey))
             {
-                normalizedFixType = QuotationDamageFixTypeHelper.Normalize(normalizedFixType) ?? normalizedFixType;
+                normalizedFixType = QuotationDamageFixTypeHelper.ResolveDisplayName(info.FixTypeKey);
             }
 
-            if (!string.IsNullOrWhiteSpace(displayFixType) && normalizedFixType is null)
+            if (normalizedFixType is null && !string.IsNullOrWhiteSpace(info.FixTypeName))
             {
-                normalizedFixType = QuotationDamageFixTypeHelper.Normalize(displayFixType);
+                normalizedFixType = QuotationDamageFixTypeHelper.ResolveDisplayName(info.FixTypeName);
             }
 
-            var storedFixType = displayFixType;
-            if (string.IsNullOrWhiteSpace(storedFixType) && normalizedFixType is not null)
-            {
-                storedFixType = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
-            }
+            var storedFixType = !string.IsNullOrWhiteSpace(info.FixTypeName)
+                ? QuotationDamageFixTypeHelper.ResolveDisplayName(info.FixTypeName)
+                : normalizedFixType;
 
-            if (string.IsNullOrWhiteSpace(storedFixType))
+            if (string.IsNullOrWhiteSpace(storedFixType) && !string.IsNullOrWhiteSpace(info.FixTypeKey))
             {
-                storedFixType = info.FixTypeKey;
+                storedFixType = QuotationDamageFixTypeHelper.ResolveDisplayName(info.FixTypeKey);
             }
 
             if (!string.Equals(photo.FixType, storedFixType, StringComparison.Ordinal))
@@ -2796,10 +2816,10 @@ public class QuotationService : IQuotationService
 
             var storedFixType = NormalizeOptionalText(photo?.FixType);
             var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(storedFixType);
-            var fixTypeKey = normalizedFixType ?? storedFixType;
-            var fixTypeName = normalizedFixType is not null
-                ? QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType)
-                : storedFixType;
+            var fixTypeDisplay = normalizedFixType
+                ?? (string.IsNullOrWhiteSpace(storedFixType)
+                    ? null
+                    : QuotationDamageFixTypeHelper.ResolveDisplayName(storedFixType));
 
             var damage = new QuotationDamageItem
             {
@@ -2816,8 +2836,8 @@ public class QuotationService : IQuotationService
                 DisplayDentStatus = photo?.PhotoShapeShow,
                 DisplayDescription = photo?.Comment,
                 DisplayEstimatedAmount = photo?.Cost,
-                DisplayFixType = fixTypeKey,
-                FixTypeName = fixTypeName
+                DisplayFixType = fixTypeDisplay,
+                FixTypeName = fixTypeDisplay
             };
 
             result.Add(damage);
@@ -2877,15 +2897,15 @@ public class QuotationService : IQuotationService
                 if (string.IsNullOrWhiteSpace(damage.DisplayFixType) && !string.IsNullOrWhiteSpace(photo.FixType))
                 {
                     var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
-                    damage.DisplayFixType = normalizedFixType ?? photo.FixType;
+                    damage.DisplayFixType = normalizedFixType
+                        ?? QuotationDamageFixTypeHelper.ResolveDisplayName(photo.FixType);
                 }
 
                 if (string.IsNullOrWhiteSpace(damage.FixTypeName) && !string.IsNullOrWhiteSpace(photo.FixType))
                 {
                     var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType);
-                    damage.FixTypeName = normalizedFixType is null
-                        ? photo.FixType
-                        : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
+                    damage.FixTypeName = normalizedFixType
+                        ?? QuotationDamageFixTypeHelper.ResolveDisplayName(photo.FixType);
                 }
 
                 if (damage.Photos is { Count: > 0 })
@@ -3284,7 +3304,8 @@ public class QuotationService : IQuotationService
             ? (decimal?)null
             : Math.Round((decimal)random.NextDouble() * 15m, 1);
 
-        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeKey) ?? fixTypeKey;
+        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeKey)
+            ?? QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
         return new CreateQuotationMaintenanceInfo
         {
             FixType = normalizedFixType,
