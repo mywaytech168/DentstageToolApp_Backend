@@ -83,6 +83,16 @@ public class MaintenanceOrderStatusHistory
     public string? Status295User { get; set; }
 
     /// <summary>
+    /// 296 狀態時間戳記（維修過期）。
+    /// </summary>
+    public DateTime? Status296Date { get; set; }
+
+    /// <summary>
+    /// 296 狀態操作人。
+    /// </summary>
+    public string? Status296User { get; set; }
+
+    /// <summary>
     /// 目前狀態異動人。
     /// </summary>
     public string? CurrentStatusUser { get; set; }
