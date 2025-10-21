@@ -71,14 +71,19 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             var fixType = normalizedQuery.FixType.Trim();
             var normalizedFilter = QuotationDamageFixTypeHelper.Normalize(fixType);
-            var displayName = normalizedFilter is null
-                ? null
-                : QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFilter);
 
-            ordersQuery = ordersQuery.Where(order =>
-                order.FixType == fixType ||
-                (normalizedFilter != null && order.FixType == normalizedFilter) ||
-                (displayName != null && order.FixType == displayName));
+            if (normalizedFilter is null)
+            {
+                var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(fixType);
+                if (string.Equals(resolved, fixType, StringComparison.Ordinal))
+                {
+                    ordersQuery = ordersQuery.Where(order => order.FixType == resolved);
+                }
+            }
+            else
+            {
+                ordersQuery = ordersQuery.Where(order => order.FixType == normalizedFilter);
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(normalizedQuery.Status) && !string.Equals(normalizedQuery.Status, "ALL", StringComparison.OrdinalIgnoreCase))
@@ -991,9 +996,22 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(maintenance.FixType);
-        if (string.IsNullOrWhiteSpace(maintenance.FixTypeName) && normalizedFixType is not null)
+        if (normalizedFixType is not null)
         {
-            maintenance.FixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(normalizedFixType);
+            maintenance.FixType = normalizedFixType;
+            if (string.IsNullOrWhiteSpace(maintenance.FixTypeName))
+            {
+                maintenance.FixTypeName = normalizedFixType;
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(maintenance.FixType))
+        {
+            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(maintenance.FixType);
+            maintenance.FixType = resolved;
+            if (string.IsNullOrWhiteSpace(maintenance.FixTypeName))
+            {
+                maintenance.FixTypeName = resolved;
+            }
         }
 
         return maintenance;

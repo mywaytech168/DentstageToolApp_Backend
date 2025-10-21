@@ -38,14 +38,14 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
-        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型中文標籤");
         var categoryName = NormalizeRequiredText(request.CategoryName, "服務類別名稱");
         var operatorLabel = NormalizeOperator(operatorName);
 
         var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
         if (canonicalFixType is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援凹痕、美容、板烤或其他等固定選項。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -100,14 +100,14 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
-        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型中文標籤");
         var categoryName = NormalizeRequiredText(request.CategoryName, "服務類別名稱");
         var operatorLabel = NormalizeOperator(operatorName);
 
         var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
         if (canonicalFixType is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援凹痕、美容、板烤或其他等固定選項。");
         }
 
         var entity = await _dbContext.FixTypes
@@ -115,7 +115,7 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
 
         if (entity is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型中文標籤是否正確。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -155,13 +155,13 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
         }
 
         // ---------- 參數整理區 ----------
-        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型鍵值");
+        var fixTypeRaw = NormalizeRequiredText(request.FixType, "維修類型中文標籤");
         var operatorLabel = NormalizeOperator(operatorName);
 
         var canonicalFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeRaw);
         if (canonicalFixType is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援 dent、beauty、paint、other 四種鍵值。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.BadRequest, "維修類型僅支援凹痕、美容、板烤或其他等固定選項。");
         }
 
         var entity = await _dbContext.FixTypes
@@ -169,7 +169,7 @@ public class ServiceCategoryManagementService : IServiceCategoryManagementServic
 
         if (entity is null)
         {
-            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型鍵值是否正確。");
+            throw new ServiceCategoryManagementException(HttpStatusCode.NotFound, "找不到對應的服務類別資料，請確認維修類型中文標籤是否正確。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();

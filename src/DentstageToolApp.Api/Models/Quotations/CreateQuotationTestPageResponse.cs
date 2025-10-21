@@ -34,9 +34,9 @@ public class CreateQuotationTestPageResponse
     public CreateQuotationTestEntitySummary? Car { get; set; }
 
     /// <summary>
-    /// 使用到的維修類型摘要資訊。
+    /// 此次測試資料預設的維修類型中文名稱，前端可直接顯示於頁面提醒測試人員。
     /// </summary>
-    public CreateQuotationTestEntitySummary? FixType { get; set; }
+    public string? FixType { get; set; }
 
     /// <summary>
     /// 指示此次資料是否實際取用資料庫既有資料，或完全由系統隨機生成。

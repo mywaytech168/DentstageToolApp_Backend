@@ -81,9 +81,9 @@ public class ServiceCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// 透過維修類型鍵值取得服務類別詳細資料。
+    /// 透過維修類型中文標籤取得服務類別詳細資料。
     /// </summary>
-    /// <param name="fixType">維修類型鍵值。</param>
+    /// <param name="fixType">維修類型中文標籤。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     [HttpGet("{fixType}")]
     [ProducesResponseType(typeof(ServiceCategoryDetailResponse), StatusCodes.Status200OK)]
@@ -121,7 +121,7 @@ public class ServiceCategoriesController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "fixType": "dent",
+          "fixType": "凹痕",
           "categoryName": "凹痕"
         }
         """)]
@@ -208,7 +208,7 @@ public class ServiceCategoriesController : ControllerBase
     /// 刪除服務類別資料。
     /// </summary>
     [HttpPost("delete")]
-    // 利用範例明確告知僅需提供維修類型鍵值即可完成刪除動作。
+    // 利用範例明確告知僅需提供維修類型中文標籤即可完成刪除動作。
     [SwaggerMockRequestExample(
         """
         {

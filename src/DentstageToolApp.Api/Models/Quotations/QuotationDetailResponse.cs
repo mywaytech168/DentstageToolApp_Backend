@@ -104,6 +104,9 @@ public class QuotationAmountInfo
 /// </summary>
 public class QuotationDamageSummary
 {
+    private string? _fixType;
+    private string? _fixTypeDisplay;
+
     /// <summary>
     /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
     /// </summary>
@@ -130,15 +133,56 @@ public class QuotationDamageSummary
     public decimal? EstimatedAmount { get; set; }
 
     /// <summary>
-    /// 維修類型鍵值，對應凹痕、美容、鈑烤或其他陣列。
+    /// 維修類型中文標籤，輸出時統一為凹痕、美容、板烤或其他。
     /// </summary>
-    public string? FixType { get; set; }
+    public string? FixType
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_fixTypeDisplay))
+            {
+                return _fixTypeDisplay;
+            }
+
+            return string.IsNullOrWhiteSpace(_fixType)
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(_fixType);
+        }
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _fixType = null;
+                _fixTypeDisplay = null;
+                return;
+            }
+
+            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
+            _fixType = resolved;
+            _fixTypeDisplay = resolved;
+        }
+    }
 
     /// <summary>
-    /// 維修類型顯示名稱，預設使用中文描述。
+    /// 內部使用的維修類型顯示名稱，避免重複計算顯示文字。
     /// </summary>
-    public string? FixTypeName { get; set; }
+    [JsonIgnore]
+    public string? FixTypeName
+    {
+        get => _fixTypeDisplay;
+        set => _fixTypeDisplay = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
 
+    /// <summary>
+    /// 舊版欄位：維修類型顯示名稱，保留 setter 供歷史資料解析。
+    /// </summary>
+    [JsonPropertyName("fixTypeName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyFixTypeName
+    {
+        get => null;
+        set => FixType = value;
+    }
 }
 
 /// <summary>
@@ -157,15 +201,60 @@ public class QuotationCarBodyConfirmationResponse
 /// </summary>
 public class QuotationMaintenanceDetail
 {
+    private string? _fixType;
+    private string? _fixTypeDisplay;
+
     /// <summary>
-    /// 維修類型鍵值，供前端回填分類選項。
+    /// 維修類型中文標籤，供前端直接回填四種固定分類。
     /// </summary>
-    public string? FixType { get; set; }
+    public string? FixType
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(_fixTypeDisplay))
+            {
+                return _fixTypeDisplay;
+            }
+
+            return string.IsNullOrWhiteSpace(_fixType)
+                ? null
+                : QuotationDamageFixTypeHelper.ResolveDisplayName(_fixType);
+        }
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                _fixType = null;
+                _fixTypeDisplay = null;
+                return;
+            }
+
+            var resolved = QuotationDamageFixTypeHelper.ResolveDisplayName(value);
+            _fixType = resolved;
+            _fixTypeDisplay = resolved;
+        }
+    }
 
     /// <summary>
     /// 維修類型顯示名稱，預設為中文描述。
     /// </summary>
-    public string? FixTypeName { get; set; }
+    [JsonIgnore]
+    public string? FixTypeName
+    {
+        get => _fixTypeDisplay;
+        set => _fixTypeDisplay = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    /// <summary>
+    /// 舊版欄位：維修類型顯示名稱。
+    /// </summary>
+    [JsonPropertyName("fixTypeName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? LegacyFixTypeName
+    {
+        get => null;
+        set => FixType = value;
+    }
 
     /// <summary>
     /// 是否需留車。
@@ -285,29 +374,18 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, List<QuotationDamageSummary> value, JsonSerializerOptions options)
     {
-        writer.WriteStartObject();
+        // 回傳結果直接使用陣列格式，避免再以內部維修類型識別值進行分組，符合最新資料規格。
+        writer.WriteStartArray();
 
-        var groups = GroupSummariesByFixType(value);
-
-        foreach (var key in QuotationDamageFixTypeHelper.CanonicalOrder)
+        if (value is { Count: > 0 })
         {
-            if (!groups.TryGetValue(key, out var summaries) || summaries.Count == 0)
-            {
-                continue;
-            }
-
-            writer.WritePropertyName(key);
-            writer.WriteStartArray();
-
-            foreach (var summary in summaries)
+            foreach (var summary in value)
             {
                 WriteSingleSummary(writer, summary);
             }
-
-            writer.WriteEndArray();
         }
 
-        writer.WriteEndObject();
+        writer.WriteEndArray();
     }
 
     private static void WriteSingleSummary(Utf8JsonWriter writer, QuotationDamageSummary? summary)
@@ -340,9 +418,6 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
 
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.FixType);
-
-        writer.WritePropertyName("fixTypeName");
-        WriteNullableString(writer, target.FixTypeName);
         writer.WriteEndObject();
     }
 
@@ -352,7 +427,8 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
 
         foreach (var property in root.EnumerateObject())
         {
-            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name) ?? property.Name;
+            var normalizedKey = QuotationDamageFixTypeHelper.Normalize(property.Name)
+                ?? QuotationDamageFixTypeHelper.ResolveDisplayName(property.Name);
 
             if (property.Value.ValueKind == JsonValueKind.Array)
             {
@@ -393,7 +469,7 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
             Description = ReadString(element, "description"),
             EstimatedAmount = ReadDecimal(element, "estimatedAmount"),
             FixType = ReadString(element, "fixType"),
-            FixTypeName = ReadString(element, "fixTypeName")
+            LegacyFixTypeName = ReadString(element, "fixTypeName")
         };
 
         if (string.IsNullOrWhiteSpace(summary.FixType))
@@ -403,37 +479,6 @@ public class QuotationDamageSummaryCollectionConverter : JsonConverter<List<Quot
 
         QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary, fallbackKey);
         return summary;
-    }
-
-    private static Dictionary<string, List<QuotationDamageSummary>> GroupSummariesByFixType(List<QuotationDamageSummary>? value)
-    {
-        var groups = new Dictionary<string, List<QuotationDamageSummary>>(StringComparer.OrdinalIgnoreCase);
-
-        if (value is not { Count: > 0 })
-        {
-            return groups;
-        }
-
-        foreach (var summary in value)
-        {
-            if (summary is null)
-            {
-                continue;
-            }
-
-            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(summary);
-            var key = QuotationDamageFixTypeHelper.DetermineGroupKey(summary.FixType);
-
-            if (!groups.TryGetValue(key, out var list))
-            {
-                list = new List<QuotationDamageSummary>();
-                groups[key] = list;
-            }
-
-            list.Add(summary);
-        }
-
-        return groups;
     }
 
     private static string? ReadString(JsonElement element, string propertyName)
