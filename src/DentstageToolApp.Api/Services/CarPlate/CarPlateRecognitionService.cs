@@ -132,6 +132,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         // ---------- 資料庫查詢區 ----------
         var car = await _dbContext.Cars
             .Include(c => c.Orders)
+                .ThenInclude(order => order.Quatation)
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 c => c.CarNo == normalizedPlate
@@ -149,6 +150,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         }
 
         var additionalOrders = await _dbContext.Orders
+            .Include(order => order.Quatation)
             .AsNoTracking()
             .Where(o =>
                 o.CarNo == normalizedPlate
@@ -191,9 +193,33 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         var referenceOrder = orders.FirstOrDefault();
 
+        // ---------- 車輛識別整理區 ----------
+        // 依序從車輛主檔、工單與估價單補齊識別碼，避免資料缺漏。
+        var carUid = ResolveFirstValue(
+            BuildCandidateList(
+                car?.CarUid,
+                referenceOrder?.CarUid,
+                referenceOrder?.Quatation?.CarUid,
+                orders.Select(o => o.CarUid),
+                orders.Select(o => o.Quatation?.CarUid)));
+
+        // 品牌與車型識別碼僅存於估價資料，因此收集所有工單估價資訊後挑選第一筆有效值。
+        var brandUid = ResolveFirstValue(
+            BuildCandidateList(
+                referenceOrder?.Quatation?.BrandUid,
+                orders.Select(o => o.Quatation?.BrandUid)));
+
+        var modelUid = ResolveFirstValue(
+            BuildCandidateList(
+                referenceOrder?.Quatation?.ModelUid,
+                orders.Select(o => o.Quatation?.ModelUid)));
+
         var response = new CarPlateMaintenanceHistoryResponse
         {
             CarPlateNumber = normalizedPlate,
+            CarUid = carUid,
+            BrandUid = brandUid,
+            ModelUid = modelUid,
             Brand = car?.Brand ?? referenceOrder?.Brand,
             Model = car?.Model ?? referenceOrder?.Model,
             Color = car?.Color ?? referenceOrder?.Color,
@@ -210,6 +236,52 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
     }
 
     // ---------- 方法區 ----------
+
+    /// <summary>
+    /// 建立候選清單，將主要值與額外來源合併後輸出為列舉。
+    /// </summary>
+    /// <param name="primary">優先檢查的主要值。</param>
+    /// <param name="secondary">次要值集合，可為 null。</param>
+    /// <returns>含所有候選字串的列舉。</returns>
+    private static IEnumerable<string?> BuildCandidateList(string? primary, params IEnumerable<string?>[] secondary)
+    {
+        // 先回傳主要值，確保主檔資訊優先使用。
+        yield return primary;
+
+        // 依序回傳其他來源的值，每個來源皆可能為 null。
+        foreach (var sequence in secondary)
+        {
+            if (sequence is null)
+            {
+                continue;
+            }
+
+            foreach (var item in sequence)
+            {
+                yield return item;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 從候選集合中挑選第一個有效值，並移除前後空白。
+    /// </summary>
+    /// <param name="candidates">候選字串集合。</param>
+    /// <returns>第一個非空白的字串；若無則回傳 null。</returns>
+    private static string? ResolveFirstValue(IEnumerable<string?> candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            return candidate.Trim();
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// 以 Tesseract 分析影像，回傳完整文字與信心度。
