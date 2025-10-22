@@ -26,7 +26,7 @@ public class CarPlateMaintenanceHistoryResponse
     /// 車輛顏色。
     /// </summary>
     public string? Color { get; set; }
-
+    
     /// <summary>
     /// 是否擁有維修紀錄，提供前端快速判斷狀態。
     /// </summary>
@@ -35,7 +35,12 @@ public class CarPlateMaintenanceHistoryResponse
     /// <summary>
     /// 里程
     /// </summary>
-    public int Milage { get; set; }
+    public int? Milage { get; set; }
+
+    /// <summary>
+    /// 車輛備註
+    /// </summary>
+    public string? CarRemark { get; set; }
 
     /// <summary>
     /// 維修紀錄清單，按照時間新至舊排序。
