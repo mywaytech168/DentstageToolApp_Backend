@@ -241,9 +241,9 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
     /// 建立候選清單，將主要值與額外來源合併後輸出為列舉。
     /// </summary>
     /// <param name="primary">優先檢查的主要值。</param>
-    /// <param name="secondary">次要值集合，可為 null。</param>
+    /// <param name="secondary">次要值集合，可為 null，可傳入單一字串或可列舉集合。</param>
     /// <returns>含所有候選字串的列舉。</returns>
-    private static IEnumerable<string?> BuildCandidateList(string? primary, params IEnumerable<string?>[] secondary)
+    private static IEnumerable<string?> BuildCandidateList(string? primary, params object?[] secondary)
     {
         // 先回傳主要值，確保主檔資訊優先使用。
         yield return primary;
@@ -256,10 +256,26 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
                 continue;
             }
 
-            foreach (var item in sequence)
+            // 若來源是單一字串則直接回傳，確保單筆資料可被納入比對。
+            if (sequence is string singleCandidate)
             {
-                yield return item;
+                yield return singleCandidate;
+                continue;
             }
+
+            // 若來源為集合則逐一回傳，支援多筆資料合併。
+            if (sequence is IEnumerable<string?> enumerable)
+            {
+                foreach (var item in enumerable)
+                {
+                    yield return item;
+                }
+
+                continue;
+            }
+
+            // 其餘型別視為不支援，避免出現未預期的型別造成例外或錯誤。
+            throw new InvalidOperationException("BuildCandidateList 僅支援 string 或 IEnumerable<string?> 型別作為輸入來源。");
         }
     }
 
