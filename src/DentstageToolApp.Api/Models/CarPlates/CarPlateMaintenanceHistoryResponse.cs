@@ -13,6 +13,21 @@ public class CarPlateMaintenanceHistoryResponse
     public string CarPlateNumber { get; set; } = string.Empty;
 
     /// <summary>
+    /// 車輛識別碼，協助前端直接導向車輛詳細資訊頁面。
+    /// </summary>
+    public string? CarUid { get; set; }
+
+    /// <summary>
+    /// 車輛品牌識別碼，提供前端綁定品牌選單使用。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼，對應特定品牌下的車型資料。
+    /// </summary>
+    public string? ModelUid { get; set; }
+
+    /// <summary>
     /// 車輛品牌。
     /// </summary>
     public string? Brand { get; set; }
