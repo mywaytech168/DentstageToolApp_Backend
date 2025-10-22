@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Brands;
+using DentstageToolApp.Api.Models.BrandModels;
 using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,7 @@ public class BrandQueryService : IBrandQueryService
 
             var query = _dbContext.Brands
                 .AsNoTracking()
+                .Include(brand => brand.Models)
                 .OrderBy(brand => brand.BrandName);
 
             var totalCount = await query.CountAsync(cancellationToken);
@@ -50,7 +52,16 @@ public class BrandQueryService : IBrandQueryService
                 .Select(brand => new BrandListItem
                 {
                     BrandUid = brand.BrandUid,
-                    BrandName = brand.BrandName
+                    BrandName = brand.BrandName,
+                    // 依車型名稱排序後轉成下拉選項結構，確保前端直接套用即可。
+                    Models = brand.Models
+                        .OrderBy(model => model.ModelName)
+                        .Select(model => new BrandModelOption
+                        {
+                            ModelUid = model.ModelUid,
+                            ModelName = model.ModelName
+                        })
+                        .ToList()
                 })
                 .ToListAsync(cancellationToken);
 

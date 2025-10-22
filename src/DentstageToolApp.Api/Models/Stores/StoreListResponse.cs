@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DentstageToolApp.Api.Models.Pagination;
+using DentstageToolApp.Api.Models.Technicians;
 
 namespace DentstageToolApp.Api.Models.Stores;
 
@@ -33,4 +34,9 @@ public class StoreListItem
     /// 門市名稱。
     /// </summary>
     public string StoreName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 門市底下的技師清單，提供前端一次載入技師下拉選單使用。
+    /// </summary>
+    public List<TechnicianItem> Technicians { get; set; } = new();
 }

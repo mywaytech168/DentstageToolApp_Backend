@@ -43,7 +43,7 @@ public class BrandsController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得品牌列表，供前端顯示品牌下拉選單使用。
+    /// 取得品牌列表，供前端顯示品牌下拉選單使用，回應會直接帶出車型清單。
     /// </summary>
     /// <remarks>
     /// GET /api/brands?page=1&amp;pageSize=20

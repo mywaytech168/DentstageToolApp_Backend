@@ -4,6 +4,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Stores;
+using DentstageToolApp.Api.Models.Technicians;
 using DentstageToolApp.Api.Models.Pagination;
 using DentstageToolApp.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,7 @@ public class StoreQueryService : IStoreQueryService
 
             var query = _dbContext.Stores
                 .AsNoTracking()
+                .Include(store => store.Technicians)
                 .OrderBy(store => store.StoreName);
 
             var totalCount = await query.CountAsync(cancellationToken);
@@ -50,7 +52,17 @@ public class StoreQueryService : IStoreQueryService
                 .Select(store => new StoreListItem
                 {
                     StoreUid = store.StoreUid,
-                    StoreName = store.StoreName
+                    StoreName = store.StoreName,
+                    // 將門市技師依姓名排序後轉換成簡化欄位，讓前端可直接綁定技師下拉。
+                    Technicians = store.Technicians
+                        .OrderBy(technician => technician.TechnicianName)
+                        .Select(technician => new TechnicianItem
+                        {
+                            TechnicianUid = technician.TechnicianUid,
+                            TechnicianName = technician.TechnicianName,
+                            JobTitle = technician.JobTitle
+                        })
+                        .ToList()
                 })
                 .ToListAsync(cancellationToken);
 
