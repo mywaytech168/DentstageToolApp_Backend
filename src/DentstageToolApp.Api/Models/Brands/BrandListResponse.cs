@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.BrandModels;
 using DentstageToolApp.Api.Models.Pagination;
 
 namespace DentstageToolApp.Api.Models.Brands;
@@ -33,4 +34,9 @@ public class BrandListItem
     /// 品牌名稱。
     /// </summary>
     public string BrandName { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 品牌底下可選用的車型清單，方便前端直接渲染下拉選項。
+    /// </summary>
+    public List<BrandModelOption> Models { get; set; } = new();
 }
