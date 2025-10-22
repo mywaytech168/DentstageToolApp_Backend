@@ -126,6 +126,19 @@ public class QuotationsController : ControllerBase
             ],
             "other": []
           },
+            "carBodyConfirmation": {
+              "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
+              "damageMarkers": [
+                {
+                  "x": 0.42,
+                  "y": 0.63,
+                  "hasDent": true,
+                  "hasScratch": false,
+                  "hasPaintPeel": false,
+                  "remark": "主要凹痕"
+                }
+              ]
+            },
           "maintenance": {
             "fixType": "凹痕",
             "reserveCar": true,
