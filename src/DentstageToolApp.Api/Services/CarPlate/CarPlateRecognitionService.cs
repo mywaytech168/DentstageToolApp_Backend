@@ -199,6 +199,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             Color = car?.Color ?? referenceOrder?.Color,
             HasMaintenanceRecords = recordItems.Count > 0,
             Milage = car?.Milage ?? referenceOrder?.Milage,
+            CarRemark = car?.CarRemark ?? referenceOrder?.CarRemark,
             Records = recordItems,
             Message = recordItems.Count > 0
                 ? "查詢成功，已列出歷史維修資料。"
