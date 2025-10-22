@@ -42,7 +42,6 @@ public class AppReleasesController : ControllerBase
             versionName = _appReleaseOptions.VersionName,
             versionCode = _appReleaseOptions.VersionCode,
             changeLog = _appReleaseOptions.ChangeLog ?? string.Empty,
-            isForceUpdate = _appReleaseOptions.IsForceUpdate,
             downloadUrl = BuildDownloadUrl(),
             shouldUpdate
         };
