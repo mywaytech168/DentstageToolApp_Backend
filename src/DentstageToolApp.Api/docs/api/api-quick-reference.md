@@ -90,23 +90,27 @@ Authorization: Bearer {舊的AccessToken}
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
-| GET | `/api/brands?page=1&pageSize=20` | 以分頁取得品牌列表。 | Query 對應 `PaginationRequest`，依名稱排序。 |
+| GET | `/api/brands?page=1&pageSize=20` | 以分頁取得品牌列表。 | Query 對應 `PaginationRequest`，依名稱排序，回應夾帶各品牌車型清單。 |
 | POST | `/api/brands` | 新增品牌。 | Body 採 JSON，對應 `CreateBrandRequest`。 |
 | POST | `/api/brands/edit` | 編輯品牌。 | Body 採 JSON，對應 `EditBrandRequest`。 |
 | POST | `/api/brands/delete` | 刪除品牌。 | Body 採 JSON，對應 `DeleteBrandRequest`。 |
 
-> 品牌列表回應會提供 `pagination` 欄位，包含 `page`、`pageSize`、`totalCount` 與 `totalPages`，可直接驅動前端分頁元件。 【F:src/DentstageToolApp.Api/Models/Brands/BrandListResponse.cs†L8-L24】
+> 品牌列表回應會提供 `pagination` 欄位，包含 `page`、`pageSize`、`totalCount` 與 `totalPages`，可直接驅動前端分頁元件。 【F:src/DentstageToolApp.Api/Models/Brands/BrandListResponse.cs†L8-L27】
+> 
+> 另外，`items` 底下的每筆品牌都會包含 `models` 陣列，內容為 `{ modelUid, modelName }`，讓前端可直接綁定品牌／車型的連動選單。 【F:src/DentstageToolApp.Api/Models/Brands/BrandListResponse.cs†L31-L39】【F:src/DentstageToolApp.Api/Services/Brand/BrandQueryService.cs†L46-L70】
 
 ## 門市模組（`api/stores`）
 
 | 方法 | 路徑 | 功能摘要 | 備註 |
 | --- | --- | --- | --- |
-| GET | `/api/stores?page=1&pageSize=20` | 以分頁取得門市列表。 | Query 對應 `PaginationRequest`。 |
+| GET | `/api/stores?page=1&pageSize=20` | 以分頁取得門市列表。 | Query 對應 `PaginationRequest`，回應同步帶出門市技師名單。 |
 | POST | `/api/stores` | 新增門市。 | Body 採 JSON，對應 `CreateStoreRequest`。 |
 | POST | `/api/stores/edit` | 編輯門市。 | Body 採 JSON，對應 `EditStoreRequest`。 |
 | POST | `/api/stores/delete` | 刪除門市。 | Body 採 JSON，對應 `DeleteStoreRequest`。 |
 
-> 門市列表同樣回傳 `pagination`，可搭配技師查詢功能使用。 【F:src/DentstageToolApp.Api/Models/Stores/StoreListResponse.cs†L8-L24】
+> 門市列表同樣回傳 `pagination`，可搭配技師查詢功能使用。 【F:src/DentstageToolApp.Api/Models/Stores/StoreListResponse.cs†L8-L27】
+> 
+> 每筆門市資料新增 `technicians` 陣列，內容含 `{ technicianUid, technicianName, jobTitle }`，便於前端一次載入門市與技師資訊。 【F:src/DentstageToolApp.Api/Models/Stores/StoreListResponse.cs†L31-L39】【F:src/DentstageToolApp.Api/Services/Store/StoreQueryService.cs†L46-L72】
 
 **新增／編輯欄位重點**
 - `customerName`：必填客戶名稱。 【F:src/DentstageToolApp.Api/Customers/CreateCustomerRequest.cs†L10-L15】【F:src/DentstageToolApp.Api/Customers/EditCustomerRequest.cs†L17-L22】
