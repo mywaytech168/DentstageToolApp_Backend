@@ -33,6 +33,11 @@ public class CarPlateMaintenanceHistoryResponse
     public bool HasMaintenanceRecords { get; set; }
 
     /// <summary>
+    /// 里程
+    /// </summary>
+    public int Milage { get; set; }
+
+    /// <summary>
     /// 維修紀錄清單，按照時間新至舊排序。
     /// </summary>
     public IReadOnlyCollection<CarPlateMaintenanceRecordDto> Records { get; set; } = new List<CarPlateMaintenanceRecordDto>();
