@@ -43,7 +43,7 @@ public class StoresController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得門市列表資料。
+    /// 取得門市列表資料，會同時附帶門市技師名單供前端快速綁定。
     /// </summary>
     /// <remarks>
     /// GET /api/stores?page=1&amp;pageSize=20
