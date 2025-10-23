@@ -651,11 +651,6 @@ public class QuotationService : IQuotationService
             Date = quotationDate,
             StoreUid = storeUid,
             EstimationTechnicianUid = estimatorUid,
-            Status = "110",
-            Status110Timestamp = createdAt,
-            Status110User = storeName,
-            CurrentStatusDate = createdAt,
-            CurrentStatusUser = storeName,
             UserName = estimatorName,
             BookDate = reservationDate,
             BookMethod = bookMethod,
@@ -710,6 +705,18 @@ public class QuotationService : IQuotationService
             PanelBeat = panelBeatFlag ? "1" : null,
             PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null
         };
+
+        // ---------- 狀態初始化 ----------
+        // 建立估價單時若填寫不能維修原因，直接套用取消狀態稽核流程，確保狀態時間一致。
+        var initialStatus = rejectFlag ? "195" : "110";
+        ApplyStatusAudit(quotationEntity, initialStatus, operatorLabel, createdAt);
+
+        if (!rejectFlag)
+        {
+            // 預設估價中的狀態操作人維持門市名稱，沿用舊系統顯示方式。
+            quotationEntity.Status110User = storeName;
+            quotationEntity.CurrentStatusUser = storeName;
+        }
 
         await _context.Quatations.AddAsync(quotationEntity, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
@@ -969,6 +976,7 @@ public class QuotationService : IQuotationService
         var storeInfo = request.Store;
         DateOnly? requestedReservationDate = null;
         DateOnly? requestedRepairDate = null;
+        var now = GetTaipeiNow();
 
         // ---------- 車輛資料同步 ----------
         if (carInfo.LicensePlate is not null)
@@ -1299,6 +1307,29 @@ public class QuotationService : IQuotationService
         }
 
         var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
+
+        // ---------- 取消狀態稽核 ----------
+        // 若維修資訊包含不能維修原因，直接轉為取消狀態並記錄時間，確保流程與手動取消一致。
+        if (rejectFlag)
+        {
+            ApplyStatusAudit(quotation, "195", operatorLabel, now);
+        }
+        else if (IsCancellationStatus(quotation.Status))
+        {
+            // 已取消但原因被移除時，回退到可用的上一個狀態，避免估價單停留在取消狀態。
+            var fallbackStatus = ResolvePreviousStatus(quotation) ?? "110";
+            ClearCancellationAudit(quotation);
+            ApplyStatusAudit(quotation, fallbackStatus, operatorLabel, now);
+        }
+        else
+        {
+            // 一般編輯仍需更新最後異動紀錄，保持狀態時間一致。
+            quotation.ModificationTimestamp = now;
+            quotation.ModifiedBy = operatorLabel;
+            quotation.CurrentStatusDate = now;
+            quotation.CurrentStatusUser = operatorLabel;
+        }
+
         quotation.Reject = rejectFlag ? true : null;
         quotation.RejectReason = rejectFlag ? unrepairableReason : null;
 
@@ -1322,8 +1353,6 @@ public class QuotationService : IQuotationService
             suggestedPaintReason,
             unrepairableReason);
         quotation.Remark = SerializeRemark(maintenanceRemark, extraData);
-        quotation.ModificationTimestamp = DateTime.UtcNow;
-        quotation.ModifiedBy = operatorLabel;
 
         await _context.SaveChangesAsync(cancellationToken);
 

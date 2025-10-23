@@ -442,10 +442,47 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ?? NormalizeOptionalText(quotation.UserUid);
         order.CreatorTechnicianUid = quotation.CreatorTechnicianUid;
         order.Amount = amount;
+
+        // ---------- 維修單取消狀態同步 ----------
+        var unrepairableReason = NormalizeOptionalText(quotation.RejectReason);
+        var hasUnrepairableReason = !string.IsNullOrWhiteSpace(unrepairableReason);
+        var currentOrderStatus = NormalizeOptionalText(order.Status);
+
+        if (hasUnrepairableReason)
+        {
+            // 估價單標記不能維修時同步標記維修單為取消維修，並補齊停工原因。
+            order.Status = "295";
+            order.Status295Timestamp = now;
+            order.Status295User = operatorLabel;
+            order.CurrentStatusDate = now;
+            order.CurrentStatusUser = operatorLabel;
+            order.StopReason = unrepairableReason;
+        }
+        else
+        {
+            // 取消原因被移除時若仍在 295 狀態，回復到上一個有效狀態並清除紀錄。
+            order.StopReason = null;
+
+            if (string.Equals(currentOrderStatus, "295", StringComparison.OrdinalIgnoreCase))
+            {
+                var fallbackStatus = ResolvePreviousOrderStatus(order, currentOrderStatus) ?? "210";
+                ApplyOrderStatusReversion(order, fallbackStatus, operatorLabel, now);
+            }
+            else
+            {
+                order.CurrentStatusDate = now;
+                order.CurrentStatusUser = operatorLabel;
+            }
+
+            if (!string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+            {
+                order.Status295Timestamp = null;
+                order.Status295User = null;
+            }
+        }
+
         order.ModificationTimestamp = now;
         order.ModifiedBy = operatorLabel;
-        order.CurrentStatusDate = now;
-        order.CurrentStatusUser = operatorLabel;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
