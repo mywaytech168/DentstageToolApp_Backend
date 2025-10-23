@@ -44,6 +44,9 @@ public class QuotationService : IQuotationService
     // 產生測試資料時使用的預約方式範例，方便前端展示不同來源。
     private static readonly string[] TestBookMethodSamples = { "電話預約", "LINE 預約", "現場排程" };
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
+    private const string DefaultQuotationStatus = "110";
+    private const string UnrepairableStatus = "115";
+    private const string CancellationStatus = "195";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -724,8 +727,8 @@ public class QuotationService : IQuotationService
         ApplyCategoryAdjustments(quotationEntity, categoryAdjustments);
 
         // ---------- 狀態初始化 ----------
-        // 建立估價單時若填寫不能維修原因，直接套用取消狀態稽核流程，確保狀態時間一致。
-        var initialStatus = rejectFlag ? "195" : "110";
+        // 建立估價單時若填寫不能維修原因，直接套用 115 不能維修狀態，避免落入取消流程。
+        var initialStatus = rejectFlag ? UnrepairableStatus : DefaultQuotationStatus;
         ApplyStatusAudit(quotationEntity, initialStatus, operatorLabel, createdAt);
 
         if (!rejectFlag)
@@ -1370,16 +1373,23 @@ public class QuotationService : IQuotationService
 
         var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
 
-        // ---------- 取消狀態稽核 ----------
-        // 若維修資訊包含不能維修原因，直接轉為取消狀態並記錄時間，確保流程與手動取消一致。
+        // ---------- 不能維修與取消狀態稽核 ----------
+        // 若維修資訊包含不能維修原因，直接套用 115 不能維修狀態，不再走 195 取消流程。
         if (rejectFlag)
         {
-            ApplyStatusAudit(quotation, "195", operatorLabel, now);
+            ClearCancellationAudit(quotation);
+            ApplyStatusAudit(quotation, UnrepairableStatus, operatorLabel, now);
+        }
+        else if (IsUnrepairableStatus(quotation.Status))
+        {
+            // 解除不能維修原因時，優先回復到歷史狀態，若缺少紀錄則回到預設 110。
+            var fallbackStatus = ResolvePreviousStatus(quotation) ?? DefaultQuotationStatus;
+            ApplyStatusAudit(quotation, fallbackStatus, operatorLabel, now);
         }
         else if (IsCancellationStatus(quotation.Status))
         {
             // 已取消但原因被移除時，回退到可用的上一個狀態，避免估價單停留在取消狀態。
-            var fallbackStatus = ResolvePreviousStatus(quotation) ?? "110";
+            var fallbackStatus = ResolvePreviousStatus(quotation) ?? DefaultQuotationStatus;
             ClearCancellationAudit(quotation);
             ApplyStatusAudit(quotation, fallbackStatus, operatorLabel, now);
         }
@@ -2169,7 +2179,7 @@ public class QuotationService : IQuotationService
             quotation.BookMethod = null;
         }
 
-        ApplyStatusAudit(quotation, "195", operatorLabel, now);
+        ApplyStatusAudit(quotation, CancellationStatus, operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -2203,11 +2213,20 @@ public class QuotationService : IQuotationService
     private static bool IsCancellationStatus(string? status)
     {
         var normalized = NormalizeOptionalText(status);
-        return string.Equals(normalized, "195", StringComparison.OrdinalIgnoreCase);
+        return string.Equals(normalized, CancellationStatus, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// 回溯狀態時清除取消紀錄，避免保留 199 欄位資訊。
+    /// 判斷目前狀態是否為不能維修 (115)。
+    /// </summary>
+    private static bool IsUnrepairableStatus(string? status)
+    {
+        var normalized = NormalizeOptionalText(status);
+        return string.Equals(normalized, UnrepairableStatus, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 回溯或轉換狀態時清除取消紀錄，避免保留 199 欄位資訊。
     /// </summary>
     private static void ClearCancellationAudit(Quatation quotation)
     {
@@ -2230,7 +2249,7 @@ public class QuotationService : IQuotationService
 
         switch (statusCode)
         {
-            case "110":
+            case DefaultQuotationStatus:
                 quotation.Status110Timestamp = timestamp;
                 quotation.Status110User = operatorLabel;
                 break;
@@ -2246,7 +2265,7 @@ public class QuotationService : IQuotationService
                 quotation.Status191Timestamp = timestamp;
                 quotation.Status191User = operatorLabel;
                 break;
-            case "195":
+            case CancellationStatus:
                 // 資料表目前僅提供 Status199 欄位，暫用來記錄 195 取消狀態的操作時間。
                 quotation.Status199Timestamp = timestamp;
                 quotation.Status199User = operatorLabel;
@@ -2275,11 +2294,11 @@ public class QuotationService : IQuotationService
         // 狀態 195 的時間點仍儲存在 Status199 欄位，因此在此明確對應。
         var statusFlow = new List<(string Code, DateTime? Timestamp)>
         {
-            ("110", quotation.Status110Timestamp),
+            (DefaultQuotationStatus, quotation.Status110Timestamp),
             ("180", quotation.Status180Timestamp),
             ("190", quotation.Status190Timestamp),
             ("191", quotation.Status191Timestamp),
-            ("195", quotation.Status199Timestamp)
+            (CancellationStatus, quotation.Status199Timestamp)
         };
 
         if (string.IsNullOrWhiteSpace(currentStatus))
@@ -2295,7 +2314,18 @@ public class QuotationService : IQuotationService
         var currentIndex = statusFlow.FindIndex(item =>
             string.Equals(item.Code, currentStatus, StringComparison.OrdinalIgnoreCase));
 
-        if (currentIndex <= 0)
+        if (currentIndex < 0)
+        {
+            // 若當前狀態未在流程清單中（例如 115 不能維修），
+            // 則回傳最後一個具備時間戳記的狀態作為回退依據。
+            return statusFlow
+                .Where(item => item.Timestamp.HasValue)
+                .OrderByDescending(item => item.Timestamp!.Value)
+                .Select(item => item.Code)
+                .FirstOrDefault();
+        }
+
+        if (currentIndex == 0)
         {
             // 找不到對應狀態或已經是最初狀態（110），便無法再往前回朔。
             return null;
