@@ -309,6 +309,7 @@ builder.Services.AddScoped<ICustomerManagementService, CustomerManagementService
 builder.Services.AddScoped<ICustomerLookupService, CustomerLookupService>();
 builder.Services.AddScoped<IStoreManagementService, StoreManagementService>();
 builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
+builder.Services.AddScoped<IStoreDeviceRegistrationService, StoreDeviceRegistrationService>();
 builder.Services.AddScoped<ITechnicianManagementService, TechnicianManagementService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
