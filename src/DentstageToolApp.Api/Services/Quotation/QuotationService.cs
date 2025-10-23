@@ -871,19 +871,24 @@ public class QuotationService : IQuotationService
         var storedOtherFee = extraData?.OtherFee;
         var storedPercentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
         var storedDiscountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
+        // ---------- 類別折扣欄位合併 ----------
+        // 透過合併 remark JSON 與資料庫欄位的資料，確保新寫入欄位的折扣資料能在詳情頁顯示，同時保留舊資料的相容性。
+        var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
+        var mergedCategoryAdjustments = MergeCategoryAdjustments(extraData?.CategoryAdjustments, columnCategoryAdjustments);
         var financials = CalculateMaintenanceFinancialSummary(
             normalizedDamages,
             storedOtherFee,
             roundingDiscount,
             storedPercentageDiscount,
             storedDiscountReason,
-            extraData?.CategoryAdjustments);
+            mergedCategoryAdjustments);
         var otherFee = financials.OtherFee ?? storedOtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount ?? storedPercentageDiscount;
         var discountReason = NormalizeOptionalText(financials.DiscountReason ?? storedDiscountReason);
+        // 若沒有明確的折扣設定，仍回傳合併後的欄位內容，避免新欄位資料被忽略。
         var categoryAdjustments = financials.HasAdjustmentData
             ? financials.Adjustments
-            : new QuotationMaintenanceCategoryAdjustmentCollection();
+            : CloneCategoryAdjustments(mergedCategoryAdjustments);
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
