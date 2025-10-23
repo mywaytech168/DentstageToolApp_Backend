@@ -2802,10 +2802,13 @@ public class QuotationService : IQuotationService
 
         entity.DentOtherFee = adjustments?.Dent?.OtherFee;
         entity.DentPercentageDiscount = adjustments?.Dent?.PercentageDiscount;
+        entity.DentDiscountReason = NormalizeOptionalText(adjustments?.Dent?.DiscountReason);
         entity.PaintOtherFee = adjustments?.Paint?.OtherFee;
         entity.PaintPercentageDiscount = adjustments?.Paint?.PercentageDiscount;
+        entity.PaintDiscountReason = NormalizeOptionalText(adjustments?.Paint?.DiscountReason);
         entity.OtherOtherFee = adjustments?.Other?.OtherFee;
         entity.OtherPercentageDiscount = adjustments?.Other?.PercentageDiscount;
+        entity.OtherDiscountReason = NormalizeOptionalText(adjustments?.Other?.DiscountReason);
     }
 
     /// <summary>
@@ -2820,10 +2823,13 @@ public class QuotationService : IQuotationService
 
         entity.DentOtherFee = adjustments?.Dent?.OtherFee;
         entity.DentPercentageDiscount = adjustments?.Dent?.PercentageDiscount;
+        entity.DentDiscountReason = NormalizeOptionalText(adjustments?.Dent?.DiscountReason);
         entity.PaintOtherFee = adjustments?.Paint?.OtherFee;
         entity.PaintPercentageDiscount = adjustments?.Paint?.PercentageDiscount;
+        entity.PaintDiscountReason = NormalizeOptionalText(adjustments?.Paint?.DiscountReason);
         entity.OtherOtherFee = adjustments?.Other?.OtherFee;
         entity.OtherPercentageDiscount = adjustments?.Other?.PercentageDiscount;
+        entity.OtherDiscountReason = NormalizeOptionalText(adjustments?.Other?.DiscountReason);
     }
 
     /// <summary>
@@ -2841,17 +2847,20 @@ public class QuotationService : IQuotationService
             Dent = new QuotationMaintenanceCategoryAdjustment
             {
                 OtherFee = entity.DentOtherFee,
-                PercentageDiscount = entity.DentPercentageDiscount
+                PercentageDiscount = entity.DentPercentageDiscount,
+                DiscountReason = NormalizeOptionalText(entity.DentDiscountReason)
             },
             Paint = new QuotationMaintenanceCategoryAdjustment
             {
                 OtherFee = entity.PaintOtherFee,
-                PercentageDiscount = entity.PaintPercentageDiscount
+                PercentageDiscount = entity.PaintPercentageDiscount,
+                DiscountReason = NormalizeOptionalText(entity.PaintDiscountReason)
             },
             Other = new QuotationMaintenanceCategoryAdjustment
             {
                 OtherFee = entity.OtherOtherFee,
-                PercentageDiscount = entity.OtherPercentageDiscount
+                PercentageDiscount = entity.OtherPercentageDiscount,
+                DiscountReason = NormalizeOptionalText(entity.OtherDiscountReason)
             }
         };
 

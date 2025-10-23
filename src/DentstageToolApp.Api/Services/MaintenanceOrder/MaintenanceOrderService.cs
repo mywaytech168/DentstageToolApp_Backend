@@ -1074,6 +1074,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             categoryAdjustments.Dent.PercentageDiscount = order.DentPercentageDiscount;
         }
+        if (string.IsNullOrWhiteSpace(categoryAdjustments.Dent.DiscountReason)
+            && !string.IsNullOrWhiteSpace(order.DentDiscountReason))
+        {
+            // 估價資料若已落入新欄位，需回填凹痕折扣原因以供維修詳情顯示。
+            categoryAdjustments.Dent.DiscountReason = NormalizeOptionalText(order.DentDiscountReason);
+        }
         if (!categoryAdjustments.Paint.OtherFee.HasValue && order.PaintOtherFee.HasValue)
         {
             categoryAdjustments.Paint.OtherFee = order.PaintOtherFee;
@@ -1082,6 +1088,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             categoryAdjustments.Paint.PercentageDiscount = order.PaintPercentageDiscount;
         }
+        if (string.IsNullOrWhiteSpace(categoryAdjustments.Paint.DiscountReason)
+            && !string.IsNullOrWhiteSpace(order.PaintDiscountReason))
+        {
+            // 維修單需同步保留板烤折扣原因，避免僅有欄位資料時遺失描述。
+            categoryAdjustments.Paint.DiscountReason = NormalizeOptionalText(order.PaintDiscountReason);
+        }
         if (!categoryAdjustments.Other.OtherFee.HasValue && order.OtherOtherFee.HasValue)
         {
             categoryAdjustments.Other.OtherFee = order.OtherOtherFee;
@@ -1089,6 +1101,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (!categoryAdjustments.Other.PercentageDiscount.HasValue && order.OtherPercentageDiscount.HasValue)
         {
             categoryAdjustments.Other.PercentageDiscount = order.OtherPercentageDiscount;
+        }
+        if (string.IsNullOrWhiteSpace(categoryAdjustments.Other.DiscountReason)
+            && !string.IsNullOrWhiteSpace(order.OtherDiscountReason))
+        {
+            // 其他分類同樣補上折扣原因，確保新欄位內容可見。
+            categoryAdjustments.Other.DiscountReason = NormalizeOptionalText(order.OtherDiscountReason);
         }
 
         maintenance.CategoryAdjustments = categoryAdjustments;
@@ -1128,7 +1146,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             OtherFee = source.OtherFee,
             PercentageDiscount = source.PercentageDiscount,
-            DiscountReason = source.DiscountReason
+            // 折扣原因同樣進行字串正規化，避免出現多餘空白。
+            DiscountReason = NormalizeOptionalText(source.DiscountReason)
         };
     }
 
