@@ -174,6 +174,11 @@ public class CreateQuotationMaintenanceInfo
     public string? DiscountReason { get; set; }
 
     /// <summary>
+    /// 依凹痕、板烤與其他三大類拆分的費用與折扣設定，對應前端面板輸入。
+    /// </summary>
+    public QuotationMaintenanceCategoryAdjustmentCollection? CategoryAdjustments { get; set; }
+
+    /// <summary>
     /// 維修設定備註，取代舊版放置於頂層的 remark 欄位。
     /// </summary>
     public string? Remark { get; set; }
@@ -337,9 +342,59 @@ public class QuotationMaintenanceInfo
     public string? DiscountReason { get; set; }
 
     /// <summary>
+    /// 依類別拆分的費用與折扣資訊，方便前端直接回填新欄位。
+    /// </summary>
+    public QuotationMaintenanceCategoryAdjustmentCollection? CategoryAdjustments { get; set; }
+
+    /// <summary>
     /// 維修相關備註。
     /// </summary>
     public string? Remark { get; set; }
+}
+
+/// <summary>
+/// 估價單維修設定在三大服務類別中的費用與折扣調整集合。
+/// </summary>
+public class QuotationMaintenanceCategoryAdjustmentCollection
+{
+    /// <summary>
+    /// 凹痕類別的額外費用與折扣設定。
+    /// </summary>
+    [JsonPropertyName("dent")]
+    public QuotationMaintenanceCategoryAdjustment Dent { get; set; } = new();
+
+    /// <summary>
+    /// 板烤類別的額外費用與折扣設定。
+    /// </summary>
+    [JsonPropertyName("paint")]
+    public QuotationMaintenanceCategoryAdjustment Paint { get; set; } = new();
+
+    /// <summary>
+    /// 其他類別的額外費用與折扣設定。
+    /// </summary>
+    [JsonPropertyName("other")]
+    public QuotationMaintenanceCategoryAdjustment Other { get; set; } = new();
+}
+
+/// <summary>
+/// 維修類別中單一項目的額外費用、折扣趴數與折扣原因。
+/// </summary>
+public class QuotationMaintenanceCategoryAdjustment
+{
+    /// <summary>
+    /// 類別專屬的其他費用，例如代步車或耗材。
+    /// </summary>
+    public decimal? OtherFee { get; set; }
+
+    /// <summary>
+    /// 類別專屬的折扣百分比，單位為百分比數值。
+    /// </summary>
+    public decimal? PercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 類別折扣原因，利於稽核折扣依據。
+    /// </summary>
+    public string? DiscountReason { get; set; }
 }
 
 /// <summary>

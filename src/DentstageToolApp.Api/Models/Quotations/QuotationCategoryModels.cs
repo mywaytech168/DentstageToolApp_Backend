@@ -1197,12 +1197,12 @@ public class QuotationCategoryAmount
     /// <summary>
     /// 類別其他費用，例如耗材費或代步車。
     /// </summary>
-    public decimal? AdditionalFee { get; set; }
+    public decimal? OtherFee { get; set; }
 
     /// <summary>
     /// 折扣趴數，單位為百分比。
     /// </summary>
-    public decimal? DiscountPercentage { get; set; }
+    public decimal? PercentageDiscount { get; set; }
 
     /// <summary>
     /// 折扣原因說明，方便稽核。
