@@ -264,6 +264,11 @@ public class Quatation
     public decimal? DentPercentageDiscount { get; set; }
 
     /// <summary>
+    /// 凹痕類別的折扣原因，方便後續稽核折扣依據。
+    /// </summary>
+    public string? DentDiscountReason { get; set; }
+
+    /// <summary>
     /// 板烤類別的其他費用。
     /// </summary>
     public decimal? PaintOtherFee { get; set; }
@@ -274,6 +279,11 @@ public class Quatation
     public decimal? PaintPercentageDiscount { get; set; }
 
     /// <summary>
+    /// 板烤類別的折扣原因，紀錄提供折扣的具體說明。
+    /// </summary>
+    public string? PaintDiscountReason { get; set; }
+
+    /// <summary>
     /// 其他類別的其他費用。
     /// </summary>
     public decimal? OtherOtherFee { get; set; }
@@ -282,6 +292,11 @@ public class Quatation
     /// 其他類別的折扣百分比。
     /// </summary>
     public decimal? OtherPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 其他類別的折扣原因，保存原始折扣描述。
+    /// </summary>
+    public string? OtherDiscountReason { get; set; }
 
     /// <summary>
     /// 預約日期。

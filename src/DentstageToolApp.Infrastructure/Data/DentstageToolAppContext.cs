@@ -583,18 +583,27 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.DentPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("DentPercentageDiscount");
+        entity.Property(e => e.DentDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("DentDiscountReason");
         entity.Property(e => e.PaintOtherFee)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("PaintOtherFee");
         entity.Property(e => e.PaintPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("PaintPercentageDiscount");
+        entity.Property(e => e.PaintDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("PaintDiscountReason");
         entity.Property(e => e.OtherOtherFee)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("OtherOtherFee");
         entity.Property(e => e.OtherPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("OtherPercentageDiscount");
+        entity.Property(e => e.OtherDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("OtherDiscountReason");
         entity.Property(e => e.BookDate)
             .HasMaxLength(20)
             .HasColumnName("Book_Date");
@@ -817,18 +826,27 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.DentPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("DentPercentageDiscount");
+        entity.Property(e => e.DentDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("DentDiscountReason");
         entity.Property(e => e.PaintOtherFee)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("PaintOtherFee");
         entity.Property(e => e.PaintPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("PaintPercentageDiscount");
+        entity.Property(e => e.PaintDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("PaintDiscountReason");
         entity.Property(e => e.OtherOtherFee)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("OtherOtherFee");
         entity.Property(e => e.OtherPercentageDiscount)
             .HasColumnType("decimal(5,2)")
             .HasColumnName("OtherPercentageDiscount");
+        entity.Property(e => e.OtherDiscountReason)
+            .HasMaxLength(255)
+            .HasColumnName("OtherDiscountReason");
         entity.Property(e => e.Amount)
             .HasColumnType("decimal(10,2)");
         entity.Property(e => e.StopReason)
