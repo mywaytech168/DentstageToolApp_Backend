@@ -24,6 +24,7 @@ namespace DentstageToolApp.Api.Controllers;
 public class StoresController : ControllerBase
 {
     private readonly IStoreManagementService _storeManagementService;
+    private readonly IStoreDeviceRegistrationService _storeDeviceRegistrationService;
     private readonly IStoreQueryService _storeQueryService;
     private readonly ILogger<StoresController> _logger;
 
@@ -33,10 +34,12 @@ public class StoresController : ControllerBase
     public StoresController(
         IStoreManagementService storeManagementService,
         IStoreQueryService storeQueryService,
+        IStoreDeviceRegistrationService storeDeviceRegistrationService,
         ILogger<StoresController> logger)
     {
         _storeManagementService = storeManagementService;
         _storeQueryService = storeQueryService;
+        _storeDeviceRegistrationService = storeDeviceRegistrationService;
         _logger = logger;
     }
 
@@ -154,6 +157,53 @@ public class StoresController : ControllerBase
         {
             _logger.LogError(ex, "新增門市流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "新增門市資料失敗");
+        }
+    }
+
+    /// <summary>
+    /// 為門市建立專屬註冊機碼，產生新的裝置註冊資料以供 App 綁定。
+    /// </summary>
+    [HttpPost("registration-keys")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "storeUid": "St_28E50A91-6DA5-4A66-9BA9-6C318D2A9E12",
+          "deviceName": "台南服務平板"
+        }
+        """)]
+    [ProducesResponseType(typeof(CreateStoreDeviceRegistrationResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<CreateStoreDeviceRegistrationResponse>> CreateStoreRegistrationKeyAsync(
+        [FromBody] CreateStoreDeviceRegistrationRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _storeDeviceRegistrationService.CreateDeviceRegistrationAsync(request, operatorName, cancellationToken);
+            return StatusCode(StatusCodes.Status201Created, response);
+        }
+        catch (StoreDeviceRegistrationException ex)
+        {
+            _logger.LogWarning(ex, "建立門市註冊機碼失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "建立門市註冊機碼失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("建立門市註冊機碼流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "建立門市註冊機碼已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "建立門市註冊機碼流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "建立門市註冊機碼失敗");
         }
     }
 
