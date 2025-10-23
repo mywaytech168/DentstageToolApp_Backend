@@ -145,6 +145,23 @@ public class QuotationsController : ControllerBase
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,
+            "categoryAdjustments": {
+              "dent": {
+                "otherFee": 300,
+                "percentageDiscount": 5,
+                "discountReason": "凹痕維修回饋方案"
+              },
+              "paint": {
+                "otherFee": 500,
+                "percentageDiscount": 8,
+                "discountReason": "板烤周年折扣"
+              },
+              "other": {
+                "otherFee": 800,
+                "percentageDiscount": 10,
+                "discountReason": "其他服務贈送方案"
+              }
+            },
             "remark": "請於修復後通知客戶取車"
           }
         }
@@ -300,6 +317,23 @@ public class QuotationsController : ControllerBase
             "roundingDiscount": 200,
             "percentageDiscount": 10,
             "discountReason": "回饋老客戶",
+            "categoryAdjustments": {
+              "dent": {
+                "otherFee": 300,
+                "percentageDiscount": 5,
+                "discountReason": "凹痕維修回饋方案"
+              },
+              "paint": {
+                "otherFee": 500,
+                "percentageDiscount": 8,
+                "discountReason": "板烤周年折扣"
+              },
+              "other": {
+                "otherFee": 800,
+                "percentageDiscount": 10,
+                "discountReason": "其他服務贈送方案"
+              }
+            },
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,

@@ -323,6 +323,51 @@ public class Order
     public string? DiscountReason { get; set; }
 
     /// <summary>
+    /// 凹痕類別的其他費用。
+    /// </summary>
+    public decimal? DentOtherFee { get; set; }
+
+    /// <summary>
+    /// 凹痕類別的折扣百分比。
+    /// </summary>
+    public decimal? DentPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 凹痕類別的折扣原因，協助維修單追蹤折扣來源。
+    /// </summary>
+    public string? DentDiscountReason { get; set; }
+
+    /// <summary>
+    /// 板烤類別的其他費用。
+    /// </summary>
+    public decimal? PaintOtherFee { get; set; }
+
+    /// <summary>
+    /// 板烤類別的折扣百分比。
+    /// </summary>
+    public decimal? PaintPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 板烤類別的折扣原因，保留評估折扣時的文字說明。
+    /// </summary>
+    public string? PaintDiscountReason { get; set; }
+
+    /// <summary>
+    /// 其他類別的其他費用。
+    /// </summary>
+    public decimal? OtherOtherFee { get; set; }
+
+    /// <summary>
+    /// 其他類別的折扣百分比。
+    /// </summary>
+    public decimal? OtherPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 其他類別的折扣原因，保存估價與維修同步的折扣內容。
+    /// </summary>
+    public string? OtherDiscountReason { get; set; }
+
+    /// <summary>
     /// 應付金額。
     /// </summary>
     public decimal? Amount { get; set; }
