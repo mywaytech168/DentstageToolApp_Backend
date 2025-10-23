@@ -482,7 +482,7 @@ public class QuotationService : IQuotationService
         var repaintFlag = ConvertBooleanToFlag(maintenanceInfo.HasRepainted);
         var toolFlag = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
         var maintenanceRemark = NormalizeOptionalText(maintenanceInfo.Remark);
-        var otherFee = maintenanceInfo.OtherFee;
+        var legacyOtherFee = maintenanceInfo.OtherFee;
         var estimatedRepairDays = maintenanceInfo.EstimatedRepairDays;
         var estimatedRepairHours = maintenanceInfo.EstimatedRepairHours;
         var estimatedRestorationPercentage = maintenanceInfo.EstimatedRestorationPercentage;
@@ -499,8 +499,9 @@ public class QuotationService : IQuotationService
         var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
         var panelBeatFlag = !string.IsNullOrEmpty(suggestedPaintReason);
         var roundingDiscount = maintenanceInfo.RoundingDiscount;
-        var percentageDiscount = maintenanceInfo.PercentageDiscount;
-        var discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
+        var legacyPercentageDiscount = maintenanceInfo.PercentageDiscount;
+        var rawDiscountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
+        var requestedCategoryAdjustments = maintenanceInfo.CategoryAdjustments;
 
         // ---------- 預約與維修日期處理 ----------
         // 若前端已排定預約或維修日期，需轉換為 DateOnly 以符合資料表欄位型別。
@@ -619,6 +620,19 @@ public class QuotationService : IQuotationService
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
 
         // remark 改以包裝 JSON 儲存傷痕、簽名與折扣資訊，仍保留純文字備註於 PlainRemark。
+        var financials = CalculateMaintenanceFinancialSummary(
+            normalizedDamages,
+            legacyOtherFee,
+            roundingDiscount,
+            legacyPercentageDiscount,
+            rawDiscountReason,
+            requestedCategoryAdjustments);
+        var otherFee = financials.OtherFee;
+        var percentageDiscount = financials.EffectivePercentageDiscount;
+        var discountReason = financials.DiscountReason ?? rawDiscountReason;
+        var categoryAdjustments = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var valuation = financials.Valuation;
+
         var extraData = BuildExtraData(
             normalizedDamages,
             carBodyConfirmation,
@@ -630,9 +644,9 @@ public class QuotationService : IQuotationService
             estimatedRepairHours,
             estimatedRestorationPercentage,
             suggestedPaintReason,
-            unrepairableReason);
+            unrepairableReason,
+            categoryAdjustments);
         var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
-        var valuation = CalculateTotalAmount(normalizedDamages, otherFee, roundingDiscount, percentageDiscount);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -705,6 +719,9 @@ public class QuotationService : IQuotationService
             PanelBeat = panelBeatFlag ? "1" : null,
             PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null
         };
+
+        // ---------- 類別折扣欄位同步 ----------
+        ApplyCategoryAdjustments(quotationEntity, categoryAdjustments);
 
         // ---------- 狀態初始化 ----------
         // 建立估價單時若填寫不能維修原因，直接套用取消狀態稽核流程，確保狀態時間一致。
@@ -850,10 +867,23 @@ public class QuotationService : IQuotationService
         // 移除多餘欄位的車體確認單內容，僅保留必要資訊。
         var simplifiedCarBody = SimplifyCarBodyConfirmation(extraData?.CarBodyConfirmation);
         var maintenanceRemark = plainRemark;
-        var otherFee = extraData?.OtherFee;
         var roundingDiscount = extraData?.RoundingDiscount ?? quotation.Discount;
-        var percentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
-        var discountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
+        var storedOtherFee = extraData?.OtherFee;
+        var storedPercentageDiscount = extraData?.PercentageDiscount ?? quotation.DiscountPercent;
+        var storedDiscountReason = NormalizeOptionalText(extraData?.DiscountReason ?? quotation.DiscountReason);
+        var financials = CalculateMaintenanceFinancialSummary(
+            normalizedDamages,
+            storedOtherFee,
+            roundingDiscount,
+            storedPercentageDiscount,
+            storedDiscountReason,
+            extraData?.CategoryAdjustments);
+        var otherFee = financials.OtherFee ?? storedOtherFee;
+        var percentageDiscount = financials.EffectivePercentageDiscount ?? storedPercentageDiscount;
+        var discountReason = NormalizeOptionalText(financials.DiscountReason ?? storedDiscountReason);
+        var categoryAdjustments = financials.HasAdjustmentData
+            ? financials.Adjustments
+            : new QuotationMaintenanceCategoryAdjustmentCollection();
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
@@ -941,6 +971,7 @@ public class QuotationService : IQuotationService
                 RoundingDiscount = roundingDiscount,
                 PercentageDiscount = percentageDiscount,
                 DiscountReason = discountReason,
+                CategoryAdjustments = categoryAdjustments,
                 EstimatedRepairDays = estimatedRepairDays,
                 EstimatedRepairHours = estimatedRepairHours,
                 EstimatedRestorationPercentage = estimatedRestorationPercentage,
@@ -1174,10 +1205,17 @@ public class QuotationService : IQuotationService
         }
 
         var maintenanceRemark = plainRemark;
-        decimal? otherFee = existingExtra?.OtherFee;
+        decimal? legacyOtherFee = existingExtra?.OtherFee;
         decimal? roundingDiscount = quotation.Discount ?? existingExtra?.RoundingDiscount;
-        decimal? percentageDiscount = quotation.DiscountPercent ?? existingExtra?.PercentageDiscount;
-        var discountReason = NormalizeOptionalText(existingExtra?.DiscountReason ?? quotation.DiscountReason);
+        decimal? legacyPercentageDiscount = quotation.DiscountPercent ?? existingExtra?.PercentageDiscount;
+        var rawDiscountReason = NormalizeOptionalText(existingExtra?.DiscountReason ?? quotation.DiscountReason);
+        var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
+        var storedCategoryAdjustments = MergeCategoryAdjustments(existingExtra?.CategoryAdjustments, columnCategoryAdjustments);
+        var requestedCategoryAdjustments = CloneCategoryAdjustments(storedCategoryAdjustments);
+        if (existingExtra is not null)
+        {
+            existingExtra.CategoryAdjustments = storedCategoryAdjustments;
+        }
         var estimatedRepairDays = quotation.FixExpectDay ?? existingExtra?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? existingExtra?.EstimatedRepairHours;
         var estimatedRestorationPercentage = existingExtra?.EstimatedRestorationPercentage
@@ -1218,24 +1256,29 @@ public class QuotationService : IQuotationService
                 quotation.ToolTest = ConvertBooleanToFlag(maintenanceInfo.NeedToolEvaluation);
             }
 
-            if (maintenanceInfo.OtherFee.HasValue)
-            {
-                otherFee = maintenanceInfo.OtherFee;
-            }
-
             if (maintenanceInfo.RoundingDiscount.HasValue)
             {
                 roundingDiscount = maintenanceInfo.RoundingDiscount;
             }
 
+            if (maintenanceInfo.OtherFee.HasValue)
+            {
+                legacyOtherFee = maintenanceInfo.OtherFee;
+            }
+
             if (maintenanceInfo.PercentageDiscount.HasValue)
             {
-                percentageDiscount = maintenanceInfo.PercentageDiscount;
+                legacyPercentageDiscount = maintenanceInfo.PercentageDiscount;
             }
 
             if (maintenanceInfo.DiscountReason is not null)
             {
-                discountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
+                rawDiscountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
+            }
+
+            if (maintenanceInfo.CategoryAdjustments is not null)
+            {
+                requestedCategoryAdjustments = CloneCategoryAdjustments(maintenanceInfo.CategoryAdjustments);
             }
 
             if (maintenanceInfo.EstimatedRepairDays.HasValue)
@@ -1286,9 +1329,23 @@ public class QuotationService : IQuotationService
             }
         }
 
+        var financials = CalculateMaintenanceFinancialSummary(
+            effectiveDamages,
+            legacyOtherFee,
+            roundingDiscount,
+            legacyPercentageDiscount,
+            rawDiscountReason,
+            requestedCategoryAdjustments);
+        var otherFee = financials.OtherFee;
+        var percentageDiscount = financials.EffectivePercentageDiscount;
+        var discountReason = financials.DiscountReason ?? rawDiscountReason;
+        var categoryAdjustments = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var valuation = financials.Valuation;
+
         quotation.Discount = roundingDiscount;
         quotation.DiscountPercent = percentageDiscount;
         quotation.DiscountReason = discountReason;
+        ApplyCategoryAdjustments(quotation, categoryAdjustments);
         quotation.FixTimeHour = fixTimeHour;
         quotation.FixTimeMin = fixTimeMin;
         quotation.FixExpectDay = fixExpectDay;
@@ -1337,7 +1394,6 @@ public class QuotationService : IQuotationService
         quotation.PanelBeat = panelBeatFlag ? "1" : null;
         quotation.PanelBeatReason = panelBeatFlag ? suggestedPaintReason : null;
 
-        var valuation = CalculateTotalAmount(effectiveDamages, otherFee, roundingDiscount, percentageDiscount);
         quotation.Valuation = valuation;
 
         var extraData = BuildExtraData(
@@ -1351,7 +1407,8 @@ public class QuotationService : IQuotationService
             estimatedRepairHours,
             estimatedRestorationPercentage,
             suggestedPaintReason,
-            unrepairableReason);
+            unrepairableReason,
+            categoryAdjustments);
         quotation.Remark = SerializeRemark(maintenanceRemark, extraData);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -1649,6 +1706,9 @@ public class QuotationService : IQuotationService
             FlagRegularCustomer = quotation.FlagRegularCustomer,
             FlagExternalCooperation = false
         };
+
+        // ---------- 類別折扣欄位同步 ----------
+        ApplyCategoryAdjustments(order, ExtractCategoryAdjustments(quotation));
 
         _context.Orders.Add(order);
 
@@ -2323,62 +2383,102 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 將物件集合中的金額資訊轉換為估價單主檔的估價金額。
+    /// 綜合傷痕、類別費用與折扣資訊，計算估價金額與折扣摘要。
     /// </summary>
-    private static decimal? CalculateTotalAmount(List<QuotationDamageItem> damages, decimal? otherFee, decimal? roundingDiscount, decimal? percentageDiscount)
+    private static MaintenanceFinancialSummary CalculateMaintenanceFinancialSummary(
+        List<QuotationDamageItem> damages,
+        decimal? otherFee,
+        decimal? roundingDiscount,
+        decimal? percentageDiscount,
+        string? discountReason,
+        QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments)
     {
+        var normalizedReason = NormalizeOptionalText(discountReason);
+        var normalization = NormalizeMaintenanceAdjustments(
+            categoryAdjustments,
+            otherFee,
+            percentageDiscount,
+            normalizedReason);
+        var adjustments = normalization.Adjustments;
+        var categoryTotals = CalculateCategoryDamageTotals(damages);
+
+        decimal aggregatedOtherFeeValue = 0m;
+        var hasOtherFee = false;
         var hasBaseAmount = false;
-        decimal subtotal = 0m;
+        decimal totalBase = 0m;
+        decimal totalDiscountAmount = 0m;
 
-        if (damages is { Count: > 0 })
+        foreach (var (key, adjustment) in EnumerateAdjustmentPairs(adjustments))
         {
-            foreach (var damage in damages)
-            {
-                if (damage?.DisplayEstimatedAmount is not { } estimate)
-                {
-                    continue;
-                }
+            var damageSubtotal = categoryTotals.TryGetValue(key, out var subtotal) ? subtotal : 0m;
+            var categoryOtherFee = adjustment.OtherFee ?? 0m;
+            var hasOtherFeeValue = adjustment.OtherFee.HasValue;
 
-                subtotal += estimate;
+            if (damageSubtotal > 0m || hasOtherFeeValue)
+            {
                 hasBaseAmount = true;
+            }
+
+            if (hasOtherFeeValue)
+            {
+                aggregatedOtherFeeValue += adjustment.OtherFee.Value;
+                hasOtherFee = true;
+            }
+
+            var categoryBase = damageSubtotal + categoryOtherFee;
+            totalBase += categoryBase;
+
+            if (adjustment.PercentageDiscount.HasValue && adjustment.PercentageDiscount.Value != 0m)
+            {
+                var discountRate = adjustment.PercentageDiscount.Value / 100m;
+                totalDiscountAmount += categoryBase * discountRate;
             }
         }
 
-        if (otherFee.HasValue)
+        var aggregatedOtherFee = hasOtherFee ? aggregatedOtherFeeValue : otherFee;
+        var discountReasonSummary = BuildAggregatedDiscountReason(adjustments, normalizedReason);
+
+        decimal? effectivePercentage = null;
+        if (totalDiscountAmount != 0m && totalBase != 0m)
         {
-            subtotal += otherFee.Value;
-            hasBaseAmount = true;
+            effectivePercentage = totalDiscountAmount / totalBase * 100m;
+        }
+        else
+        {
+            effectivePercentage = ExtractFirstPercentageDiscount(adjustments) ?? percentageDiscount;
         }
 
-        var result = subtotal;
-        var hasDiscount = false;
+        var netAmount = totalBase - totalDiscountAmount;
+        var hasDiscount = totalDiscountAmount != 0m;
 
-        if (percentageDiscount.HasValue && percentageDiscount.Value != 0)
+        if (roundingDiscount.HasValue)
         {
-            // 先計算折扣金額，再自總額扣除，保留原始小計供後續折扣使用。
-            var discountRate = percentageDiscount.Value / 100m;
-            result -= subtotal * discountRate;
-            hasDiscount = true;
+            netAmount -= roundingDiscount.Value;
+            if (roundingDiscount.Value != 0m)
+            {
+                hasDiscount = true;
+            }
         }
 
-        if (roundingDiscount.HasValue && roundingDiscount.Value != 0)
-        {
-            // 零頭折扣直接以金額扣除，可用來調整至整數金額。
-            result -= roundingDiscount.Value;
-            hasDiscount = true;
-        }
-
+        decimal? valuation = netAmount;
         if (!hasBaseAmount && !hasDiscount)
         {
-            return null;
+            valuation = null;
         }
-
-        if (result < 0)
+        else if (valuation < 0m)
         {
-            result = 0;
+            valuation = 0m;
         }
 
-        return result;
+        return new MaintenanceFinancialSummary
+        {
+            Adjustments = adjustments,
+            HasAdjustmentData = HasCategoryAdjustments(adjustments),
+            OtherFee = aggregatedOtherFee,
+            EffectivePercentageDiscount = effectivePercentage,
+            DiscountReason = discountReasonSummary,
+            Valuation = valuation
+        };
     }
 
     /// <summary>
@@ -2416,7 +2516,8 @@ public class QuotationService : IQuotationService
         int? estimatedRepairHours,
         decimal? estimatedRestorationPercentage,
         string? suggestedPaintReason,
-        string? unrepairableReason)
+        string? unrepairableReason,
+        QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments)
     {
         var hasDamages = damages is { Count: > 0 };
         var hasCarBody = HasCarBodyContent(carBody);
@@ -2428,7 +2529,8 @@ public class QuotationService : IQuotationService
             || estimatedRepairHours.HasValue
             || estimatedRestorationPercentage.HasValue
             || !string.IsNullOrWhiteSpace(suggestedPaintReason)
-            || !string.IsNullOrWhiteSpace(unrepairableReason);
+            || !string.IsNullOrWhiteSpace(unrepairableReason)
+            || HasCategoryAdjustments(categoryAdjustments);
 
         if (!hasDamages && !hasCarBody && !hasMaintenanceExtra)
         {
@@ -2447,8 +2549,357 @@ public class QuotationService : IQuotationService
             EstimatedRepairHours = estimatedRepairHours,
             EstimatedRestorationPercentage = estimatedRestorationPercentage,
             SuggestedPaintReason = suggestedPaintReason,
-            UnrepairableReason = unrepairableReason
+            UnrepairableReason = unrepairableReason,
+            CategoryAdjustments = HasCategoryAdjustments(categoryAdjustments)
+                ? CloneCategoryAdjustments(categoryAdjustments)
+                : null
         };
+    }
+
+    /// <summary>
+    /// 正規化維修類別的折扣設定，必要時補入舊欄位資料作為預設值。
+    /// </summary>
+    private static MaintenanceAdjustmentNormalizationResult NormalizeMaintenanceAdjustments(
+        QuotationMaintenanceCategoryAdjustmentCollection? source,
+        decimal? fallbackOtherFee,
+        decimal? fallbackPercentageDiscount,
+        string? fallbackDiscountReason)
+    {
+        var adjustments = CloneCategoryAdjustments(source);
+        var hasExplicitAdjustments = HasCategoryAdjustments(source);
+
+        if (!HasOtherFee(adjustments) && fallbackOtherFee.HasValue)
+        {
+            adjustments.Other.OtherFee = fallbackOtherFee;
+        }
+
+        if (!HasPercentageDiscount(adjustments) && fallbackPercentageDiscount.HasValue)
+        {
+            adjustments.Other.PercentageDiscount = fallbackPercentageDiscount;
+        }
+
+        if (!HasDiscountReason(adjustments) && !string.IsNullOrWhiteSpace(fallbackDiscountReason))
+        {
+            adjustments.Other.DiscountReason = fallbackDiscountReason;
+        }
+
+        return new MaintenanceAdjustmentNormalizationResult
+        {
+            Adjustments = adjustments,
+            HasExplicitAdjustments = hasExplicitAdjustments
+        };
+    }
+
+    /// <summary>
+    /// 建立維修類別與其設定的列舉序列，方便後續統一運算。
+    /// </summary>
+    private static IEnumerable<(string Key, QuotationMaintenanceCategoryAdjustment Adjustment)> EnumerateAdjustmentPairs(
+        QuotationMaintenanceCategoryAdjustmentCollection adjustments)
+    {
+        yield return ("dent", adjustments.Dent ?? new QuotationMaintenanceCategoryAdjustment());
+        yield return ("paint", adjustments.Paint ?? new QuotationMaintenanceCategoryAdjustment());
+        yield return ("other", adjustments.Other ?? new QuotationMaintenanceCategoryAdjustment());
+    }
+
+    /// <summary>
+    /// 依維修類別計算傷痕金額小計，供折扣運算使用。
+    /// </summary>
+    private static Dictionary<string, decimal> CalculateCategoryDamageTotals(IEnumerable<QuotationDamageItem> damages)
+    {
+        var totals = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["dent"] = 0m,
+            ["paint"] = 0m,
+            ["other"] = 0m
+        };
+
+        if (damages is null)
+        {
+            return totals;
+        }
+
+        foreach (var damage in damages)
+        {
+            if (damage?.DisplayEstimatedAmount is not { } amount)
+            {
+                continue;
+            }
+
+            QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
+            var groupKey = QuotationDamageFixTypeHelper.DetermineGroupKey(damage.FixType);
+            var normalizedKey = NormalizeCategoryKey(groupKey) ?? "other";
+
+            if (!totals.ContainsKey(normalizedKey))
+            {
+                totals[normalizedKey] = 0m;
+            }
+
+            totals[normalizedKey] += amount;
+        }
+
+        return totals;
+    }
+
+    /// <summary>
+    /// 組裝折扣原因的顯示文字，若多於一個原因會加上類別標籤。
+    /// </summary>
+    private static string? BuildAggregatedDiscountReason(
+        QuotationMaintenanceCategoryAdjustmentCollection adjustments,
+        string? fallbackReason)
+    {
+        var entries = new List<(string Label, string? Reason)>
+        {
+            ("凹痕", NormalizeOptionalText(adjustments.Dent?.DiscountReason)),
+            ("板烤", NormalizeOptionalText(adjustments.Paint?.DiscountReason)),
+            ("其他", NormalizeOptionalText(adjustments.Other?.DiscountReason))
+        };
+
+        var nonEmpty = entries
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Reason))
+            .ToList();
+
+        if (nonEmpty.Count == 0)
+        {
+            return fallbackReason;
+        }
+
+        if (nonEmpty.Count == 1)
+        {
+            return nonEmpty[0].Reason;
+        }
+
+        return string.Join("；", nonEmpty.Select(entry => $"{entry.Label}：{entry.Reason}"));
+    }
+
+    /// <summary>
+    /// 從類別折扣設定中擷取首個有效折扣百分比，供回寫舊欄位使用。
+    /// </summary>
+    private static decimal? ExtractFirstPercentageDiscount(QuotationMaintenanceCategoryAdjustmentCollection adjustments)
+    {
+        if (adjustments.Dent?.PercentageDiscount.HasValue == true)
+        {
+            return adjustments.Dent.PercentageDiscount;
+        }
+
+        if (adjustments.Paint?.PercentageDiscount.HasValue == true)
+        {
+            return adjustments.Paint.PercentageDiscount;
+        }
+
+        if (adjustments.Other?.PercentageDiscount.HasValue == true)
+        {
+            return adjustments.Other.PercentageDiscount;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 判斷類別集合是否含有任何折扣或費用設定。
+    /// </summary>
+    private static bool HasCategoryAdjustments(QuotationMaintenanceCategoryAdjustmentCollection? collection)
+    {
+        if (collection is null)
+        {
+            return false;
+        }
+
+        return HasCategoryAdjustmentValue(collection.Dent)
+            || HasCategoryAdjustmentValue(collection.Paint)
+            || HasCategoryAdjustmentValue(collection.Other);
+    }
+
+    /// <summary>
+    /// 判斷單一類別是否有設定費用或折扣資料。
+    /// </summary>
+    private static bool HasCategoryAdjustmentValue(QuotationMaintenanceCategoryAdjustment? adjustment)
+    {
+        if (adjustment is null)
+        {
+            return false;
+        }
+
+        return adjustment.OtherFee.HasValue
+            || adjustment.PercentageDiscount.HasValue
+            || !string.IsNullOrWhiteSpace(adjustment.DiscountReason);
+    }
+
+    /// <summary>
+    /// 判斷三大類別中是否有設定額外費用。
+    /// </summary>
+    private static bool HasOtherFee(QuotationMaintenanceCategoryAdjustmentCollection adjustments)
+    {
+        return adjustments.Dent?.OtherFee.HasValue == true
+            || adjustments.Paint?.OtherFee.HasValue == true
+            || adjustments.Other?.OtherFee.HasValue == true;
+    }
+
+    /// <summary>
+    /// 判斷三大類別中是否有設定折扣趴數。
+    /// </summary>
+    private static bool HasPercentageDiscount(QuotationMaintenanceCategoryAdjustmentCollection adjustments)
+    {
+        return adjustments.Dent?.PercentageDiscount.HasValue == true
+            || adjustments.Paint?.PercentageDiscount.HasValue == true
+            || adjustments.Other?.PercentageDiscount.HasValue == true;
+    }
+
+    /// <summary>
+    /// 判斷三大類別中是否有填寫折扣原因。
+    /// </summary>
+    private static bool HasDiscountReason(QuotationMaintenanceCategoryAdjustmentCollection adjustments)
+    {
+        return !string.IsNullOrWhiteSpace(adjustments.Dent?.DiscountReason)
+            || !string.IsNullOrWhiteSpace(adjustments.Paint?.DiscountReason)
+            || !string.IsNullOrWhiteSpace(adjustments.Other?.DiscountReason);
+    }
+
+    /// <summary>
+    /// 深度複製整體類別折扣集合，避免後續修改互相影響。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustmentCollection CloneCategoryAdjustments(QuotationMaintenanceCategoryAdjustmentCollection? source)
+    {
+        return new QuotationMaintenanceCategoryAdjustmentCollection
+        {
+            Dent = CloneCategoryAdjustment(source?.Dent),
+            Paint = CloneCategoryAdjustment(source?.Paint),
+            Other = CloneCategoryAdjustment(source?.Other)
+        };
+    }
+
+    /// <summary>
+    /// 深度複製單一類別的折扣設定並同步正規化文字內容。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustment CloneCategoryAdjustment(QuotationMaintenanceCategoryAdjustment? source)
+    {
+        if (source is null)
+        {
+            return new QuotationMaintenanceCategoryAdjustment();
+        }
+
+        return new QuotationMaintenanceCategoryAdjustment
+        {
+            OtherFee = source.OtherFee,
+            PercentageDiscount = source.PercentageDiscount,
+            DiscountReason = NormalizeOptionalText(source.DiscountReason)
+        };
+    }
+
+    /// <summary>
+    /// 將類別折扣資料同步寫入估價單欄位，讓資料庫可直接查詢分類後的費用與折扣。
+    /// </summary>
+    private static void ApplyCategoryAdjustments(Quatation? entity, QuotationMaintenanceCategoryAdjustmentCollection? adjustments)
+    {
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.DentOtherFee = adjustments?.Dent?.OtherFee;
+        entity.DentPercentageDiscount = adjustments?.Dent?.PercentageDiscount;
+        entity.PaintOtherFee = adjustments?.Paint?.OtherFee;
+        entity.PaintPercentageDiscount = adjustments?.Paint?.PercentageDiscount;
+        entity.OtherOtherFee = adjustments?.Other?.OtherFee;
+        entity.OtherPercentageDiscount = adjustments?.Other?.PercentageDiscount;
+    }
+
+    /// <summary>
+    /// 將類別折扣資料同步寫入維修單欄位，維持估價與維修資料一致。
+    /// </summary>
+    private static void ApplyCategoryAdjustments(Order? entity, QuotationMaintenanceCategoryAdjustmentCollection? adjustments)
+    {
+        if (entity is null)
+        {
+            return;
+        }
+
+        entity.DentOtherFee = adjustments?.Dent?.OtherFee;
+        entity.DentPercentageDiscount = adjustments?.Dent?.PercentageDiscount;
+        entity.PaintOtherFee = adjustments?.Paint?.OtherFee;
+        entity.PaintPercentageDiscount = adjustments?.Paint?.PercentageDiscount;
+        entity.OtherOtherFee = adjustments?.Other?.OtherFee;
+        entity.OtherPercentageDiscount = adjustments?.Other?.PercentageDiscount;
+    }
+
+    /// <summary>
+    /// 由估價單欄位還原類別折扣設定，提供回傳詳情時的預設值。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustmentCollection? ExtractCategoryAdjustments(Quatation? entity)
+    {
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var adjustments = new QuotationMaintenanceCategoryAdjustmentCollection
+        {
+            Dent = new QuotationMaintenanceCategoryAdjustment
+            {
+                OtherFee = entity.DentOtherFee,
+                PercentageDiscount = entity.DentPercentageDiscount
+            },
+            Paint = new QuotationMaintenanceCategoryAdjustment
+            {
+                OtherFee = entity.PaintOtherFee,
+                PercentageDiscount = entity.PaintPercentageDiscount
+            },
+            Other = new QuotationMaintenanceCategoryAdjustment
+            {
+                OtherFee = entity.OtherOtherFee,
+                PercentageDiscount = entity.OtherPercentageDiscount
+            }
+        };
+
+        return HasCategoryAdjustments(adjustments) ? adjustments : null;
+    }
+
+    /// <summary>
+    /// 合併 remark 與資料庫欄位提供的類別折扣資訊，優先採用 remark 中的明細。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustmentCollection? MergeCategoryAdjustments(
+        QuotationMaintenanceCategoryAdjustmentCollection? primary,
+        QuotationMaintenanceCategoryAdjustmentCollection? fallback)
+    {
+        if (primary is null && fallback is null)
+        {
+            return null;
+        }
+
+        if (primary is null)
+        {
+            return CloneCategoryAdjustments(fallback);
+        }
+
+        if (fallback is null)
+        {
+            return CloneCategoryAdjustments(primary);
+        }
+
+        var merged = new QuotationMaintenanceCategoryAdjustmentCollection
+        {
+            Dent = MergeCategoryAdjustment(primary.Dent, fallback.Dent),
+            Paint = MergeCategoryAdjustment(primary.Paint, fallback.Paint),
+            Other = MergeCategoryAdjustment(primary.Other, fallback.Other)
+        };
+
+        return HasCategoryAdjustments(merged) ? merged : null;
+    }
+
+    /// <summary>
+    /// 合併單一類別的折扣資訊，若主來源缺值則回退至欄位資料。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustment MergeCategoryAdjustment(
+        QuotationMaintenanceCategoryAdjustment? primary,
+        QuotationMaintenanceCategoryAdjustment? fallback)
+    {
+        var result = new QuotationMaintenanceCategoryAdjustment();
+
+        result.OtherFee = primary?.OtherFee ?? fallback?.OtherFee;
+        result.PercentageDiscount = primary?.PercentageDiscount ?? fallback?.PercentageDiscount;
+        result.DiscountReason = NormalizeOptionalText(primary?.DiscountReason)
+            ?? NormalizeOptionalText(fallback?.DiscountReason);
+
+        return result;
     }
 
     /// <summary>
@@ -3406,6 +3857,7 @@ public class QuotationService : IQuotationService
         {
             "dent" or "凹痕" => "dent",
             "paint" or "鈑烤" or "板烤" => "paint",
+            "beauty" or "美容" => "other",
             "other" or "其他" => "other",
             _ => null
         };
@@ -3542,6 +3994,13 @@ public class QuotationService : IQuotationService
             ? (decimal?)null
             : Math.Round((decimal)random.NextDouble() * 15m, 1);
 
+        var dentOtherFee = Math.Round((decimal)random.NextDouble() * 600m, 0);
+        var paintOtherFee = Math.Round((decimal)random.NextDouble() * 800m, 0);
+        var otherOtherFee = Math.Round((decimal)random.NextDouble() * 400m, 0);
+        var paintDiscount = percentageDiscount.HasValue
+            ? Math.Round(Math.Max(percentageDiscount.Value - 2m, 0m), 1)
+            : (decimal?)null;
+
         var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixTypeKey)
             ?? QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
         return new CreateQuotationMaintenanceInfo
@@ -3551,7 +4010,7 @@ public class QuotationService : IQuotationService
             ApplyWrapping = random.Next(2) == 0,
             HasRepainted = random.Next(2) == 0,
             NeedToolEvaluation = random.Next(2) == 0,
-            OtherFee = Math.Round((decimal)random.NextDouble() * 1200m, 0),
+            OtherFee = dentOtherFee + paintOtherFee + otherOtherFee,
             RoundingDiscount = Math.Round((decimal)random.NextDouble() * 300m, 0),
             PercentageDiscount = percentageDiscount,
             DiscountReason = percentageDiscount.HasValue && percentageDiscount.Value > 0
@@ -3564,7 +4023,28 @@ public class QuotationService : IQuotationService
             FixTimeMin = random.Next(0, 4) * 15,
             FixExpectDay = random.Next(0, 3),
             FixExpectHour = random.Next(0, 24),
-            Remark = "此為隨機測試資料，正式使用前請再次確認。"
+            Remark = "此為隨機測試資料，正式使用前請再次確認。",
+            CategoryAdjustments = new QuotationMaintenanceCategoryAdjustmentCollection
+            {
+                Dent = new QuotationMaintenanceCategoryAdjustment
+                {
+                    OtherFee = dentOtherFee,
+                    PercentageDiscount = percentageDiscount,
+                    DiscountReason = percentageDiscount.HasValue ? "凹痕折扣：測試資料" : null
+                },
+                Paint = new QuotationMaintenanceCategoryAdjustment
+                {
+                    OtherFee = paintOtherFee,
+                    PercentageDiscount = paintDiscount,
+                    DiscountReason = paintDiscount.HasValue ? "板烤折扣：測試資料" : null
+                },
+                Other = new QuotationMaintenanceCategoryAdjustment
+                {
+                    OtherFee = otherOtherFee,
+                    PercentageDiscount = null,
+                    DiscountReason = null
+                }
+            }
         };
     }
 
@@ -3936,6 +4416,11 @@ public class QuotationService : IQuotationService
         public List<QuotationDamageItem>? Damages { get; set; }
 
         /// <summary>
+        /// 依三大服務類別拆分的額外費用與折扣資訊。
+        /// </summary>
+        public QuotationMaintenanceCategoryAdjustmentCollection? CategoryAdjustments { get; set; }
+
+        /// <summary>
         /// 其他估價費用。
         /// </summary>
         public decimal? OtherFee { get; set; }
@@ -3979,5 +4464,57 @@ public class QuotationService : IQuotationService
         /// 無法修復時的原因。
         /// </summary>
         public string? UnrepairableReason { get; set; }
+    }
+
+    /// <summary>
+    /// 類別折扣正規化結果，保留原始是否提供過欄位資訊。
+    /// </summary>
+    private sealed class MaintenanceAdjustmentNormalizationResult
+    {
+        /// <summary>
+        /// 正規化後的類別折扣設定。
+        /// </summary>
+        public QuotationMaintenanceCategoryAdjustmentCollection Adjustments { get; init; } = new();
+
+        /// <summary>
+        /// 是否原本就有傳入類別資料，便於後續判斷顯示文字。
+        /// </summary>
+        public bool HasExplicitAdjustments { get; init; }
+    }
+
+    /// <summary>
+    /// 維修金額計算摘要，整合折扣、費用與估價結果。
+    /// </summary>
+    private sealed class MaintenanceFinancialSummary
+    {
+        /// <summary>
+        /// 正規化後的類別折扣設定。
+        /// </summary>
+        public QuotationMaintenanceCategoryAdjustmentCollection Adjustments { get; init; } = new();
+
+        /// <summary>
+        /// 是否存在任一類別設定資料，用於決定是否輸出至 remark。
+        /// </summary>
+        public bool HasAdjustmentData { get; init; }
+
+        /// <summary>
+        /// 額外費用的加總結果。
+        /// </summary>
+        public decimal? OtherFee { get; init; }
+
+        /// <summary>
+        /// 加權後的有效折扣百分比。
+        /// </summary>
+        public decimal? EffectivePercentageDiscount { get; init; }
+
+        /// <summary>
+        /// 彙整後的折扣原因。
+        /// </summary>
+        public string? DiscountReason { get; init; }
+
+        /// <summary>
+        /// 經過折扣與零頭折扣後的估價金額。
+        /// </summary>
+        public decimal? Valuation { get; init; }
     }
 }

@@ -254,6 +254,36 @@ public class Quatation
     public string? DiscountReason { get; set; }
 
     /// <summary>
+    /// 凹痕類別的其他費用。
+    /// </summary>
+    public decimal? DentOtherFee { get; set; }
+
+    /// <summary>
+    /// 凹痕類別的折扣百分比。
+    /// </summary>
+    public decimal? DentPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 板烤類別的其他費用。
+    /// </summary>
+    public decimal? PaintOtherFee { get; set; }
+
+    /// <summary>
+    /// 板烤類別的折扣百分比。
+    /// </summary>
+    public decimal? PaintPercentageDiscount { get; set; }
+
+    /// <summary>
+    /// 其他類別的其他費用。
+    /// </summary>
+    public decimal? OtherOtherFee { get; set; }
+
+    /// <summary>
+    /// 其他類別的折扣百分比。
+    /// </summary>
+    public decimal? OtherPercentageDiscount { get; set; }
+
+    /// <summary>
     /// 預約日期。
     /// </summary>
     public DateOnly? BookDate { get; set; }

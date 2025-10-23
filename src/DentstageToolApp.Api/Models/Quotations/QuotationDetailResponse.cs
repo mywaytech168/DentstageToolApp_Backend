@@ -405,6 +405,11 @@ public class QuotationMaintenanceDetail
     public string? DiscountReason { get; set; }
 
     /// <summary>
+    /// 各類別拆分的其他費用與折扣設定，提供凹痕、板烤與其他三大類資料。
+    /// </summary>
+    public QuotationMaintenanceCategoryAdjustmentCollection CategoryAdjustments { get; set; } = new();
+
+    /// <summary>
     /// 維修相關備註。
     /// </summary>
     public string? Remark { get; set; }

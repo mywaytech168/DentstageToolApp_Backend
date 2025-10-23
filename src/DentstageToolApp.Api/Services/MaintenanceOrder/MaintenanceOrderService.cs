@@ -1012,6 +1012,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 RoundingDiscount = quotationMaintenance.RoundingDiscount,
                 PercentageDiscount = quotationMaintenance.PercentageDiscount,
                 DiscountReason = quotationMaintenance.DiscountReason,
+                CategoryAdjustments = CloneCategoryAdjustments(quotationMaintenance.CategoryAdjustments),
                 Remark = quotationMaintenance.Remark
             };
 
@@ -1050,7 +1051,85 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             maintenance.DiscountReason = discountReason;
         }
 
+        // ---------- 類別折扣欄位補齊 ----------
+        var categoryAdjustments = maintenance.CategoryAdjustments ?? new QuotationMaintenanceCategoryAdjustmentCollection();
+        if (categoryAdjustments.Dent is null)
+        {
+            categoryAdjustments.Dent = new QuotationMaintenanceCategoryAdjustment();
+        }
+        if (categoryAdjustments.Paint is null)
+        {
+            categoryAdjustments.Paint = new QuotationMaintenanceCategoryAdjustment();
+        }
+        if (categoryAdjustments.Other is null)
+        {
+            categoryAdjustments.Other = new QuotationMaintenanceCategoryAdjustment();
+        }
+
+        if (!categoryAdjustments.Dent.OtherFee.HasValue && order.DentOtherFee.HasValue)
+        {
+            categoryAdjustments.Dent.OtherFee = order.DentOtherFee;
+        }
+        if (!categoryAdjustments.Dent.PercentageDiscount.HasValue && order.DentPercentageDiscount.HasValue)
+        {
+            categoryAdjustments.Dent.PercentageDiscount = order.DentPercentageDiscount;
+        }
+        if (!categoryAdjustments.Paint.OtherFee.HasValue && order.PaintOtherFee.HasValue)
+        {
+            categoryAdjustments.Paint.OtherFee = order.PaintOtherFee;
+        }
+        if (!categoryAdjustments.Paint.PercentageDiscount.HasValue && order.PaintPercentageDiscount.HasValue)
+        {
+            categoryAdjustments.Paint.PercentageDiscount = order.PaintPercentageDiscount;
+        }
+        if (!categoryAdjustments.Other.OtherFee.HasValue && order.OtherOtherFee.HasValue)
+        {
+            categoryAdjustments.Other.OtherFee = order.OtherOtherFee;
+        }
+        if (!categoryAdjustments.Other.PercentageDiscount.HasValue && order.OtherPercentageDiscount.HasValue)
+        {
+            categoryAdjustments.Other.PercentageDiscount = order.OtherPercentageDiscount;
+        }
+
+        maintenance.CategoryAdjustments = categoryAdjustments;
+
         return maintenance;
+    }
+
+    /// <summary>
+    /// 複製類別折扣設定，確保回傳物件與來源資料相互獨立。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustmentCollection CloneCategoryAdjustments(QuotationMaintenanceCategoryAdjustmentCollection? source)
+    {
+        if (source is null)
+        {
+            return new QuotationMaintenanceCategoryAdjustmentCollection();
+        }
+
+        return new QuotationMaintenanceCategoryAdjustmentCollection
+        {
+            Dent = CloneCategoryAdjustment(source.Dent),
+            Paint = CloneCategoryAdjustment(source.Paint),
+            Other = CloneCategoryAdjustment(source.Other)
+        };
+    }
+
+    /// <summary>
+    /// 深度複製單一類別的折扣設定，避免修改互相影響。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustment CloneCategoryAdjustment(QuotationMaintenanceCategoryAdjustment? source)
+    {
+        if (source is null)
+        {
+            return new QuotationMaintenanceCategoryAdjustment();
+        }
+
+        return new QuotationMaintenanceCategoryAdjustment
+        {
+            OtherFee = source.OtherFee,
+            PercentageDiscount = source.PercentageDiscount,
+            DiscountReason = source.DiscountReason
+        };
     }
 
     /// <summary>
