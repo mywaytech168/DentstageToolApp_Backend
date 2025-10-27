@@ -152,16 +152,6 @@ public class CarPlateRecognitionController : ControllerBase
         {
             var result = await _carPlateRecognitionService.GetMaintenanceHistoryAsync(request.CarPlateNumber, cancellationToken);
 
-            if (!result.HasMaintenanceRecords)
-            {
-                return NotFound(new ProblemDetails
-                {
-                    Title = "查無維修紀錄",
-                    Detail = "資料庫沒有找到該車牌的維修紀錄，請確認車牌是否正確或尚未維修過。",
-                    Status = StatusCodes.Status404NotFound
-                });
-            }
-
             return Ok(result);
         }
         catch (InvalidDataException ex)

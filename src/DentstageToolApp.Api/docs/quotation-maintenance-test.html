@@ -76,6 +76,373 @@
     // ---------- 常數區 ----------
     const STORAGE_KEY = 'dentstage-quotation-maintenance-test-settings';
     const PHOTO_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
+    const MAINTENANCE_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
+
+    // 說明：建立分類折扣的預設值，確保維修設定可直接對應 API 欄位
+    const createEmptyCategoryAdjustments = () => ({});
+
+    // 說明：將詳情回傳的分類折扣轉換成測試頁可直接編輯的結構
+    const normalizeCategoryAdjustments = (source) => {
+      const adjustments = {};
+      if (!source || typeof source !== 'object') {
+        return adjustments;
+      }
+
+      let hasActualAdjustment = false;
+      MAINTENANCE_CATEGORY_KEYS.forEach((key) => {
+        const raw = source[key];
+        if (!raw || typeof raw !== 'object') {
+          return;
+        }
+
+        const otherFee = typeof raw.otherFee === 'number' ? raw.otherFee : 0;
+        const percentageDiscount = typeof raw.percentageDiscount === 'number' ? raw.percentageDiscount : 0;
+        const discountReason = typeof raw.discountReason === 'string' ? raw.discountReason.trim() : '';
+
+        if (otherFee !== 0 || percentageDiscount !== 0 || discountReason) {
+          adjustments[key] = {
+            otherFee,
+            percentageDiscount,
+            discountReason
+          };
+          hasActualAdjustment = true;
+        }
+      });
+
+      if (hasActualAdjustment && !Object.prototype.hasOwnProperty.call(adjustments, 'beauty')) {
+        const beautySource = source.beauty;
+        const beautyFee = typeof beautySource?.otherFee === 'number' ? beautySource.otherFee : 0;
+        const beautyDiscount = typeof beautySource?.percentageDiscount === 'number' ? beautySource.percentageDiscount : 0;
+        const beautyReason = typeof beautySource?.discountReason === 'string' ? beautySource.discountReason.trim() : '';
+        adjustments.beauty = beautyFee !== 0 || beautyDiscount !== 0 || beautyReason
+          ? {
+              otherFee: beautyFee,
+              percentageDiscount: beautyDiscount,
+              discountReason: beautyReason
+            }
+          : {};
+      }
+
+      return hasActualAdjustment ? adjustments : {};
+    };
+
+    // 說明：移除店家欄位中不必要的屬性，保留估價技師 UID 即可
+    const trimStoreInfoForDisplay = (payload) => {
+      if (!payload || typeof payload !== 'object' || !payload.store || typeof payload.store !== 'object') {
+        return payload;
+      }
+
+      const removableKeys = [
+        'creatorTechnicianUid',
+        'bookMethod',
+        'reservationDate',
+        'repairDate',
+        'storeUid',
+        'storeName',
+        'storeCode',
+        'estimationTechnicianName',
+        'creatorTechnicianName'
+      ];
+
+      removableKeys.forEach((key) => {
+        const value = payload.store[key];
+        if (value == null || (typeof value === 'string' && !value.trim())) {
+          delete payload.store[key];
+        }
+      });
+
+      return payload;
+    };
+
+    // 說明：整理類別備註，僅保留有內容的欄位
+    const trimCategoryRemarksForDisplay = (payload) => {
+      if (!payload || typeof payload !== 'object') {
+        return payload;
+      }
+
+      const remarks = payload.categoryRemarks && typeof payload.categoryRemarks === 'object'
+        ? payload.categoryRemarks
+        : null;
+
+      if (!remarks) {
+        delete payload.categoryRemarks;
+        return payload;
+      }
+
+      const normalized = {};
+      Object.keys(remarks).forEach((key) => {
+        const value = remarks[key];
+        if (typeof value === 'string' && value.trim()) {
+          normalized[key] = value.trim();
+        }
+      });
+
+      if (Object.keys(normalized).length > 0) {
+        payload.categoryRemarks = normalized;
+      } else {
+        delete payload.categoryRemarks;
+      }
+
+      return payload;
+    };
+
+    // 說明：整理維修設定欄位，去除未填寫的選項
+    const trimMaintenanceForDisplay = (payload) => {
+      if (!payload || typeof payload !== 'object') {
+        return payload;
+      }
+
+      const maintenance = payload.maintenance && typeof payload.maintenance === 'object'
+        ? payload.maintenance
+        : null;
+
+      if (!maintenance) {
+        delete payload.maintenance;
+        return payload;
+      }
+
+      const normalized = {};
+      const keepBoolean = (value) => value === true;
+      const keepNumber = (value) => typeof value === 'number' && value !== 0;
+      const keepString = (value) => typeof value === 'string' && value.trim();
+
+      if (keepBoolean(maintenance.reserveCar)) {
+        normalized.reserveCar = true;
+      }
+      if (keepBoolean(maintenance.applyCoating)) {
+        normalized.applyCoating = true;
+      }
+      if (keepBoolean(maintenance.applyWrapping)) {
+        normalized.applyWrapping = true;
+      }
+      if (keepBoolean(maintenance.hasRepainted)) {
+        normalized.hasRepainted = true;
+      }
+      if (keepBoolean(maintenance.needToolEvaluation)) {
+        normalized.needToolEvaluation = true;
+      }
+
+      if (keepNumber(maintenance.otherFee)) {
+        normalized.otherFee = maintenance.otherFee;
+      }
+      if (keepNumber(maintenance.roundingDiscount)) {
+        normalized.roundingDiscount = maintenance.roundingDiscount;
+      }
+      if (keepNumber(maintenance.percentageDiscount)) {
+        normalized.percentageDiscount = maintenance.percentageDiscount;
+      }
+      if (keepString(maintenance.discountReason)) {
+        normalized.discountReason = maintenance.discountReason.trim();
+      }
+      if (keepNumber(maintenance.estimatedRepairDays)) {
+        normalized.estimatedRepairDays = maintenance.estimatedRepairDays;
+      }
+      if (keepNumber(maintenance.estimatedRepairHours)) {
+        normalized.estimatedRepairHours = maintenance.estimatedRepairHours;
+      }
+      if (keepNumber(maintenance.estimatedRestorationPercentage)) {
+        normalized.estimatedRestorationPercentage = maintenance.estimatedRestorationPercentage;
+      }
+      if (keepString(maintenance.suggestedPaintReason)) {
+        normalized.suggestedPaintReason = maintenance.suggestedPaintReason.trim();
+      }
+      if (keepString(maintenance.unrepairableReason)) {
+        normalized.unrepairableReason = maintenance.unrepairableReason.trim();
+      }
+      if (keepString(maintenance.remark)) {
+        normalized.remark = maintenance.remark.trim();
+      }
+
+      if (maintenance.categoryAdjustments && typeof maintenance.categoryAdjustments === 'object') {
+        const filtered = {};
+        let hasActualAdjustment = false;
+        Object.keys(maintenance.categoryAdjustments).forEach((key) => {
+          const template = maintenance.categoryAdjustments[key];
+          const otherFee = typeof template?.otherFee === 'number' ? template.otherFee : 0;
+          const percentageDiscount = typeof template?.percentageDiscount === 'number' ? template.percentageDiscount : 0;
+          const discountReason = typeof template?.discountReason === 'string' ? template.discountReason.trim() : '';
+
+          if (otherFee !== 0 || percentageDiscount !== 0 || discountReason) {
+            filtered[key] = {
+              otherFee,
+              percentageDiscount,
+              discountReason
+            };
+            hasActualAdjustment = true;
+          }
+        });
+
+        if (hasActualAdjustment) {
+          if (!Object.prototype.hasOwnProperty.call(filtered, 'beauty')) {
+            const beautySource = maintenance.categoryAdjustments.beauty;
+            const beautyFee = typeof beautySource?.otherFee === 'number' ? beautySource.otherFee : 0;
+            const beautyDiscount = typeof beautySource?.percentageDiscount === 'number' ? beautySource.percentageDiscount : 0;
+            const beautyReason = typeof beautySource?.discountReason === 'string' ? beautySource.discountReason.trim() : '';
+            filtered.beauty = beautyFee !== 0 || beautyDiscount !== 0 || beautyReason
+              ? {
+                  otherFee: beautyFee,
+                  percentageDiscount: beautyDiscount,
+                  discountReason: beautyReason
+                }
+              : {};
+          }
+
+          normalized.categoryAdjustments = filtered;
+        }
+      }
+
+      if (Object.keys(normalized).length > 0) {
+        payload.maintenance = normalized;
+      } else {
+        delete payload.maintenance;
+      }
+
+      return payload;
+    };
+
+    // 說明：整理車體確認資料，僅保留有用資訊
+    const trimCarBodyConfirmationForDisplay = (payload) => {
+      if (!payload || typeof payload !== 'object') {
+        return payload;
+      }
+
+      const confirmation = payload.carBodyConfirmation && typeof payload.carBodyConfirmation === 'object'
+        ? payload.carBodyConfirmation
+        : null;
+
+      if (!confirmation) {
+        delete payload.carBodyConfirmation;
+        return payload;
+      }
+
+      const normalized = {};
+      if (typeof confirmation.signaturePhotoUid === 'string' && confirmation.signaturePhotoUid.trim()) {
+        normalized.signaturePhotoUid = confirmation.signaturePhotoUid.trim();
+      }
+
+      if (Array.isArray(confirmation.damageMarkers)) {
+        const markers = confirmation.damageMarkers
+          .map((marker) => {
+            if (!marker || typeof marker !== 'object') {
+              return null;
+            }
+
+            const normalizedMarker = {
+              x: typeof marker.x === 'number' ? marker.x : 0,
+              y: typeof marker.y === 'number' ? marker.y : 0,
+              hasDent: !!marker.hasDent,
+              hasScratch: !!marker.hasScratch,
+              hasPaintPeel: !!marker.hasPaintPeel
+            };
+
+            if (typeof marker.remark === 'string' && marker.remark.trim()) {
+              normalizedMarker.remark = marker.remark.trim();
+            }
+
+            const hasDefect = normalizedMarker.hasDent || normalizedMarker.hasScratch || normalizedMarker.hasPaintPeel;
+            if (!hasDefect && !normalizedMarker.remark) {
+              return null;
+            }
+
+            return normalizedMarker;
+          })
+          .filter(Boolean);
+
+        if (markers.length > 0) {
+          normalized.damageMarkers = markers;
+        }
+      }
+
+      if (Object.keys(normalized).length > 0) {
+        payload.carBodyConfirmation = normalized;
+      } else {
+        delete payload.carBodyConfirmation;
+      }
+
+      return payload;
+    };
+
+    // 說明：整理照片分類，移除空白分類並保留必要欄位
+    const trimPhotosForDisplay = (payload) => {
+      if (!payload || typeof payload !== 'object') {
+        return payload;
+      }
+
+      const photos = payload.photos && typeof payload.photos === 'object' ? payload.photos : null;
+      if (!photos) {
+        delete payload.photos;
+        return payload;
+      }
+
+      const normalized = {};
+      Object.keys(photos).forEach((category) => {
+        const items = Array.isArray(photos[category]) ? photos[category] : [];
+        const filtered = items
+          .map((item) => {
+            if (!item || typeof item !== 'object') {
+              return null;
+            }
+
+            const photo = typeof item.photo === 'string' ? item.photo.trim() : '';
+            if (!photo) {
+              return null;
+            }
+
+            const normalizedItem = { photo };
+            if (typeof item.position === 'string' && item.position.trim()) {
+              normalizedItem.position = item.position.trim();
+            }
+            if (typeof item.description === 'string' && item.description.trim()) {
+              normalizedItem.description = item.description.trim();
+            }
+            if (typeof item.dentStatus === 'string' && item.dentStatus.trim()) {
+              normalizedItem.dentStatus = item.dentStatus.trim();
+            }
+            if (typeof item.fixType === 'string' && item.fixType.trim()) {
+              normalizedItem.fixType = item.fixType.trim();
+            }
+            if (typeof item.estimatedAmount === 'number' && item.estimatedAmount !== 0) {
+              normalizedItem.estimatedAmount = item.estimatedAmount;
+            }
+            return normalizedItem;
+          })
+          .filter(Boolean);
+
+        if (filtered.length > 0) {
+          normalized[category] = filtered;
+        }
+      });
+
+      if (Object.keys(normalized).length > 0) {
+        payload.photos = normalized;
+      } else {
+        delete payload.photos;
+      }
+
+      return payload;
+    };
+
+    // 說明：統一套用各區段整理規則，輸出僅含必要欄位的 JSON
+    const trimQuotationLikePayload = (payload) => {
+      if (!payload || typeof payload !== 'object') {
+        return payload;
+      }
+
+      trimStoreInfoForDisplay(payload);
+      trimPhotosForDisplay(payload);
+      trimCarBodyConfirmationForDisplay(payload);
+      trimMaintenanceForDisplay(payload);
+      trimCategoryRemarksForDisplay(payload);
+
+      if (typeof payload.remark === 'string') {
+        payload.remark = payload.remark.trim();
+        if (!payload.remark) {
+          delete payload.remark;
+        }
+      }
+
+      return payload;
+    };
 
     // ---------- 輔助函式區 ----------
     /**
@@ -91,11 +458,7 @@
     const createBlankQuotationPayload = () => ({
       quotationNo: '',
       store: {
-        estimationTechnicianUid: '',
-        creatorTechnicianUid: '',
-        bookMethod: '',
-        reservationDate: null,
-        repairDate: null
+        estimationTechnicianUid: ''
       },
       car: {
         carUid: ''
@@ -103,30 +466,11 @@
       customer: {
         customerUid: ''
       },
-      categoryRemarks: {
-        dent: '',
-        paint: '',
-        other: ''
-      },
-      remark: '',
       photos: createEmptyPhotoCollection(),
-      carBodyConfirmation: null,
       maintenance: {
-        reserveCar: false,
-        applyCoating: false,
-        applyWrapping: false,
-        hasRepainted: false,
-        needToolEvaluation: false,
         otherFee: 0,
-        estimatedRepairDays: 0,
-        estimatedRepairHours: 0,
-        estimatedRestorationPercentage: 0,
-        suggestedPaintReason: '',
-        unrepairableReason: '',
-        roundingDiscount: 0,
         percentageDiscount: 0,
-        discountReason: '',
-        remark: ''
+        discountReason: ''
       }
     });
 
@@ -137,11 +481,7 @@
       orderNo: '',
       quotationNo: '',
       store: {
-        estimationTechnicianUid: '',
-        creatorTechnicianUid: '',
-        bookMethod: '',
-        reservationDate: null,
-        repairDate: null
+        estimationTechnicianUid: ''
       },
       car: {
         carUid: ''
@@ -149,30 +489,11 @@
       customer: {
         customerUid: ''
       },
-      categoryRemarks: {
-        dent: '',
-        paint: '',
-        other: ''
-      },
-      remark: '',
       photos: createEmptyPhotoCollection(),
-      carBodyConfirmation: null,
       maintenance: {
-        reserveCar: false,
-        applyCoating: false,
-        applyWrapping: false,
-        hasRepainted: false,
-        needToolEvaluation: false,
         otherFee: 0,
-        estimatedRepairDays: 0,
-        estimatedRepairHours: 0,
-        estimatedRestorationPercentage: 0,
-        suggestedPaintReason: '',
-        unrepairableReason: '',
-        roundingDiscount: 0,
         percentageDiscount: 0,
-        discountReason: '',
-        remark: ''
+        discountReason: ''
       }
     });
 
@@ -316,7 +637,7 @@
      */
     const buildQuotationUpdatePayload = (detail) => {
       if (!detail) {
-        return createBlankQuotationPayload();
+        return trimQuotationLikePayload(createBlankQuotationPayload());
       }
 
       const payload = createBlankQuotationPayload();
@@ -356,25 +677,34 @@
               : []
           }
         : null;
-      payload.maintenance = detail.maintenance
-        ? {
-            reserveCar: detail.maintenance.reserveCar ?? false,
-            applyCoating: detail.maintenance.applyCoating ?? false,
-            applyWrapping: detail.maintenance.applyWrapping ?? false,
-            hasRepainted: detail.maintenance.hasRepainted ?? false,
-            needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
-            otherFee: detail.maintenance.otherFee ?? 0,
-            estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
-            estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
-            estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
-            suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
-            unrepairableReason: detail.maintenance.unrepairableReason ?? '',
-            roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
-            percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
-            discountReason: detail.maintenance.discountReason ?? '',
-            remark: detail.maintenance.remark ?? ''
-          }
-        : payload.maintenance;
+      if (detail.maintenance) {
+        const adjustments = normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments);
+        const maintenancePayload = {
+          reserveCar: detail.maintenance.reserveCar ?? false,
+          applyCoating: detail.maintenance.applyCoating ?? false,
+          applyWrapping: detail.maintenance.applyWrapping ?? false,
+          hasRepainted: detail.maintenance.hasRepainted ?? false,
+          needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+          otherFee: detail.maintenance.otherFee ?? 0,
+          estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
+          estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
+          estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
+          suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+          unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+          roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
+          percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
+          discountReason: detail.maintenance.discountReason ?? '',
+          remark: detail.maintenance.remark ?? ''
+        };
+
+        if (Object.keys(adjustments).length > 0) {
+          maintenancePayload.categoryAdjustments = adjustments;
+        }
+
+        payload.maintenance = maintenancePayload;
+      }
+
+      trimQuotationLikePayload(payload);
       return payload;
     };
 
@@ -383,7 +713,7 @@
      */
     const buildMaintenanceUpdatePayload = (detail) => {
       if (!detail) {
-        return createBlankMaintenancePayload();
+        return trimQuotationLikePayload(createBlankMaintenancePayload());
       }
 
       const payload = createBlankMaintenancePayload();
@@ -424,25 +754,34 @@
               : []
           }
         : null;
-      payload.maintenance = detail.maintenance
-        ? {
-            reserveCar: detail.maintenance.reserveCar ?? false,
-            applyCoating: detail.maintenance.applyCoating ?? false,
-            applyWrapping: detail.maintenance.applyWrapping ?? false,
-            hasRepainted: detail.maintenance.hasRepainted ?? false,
-            needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
-            otherFee: detail.maintenance.otherFee ?? 0,
-            estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
-            estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
-            estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
-            suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
-            unrepairableReason: detail.maintenance.unrepairableReason ?? '',
-            roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
-            percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
-            discountReason: detail.maintenance.discountReason ?? '',
-            remark: detail.maintenance.remark ?? ''
-          }
-        : payload.maintenance;
+      if (detail.maintenance) {
+        const adjustments = normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments);
+        const maintenancePayload = {
+          reserveCar: detail.maintenance.reserveCar ?? false,
+          applyCoating: detail.maintenance.applyCoating ?? false,
+          applyWrapping: detail.maintenance.applyWrapping ?? false,
+          hasRepainted: detail.maintenance.hasRepainted ?? false,
+          needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+          otherFee: detail.maintenance.otherFee ?? 0,
+          estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
+          estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
+          estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
+          suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+          unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+          roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
+          percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
+          discountReason: detail.maintenance.discountReason ?? '',
+          remark: detail.maintenance.remark ?? ''
+        };
+
+        if (Object.keys(adjustments).length > 0) {
+          maintenancePayload.categoryAdjustments = adjustments;
+        }
+
+        payload.maintenance = maintenancePayload;
+      }
+
+      trimQuotationLikePayload(payload);
       return payload;
     };
 
@@ -643,13 +982,13 @@
           cancelReason: '',
           clearReservation: true,
           detailPreview: '',
-          editPayload: JSON.stringify(createBlankQuotationPayload(), null, 2)
+          editPayload: JSON.stringify(trimQuotationLikePayload(createBlankQuotationPayload()), null, 2)
         });
         const maintenanceForm = reactive({
           orderNo: '',
           terminateReason: '',
           detailPreview: '',
-          editPayload: JSON.stringify(createBlankMaintenancePayload(), null, 2)
+          editPayload: JSON.stringify(trimQuotationLikePayload(createBlankMaintenancePayload()), null, 2)
         });
         const logs = ref([]);
         const lastResponse = ref('等待操作...');
@@ -805,12 +1144,46 @@
               reservationDate: parsed.quotationForm.reservationDate ?? quotationForm.reservationDate,
               cancelReason: parsed.quotationForm.cancelReason ?? quotationForm.cancelReason,
               clearReservation: parsed.quotationForm.clearReservation ?? quotationForm.clearReservation,
-              editPayload: parsed.quotationForm.editPayload ?? quotationForm.editPayload
+              editPayload: (() => {
+                if (!parsed.quotationForm.editPayload) {
+                  return quotationForm.editPayload;
+                }
+                try {
+                  const restored = JSON.parse(parsed.quotationForm.editPayload);
+                  if (restored && typeof restored === 'object' && restored.maintenance) {
+                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                      restored.maintenance.categoryAdjustments
+                    );
+                  }
+                  trimQuotationLikePayload(restored);
+                  return JSON.stringify(restored, null, 2);
+                } catch (error) {
+                  console.warn('估價單編輯範本解析失敗，維持原始字串。', error);
+                  return parsed.quotationForm.editPayload;
+                }
+              })()
             });
             if (parsed.maintenanceForm) Object.assign(maintenanceForm, {
               orderNo: parsed.maintenanceForm.orderNo ?? maintenanceForm.orderNo,
               terminateReason: parsed.maintenanceForm.terminateReason ?? maintenanceForm.terminateReason,
-              editPayload: parsed.maintenanceForm.editPayload ?? maintenanceForm.editPayload
+              editPayload: (() => {
+                if (!parsed.maintenanceForm.editPayload) {
+                  return maintenanceForm.editPayload;
+                }
+                try {
+                  const restored = JSON.parse(parsed.maintenanceForm.editPayload);
+                  if (restored && typeof restored === 'object' && restored.maintenance) {
+                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                      restored.maintenance.categoryAdjustments
+                    );
+                  }
+                  trimQuotationLikePayload(restored);
+                  return JSON.stringify(restored, null, 2);
+                } catch (error) {
+                  console.warn('維修單編輯範本解析失敗，維持原始字串。', error);
+                  return parsed.maintenanceForm.editPayload;
+                }
+              })()
             });
             lastResponse.value = '已載入上次儲存的設定，可直接開始測試。';
           } catch (error) {
@@ -951,6 +1324,17 @@
           loading.updateQuotation = true;
           try {
             const payload = safeParse(quotationForm.editPayload || '{}');
+            if (payload && typeof payload === 'object') {
+              if (payload.maintenance) {
+                const adjustments = normalizeCategoryAdjustments(payload.maintenance.categoryAdjustments);
+                if (Object.keys(adjustments).length > 0) {
+                  payload.maintenance.categoryAdjustments = adjustments;
+                } else {
+                  delete payload.maintenance.categoryAdjustments;
+                }
+              }
+              trimQuotationLikePayload(payload);
+            }
             const response = await authorizedFetch('/quotations/edit', {
               method: 'POST',
               body: JSON.stringify(payload)
@@ -1161,6 +1545,17 @@
           loading.updateOrder = true;
           try {
             const payload = safeParse(maintenanceForm.editPayload || '{}');
+            if (payload && typeof payload === 'object') {
+              if (payload.maintenance) {
+                const adjustments = normalizeCategoryAdjustments(payload.maintenance.categoryAdjustments);
+                if (Object.keys(adjustments).length > 0) {
+                  payload.maintenance.categoryAdjustments = adjustments;
+                } else {
+                  delete payload.maintenance.categoryAdjustments;
+                }
+              }
+              trimQuotationLikePayload(payload);
+            }
             const response = await authorizedFetch('/maintenance-orders/edit', {
               method: 'POST',
               body: JSON.stringify(payload)
