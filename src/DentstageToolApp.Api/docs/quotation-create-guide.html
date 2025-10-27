@@ -164,14 +164,24 @@
           <td>選填欄位，提供客戶簽名照片以完成車體確認單。</td>
         </tr>
         <tr>
-          <td><code>carBodyConfirmation.damageMarkers[].x</code></td>
-          <td>Swagger 範例中的車體標記 X 座標。</td>
-          <td>選填欄位，0-1 之間的浮點數，代表在圖面中的水平位置。</td>
+          <td><code>carBodyConfirmation.damageMarkers[].start.x</code></td>
+          <td>受損標記起點的 X 座標。</td>
+          <td>選填欄位，0-1 之間的浮點數，代表刮痕或凹痕在圖面中的水平起點。</td>
         </tr>
         <tr>
-          <td><code>carBodyConfirmation.damageMarkers[].y</code></td>
-          <td>Swagger 範例中的車體標記 Y 座標。</td>
-          <td>選填欄位，0-1 之間的浮點數，代表在圖面中的垂直位置。</td>
+          <td><code>carBodyConfirmation.damageMarkers[].start.y</code></td>
+          <td>受損標記起點的 Y 座標。</td>
+          <td>選填欄位，0-1 之間的浮點數，代表刮痕或凹痕在圖面中的垂直起點。</td>
+        </tr>
+        <tr>
+          <td><code>carBodyConfirmation.damageMarkers[].end.x</code></td>
+          <td>受損標記終點的 X 座標。</td>
+          <td>選填欄位，0-1 之間的浮點數，建議與起點搭配使用呈現方向。</td>
+        </tr>
+        <tr>
+          <td><code>carBodyConfirmation.damageMarkers[].end.y</code></td>
+          <td>受損標記終點的 Y 座標。</td>
+          <td>選填欄位，0-1 之間的浮點數，建議與起點搭配使用呈現方向。</td>
         </tr>
         <tr>
           <td><code>carBodyConfirmation.damageMarkers[].hasDent</code></td>

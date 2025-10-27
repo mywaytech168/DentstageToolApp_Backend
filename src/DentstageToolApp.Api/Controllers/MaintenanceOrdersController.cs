@@ -209,8 +209,8 @@ public class MaintenanceOrdersController : ControllerBase
             "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
             "damageMarkers": [
               {
-                "x": 0.42,
-                "y": 0.63,
+                "start": { "x": 0.42, "y": 0.63 },
+                "end": { "x": 0.58, "y": 0.68 },
                 "hasDent": true,
                 "hasScratch": false,
                 "hasPaintPeel": false,
