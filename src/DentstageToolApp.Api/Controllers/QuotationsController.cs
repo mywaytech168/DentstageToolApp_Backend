@@ -312,16 +312,17 @@ public class QuotationsController : ControllerBase
             ]
           },
           "maintenance": {
-            "fixType": "美容",
             "reserveCar": true,
             "applyCoating": false,
             "applyWrapping": false,
             "hasRepainted": false,
             "needToolEvaluation": true,
-            "otherFee": 800,
+            "estimatedRepairDays": 1,
+            "estimatedRepairHours": 6,
+            "estimatedRestorationPercentage": 90,
+            "suggestedPaintReason": null,
+            "unrepairableReason": null,
             "roundingDiscount": 200,
-            "percentageDiscount": 10,
-            "discountReason": "回饋老客戶",
             "categoryAdjustments": {
               "dent": {
                 "otherFee": 300,
@@ -339,11 +340,6 @@ public class QuotationsController : ControllerBase
                 "discountReason": "其他服務贈送方案"
               }
             },
-            "estimatedRepairDays": 1,
-            "estimatedRepairHours": 6,
-            "estimatedRestorationPercentage": 90,
-            "suggestedPaintReason": null,
-            "unrepairableReason": null,
             "remark": "請於修復後通知客戶取車"
           }
         }
