@@ -79,7 +79,18 @@
     const MAINTENANCE_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
 
     // 說明：建立分類折扣的預設值，確保維修設定可直接對應 API 欄位
-    const createEmptyCategoryAdjustments = () => ({});
+    const createEmptyCategoryAdjustments = () => {
+      // 說明：預設建立四大維修類別的折扣欄位，協助範本維持一致結構
+      const adjustments = {};
+      MAINTENANCE_CATEGORY_KEYS.forEach((key) => {
+        adjustments[key] = {
+          otherFee: 0,
+          percentageDiscount: 0,
+          discountReason: ''
+        };
+      });
+      return adjustments;
+    };
 
     // 說明：將詳情回傳的分類折扣轉換成測試頁可直接編輯的結構
     const normalizeCategoryAdjustments = (source) => {
@@ -468,7 +479,11 @@
     const createBlankQuotationPayload = () => ({
       quotationNo: '',
       store: {
-        estimationTechnicianUid: ''
+        estimationTechnicianUid: '',
+        creatorTechnicianUid: '',
+        bookMethod: '',
+        reservationDate: null,
+        repairDate: null
       },
       car: {
         carUid: ''
@@ -476,11 +491,34 @@
       customer: {
         customerUid: ''
       },
+      categoryRemarks: {
+        dent: '',
+        paint: '',
+        other: ''
+      },
+      remark: '',
       photos: createEmptyPhotoCollection(),
+      carBodyConfirmation: {
+        signaturePhotoUid: '',
+        damageMarkers: []
+      },
       maintenance: {
+        reserveCar: false,
+        applyCoating: false,
+        applyWrapping: false,
+        hasRepainted: false,
+        needToolEvaluation: false,
         otherFee: 0,
+        roundingDiscount: 0,
         percentageDiscount: 0,
-        discountReason: ''
+        discountReason: '',
+        estimatedRepairDays: 0,
+        estimatedRepairHours: 0,
+        estimatedRestorationPercentage: 0,
+        suggestedPaintReason: '',
+        unrepairableReason: '',
+        remark: '',
+        categoryAdjustments: createEmptyCategoryAdjustments()
       }
     });
 
@@ -489,22 +527,155 @@
      */
     const createBlankMaintenancePayload = () => ({
       orderNo: '',
-      quotationNo: '',
-      store: {
-        estimationTechnicianUid: ''
-      },
-      car: {
-        carUid: ''
-      },
-      customer: {
-        customerUid: ''
-      },
-      photos: createEmptyPhotoCollection(),
-      maintenance: {
-        otherFee: 0,
-        percentageDiscount: 0,
-        discountReason: ''
+      ...createBlankQuotationPayload()
+    });
+
+    /**
+     * 說明：統一補齊估價單編輯範本的欄位結構，避免空值造成格式不一致。
+     */
+    const ensureQuotationEditPayloadShape = (payload) => {
+      const template = createBlankQuotationPayload();
+      if (!payload || typeof payload !== 'object') {
+        return template;
       }
+
+      template.quotationNo = typeof payload.quotationNo === 'string' ? payload.quotationNo : template.quotationNo;
+      template.store = {
+        estimationTechnicianUid: typeof payload.store?.estimationTechnicianUid === 'string'
+          ? payload.store.estimationTechnicianUid
+          : '',
+        creatorTechnicianUid: typeof payload.store?.creatorTechnicianUid === 'string'
+          ? payload.store.creatorTechnicianUid
+          : '',
+        bookMethod: typeof payload.store?.bookMethod === 'string' ? payload.store.bookMethod : '',
+        reservationDate: payload.store?.reservationDate ?? template.store.reservationDate,
+        repairDate: payload.store?.repairDate ?? template.store.repairDate
+      };
+      template.car = {
+        carUid: typeof payload.car?.carUid === 'string' ? payload.car.carUid : ''
+      };
+      template.customer = {
+        customerUid: typeof payload.customer?.customerUid === 'string' ? payload.customer.customerUid : ''
+      };
+      template.categoryRemarks = {
+        dent: typeof payload.categoryRemarks?.dent === 'string' ? payload.categoryRemarks.dent : '',
+        paint: typeof payload.categoryRemarks?.paint === 'string' ? payload.categoryRemarks.paint : '',
+        other: typeof payload.categoryRemarks?.other === 'string' ? payload.categoryRemarks.other : ''
+      };
+      template.remark = typeof payload.remark === 'string' ? payload.remark : '';
+
+      template.photos = createEmptyPhotoCollection();
+      if (payload.photos && typeof payload.photos === 'object') {
+        PHOTO_CATEGORY_KEYS.forEach((key) => {
+          const list = Array.isArray(payload.photos[key]) ? payload.photos[key] : [];
+          template.photos[key] = list.map((item) => ({
+            photo: typeof item?.photo === 'string' ? item.photo : '',
+            position: typeof item?.position === 'string' ? item.position : '',
+            dentStatus: typeof item?.dentStatus === 'string' ? item.dentStatus : '',
+            description: typeof item?.description === 'string' ? item.description : '',
+            estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
+            fixType: typeof item?.fixType === 'string' ? item.fixType : ''
+          }));
+        });
+      }
+
+      const markers = Array.isArray(payload.carBodyConfirmation?.damageMarkers)
+        ? payload.carBodyConfirmation.damageMarkers.map((marker) => ({
+            start: {
+              x:
+                typeof marker?.start?.x === 'number'
+                  ? marker.start.x
+                  : typeof marker?.start?.X === 'number'
+                  ? marker.start.X
+                  : 0,
+              y:
+                typeof marker?.start?.y === 'number'
+                  ? marker.start.y
+                  : typeof marker?.start?.Y === 'number'
+                  ? marker.start.Y
+                  : 0
+            },
+            end: {
+              x:
+                typeof marker?.end?.x === 'number'
+                  ? marker.end.x
+                  : typeof marker?.end?.X === 'number'
+                  ? marker.end.X
+                  : 0,
+              y:
+                typeof marker?.end?.y === 'number'
+                  ? marker.end.y
+                  : typeof marker?.end?.Y === 'number'
+                  ? marker.end.Y
+                  : 0
+            },
+            hasDent: !!marker?.hasDent,
+            hasScratch: !!marker?.hasScratch,
+            hasPaintPeel: !!marker?.hasPaintPeel,
+            remark: typeof marker?.remark === 'string' ? marker.remark : ''
+          }))
+        : [];
+      template.carBodyConfirmation = {
+        signaturePhotoUid:
+          typeof payload.carBodyConfirmation?.signaturePhotoUid === 'string'
+            ? payload.carBodyConfirmation.signaturePhotoUid
+            : '',
+        damageMarkers: markers
+      };
+
+      const adjustments = normalizeCategoryAdjustments(payload.maintenance?.categoryAdjustments);
+      template.maintenance = {
+        reserveCar: !!payload.maintenance?.reserveCar,
+        applyCoating: !!payload.maintenance?.applyCoating,
+        applyWrapping: !!payload.maintenance?.applyWrapping,
+        hasRepainted: !!payload.maintenance?.hasRepainted,
+        needToolEvaluation: !!payload.maintenance?.needToolEvaluation,
+        otherFee: typeof payload.maintenance?.otherFee === 'number' ? payload.maintenance.otherFee : 0,
+        roundingDiscount:
+          typeof payload.maintenance?.roundingDiscount === 'number' ? payload.maintenance.roundingDiscount : 0,
+        percentageDiscount:
+          typeof payload.maintenance?.percentageDiscount === 'number' ? payload.maintenance.percentageDiscount : 0,
+        discountReason:
+          typeof payload.maintenance?.discountReason === 'string' ? payload.maintenance.discountReason : '',
+        estimatedRepairDays:
+          typeof payload.maintenance?.estimatedRepairDays === 'number'
+            ? payload.maintenance.estimatedRepairDays
+            : 0,
+        estimatedRepairHours:
+          typeof payload.maintenance?.estimatedRepairHours === 'number'
+            ? payload.maintenance.estimatedRepairHours
+            : 0,
+        estimatedRestorationPercentage:
+          typeof payload.maintenance?.estimatedRestorationPercentage === 'number'
+            ? payload.maintenance.estimatedRestorationPercentage
+            : 0,
+        suggestedPaintReason:
+          typeof payload.maintenance?.suggestedPaintReason === 'string'
+            ? payload.maintenance.suggestedPaintReason
+            : '',
+        unrepairableReason:
+          typeof payload.maintenance?.unrepairableReason === 'string'
+            ? payload.maintenance.unrepairableReason
+            : '',
+        remark: typeof payload.maintenance?.remark === 'string' ? payload.maintenance.remark : '',
+        categoryAdjustments: createEmptyCategoryAdjustments()
+      };
+      if (Object.keys(adjustments).length > 0) {
+        template.maintenance.categoryAdjustments = {
+          ...template.maintenance.categoryAdjustments,
+          ...adjustments
+        };
+      }
+
+      return template;
+    };
+
+    /**
+     * 說明：補齊維修單編輯範本結構，沿用估價單格式並加入 orderNo。
+     */
+    const ensureMaintenanceEditPayloadShape = (payload) => ({
+      orderNo: typeof payload?.orderNo === 'string' ? payload.orderNo : '',
+      ...ensureQuotationEditPayloadShape(payload)
     });
 
     // 說明：將維修類型文字轉換為照片分類鍵值，方便對應 API 需求。
@@ -647,81 +818,90 @@
      */
     const buildQuotationUpdatePayload = (detail) => {
       if (!detail) {
-        return trimQuotationLikePayload(createBlankQuotationPayload());
+        return createBlankQuotationPayload();
       }
 
-      const payload = createBlankQuotationPayload();
-      payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
-      payload.store = {
-        estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
-        creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        bookMethod: detail.store?.bookMethod ?? '',
-        reservationDate: detail.store?.reservationDate ?? null,
-        repairDate: detail.store?.repairDate ?? null
+      const payload = {
+        quotationNo: detail.quotationNo ?? '',
+        store: {
+          estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
+          creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
+          bookMethod: detail.store?.bookMethod ?? '',
+          reservationDate: detail.store?.reservationDate ?? null,
+          repairDate: detail.store?.repairDate ?? null
+        },
+        car: {
+          carUid: detail.car?.carUid ?? ''
+        },
+        customer: {
+          customerUid: detail.customer?.customerUid ?? ''
+        },
+        categoryRemarks: {
+          dent: detail.categoryRemarks?.dent ?? '',
+          paint: detail.categoryRemarks?.paint ?? '',
+          other: detail.categoryRemarks?.other ?? ''
+        },
+        remark: typeof detail.remark === 'string' ? detail.remark : '',
+        photos: buildPhotoCollectionFromDetail(detail),
+        carBodyConfirmation: detail.carBodyConfirmation
+          ? {
+              signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
+              damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
+                ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
+                    start: {
+                      x: marker?.start?.x ?? marker?.start?.X ?? 0,
+                      y: marker?.start?.y ?? marker?.start?.Y ?? 0
+                    },
+                    end: {
+                      x: marker?.end?.x ?? marker?.end?.X ?? 0,
+                      y: marker?.end?.y ?? marker?.end?.Y ?? 0
+                    },
+                    hasDent: !!marker?.hasDent,
+                    hasScratch: !!marker?.hasScratch,
+                    hasPaintPeel: !!marker?.hasPaintPeel,
+                    remark: marker?.remark ?? ''
+                  }))
+                : []
+            }
+          : undefined,
+        maintenance: detail.maintenance
+          ? {
+              reserveCar: detail.maintenance.reserveCar ?? false,
+              applyCoating: detail.maintenance.applyCoating ?? false,
+              applyWrapping: detail.maintenance.applyWrapping ?? false,
+              hasRepainted: detail.maintenance.hasRepainted ?? false,
+              needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+              otherFee: typeof detail.maintenance.otherFee === 'number' ? detail.maintenance.otherFee : 0,
+              estimatedRepairDays:
+                typeof detail.maintenance.estimatedRepairDays === 'number'
+                  ? detail.maintenance.estimatedRepairDays
+                  : 0,
+              estimatedRepairHours:
+                typeof detail.maintenance.estimatedRepairHours === 'number'
+                  ? detail.maintenance.estimatedRepairHours
+                  : 0,
+              estimatedRestorationPercentage:
+                typeof detail.maintenance.estimatedRestorationPercentage === 'number'
+                  ? detail.maintenance.estimatedRestorationPercentage
+                  : 0,
+              suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+              unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+              roundingDiscount:
+                typeof detail.maintenance.roundingDiscount === 'number'
+                  ? detail.maintenance.roundingDiscount
+                  : 0,
+              percentageDiscount:
+                typeof detail.maintenance.percentageDiscount === 'number'
+                  ? detail.maintenance.percentageDiscount
+                  : 0,
+              discountReason: detail.maintenance.discountReason ?? '',
+              remark: detail.maintenance.remark ?? '',
+              categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments)
+            }
+          : undefined
       };
-      payload.car = {
-        carUid: detail.car?.carUid ?? ''
-      };
-      payload.customer = {
-        customerUid: detail.customer?.customerUid ?? ''
-      };
-      payload.categoryRemarks = {
-        dent: detail.categoryRemarks?.dent ?? '',
-        paint: detail.categoryRemarks?.paint ?? '',
-        other: detail.categoryRemarks?.other ?? ''
-      };
-      payload.remark = detail.remark ?? '';
-      payload.photos = buildPhotoCollectionFromDetail(detail);
-      payload.carBodyConfirmation = detail.carBodyConfirmation
-        ? {
-            signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
-            damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
-              ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
-                  start: {
-                    x: marker?.start?.x ?? marker?.start?.X ?? 0,
-                    y: marker?.start?.y ?? marker?.start?.Y ?? 0
-                  },
-                  end: {
-                    x: marker?.end?.x ?? marker?.end?.X ?? 0,
-                    y: marker?.end?.y ?? marker?.end?.Y ?? 0
-                  },
-                  hasDent: !!marker?.hasDent,
-                  hasScratch: !!marker?.hasScratch,
-                  hasPaintPeel: !!marker?.hasPaintPeel,
-                  remark: marker?.remark ?? ''
-                }))
-              : []
-          }
-        : null;
-      if (detail.maintenance) {
-        const adjustments = normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments);
-        const maintenancePayload = {
-          reserveCar: detail.maintenance.reserveCar ?? false,
-          applyCoating: detail.maintenance.applyCoating ?? false,
-          applyWrapping: detail.maintenance.applyWrapping ?? false,
-          hasRepainted: detail.maintenance.hasRepainted ?? false,
-          needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
-          otherFee: detail.maintenance.otherFee ?? 0,
-          estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
-          estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
-          estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
-          suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
-          unrepairableReason: detail.maintenance.unrepairableReason ?? '',
-          roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
-          percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
-          discountReason: detail.maintenance.discountReason ?? '',
-          remark: detail.maintenance.remark ?? ''
-        };
 
-        if (Object.keys(adjustments).length > 0) {
-          maintenancePayload.categoryAdjustments = adjustments;
-        }
-
-        payload.maintenance = maintenancePayload;
-      }
-
-      trimQuotationLikePayload(payload);
-      return payload;
+      return ensureQuotationEditPayloadShape(payload);
     };
 
     /**
@@ -729,82 +909,91 @@
      */
     const buildMaintenanceUpdatePayload = (detail) => {
       if (!detail) {
-        return trimQuotationLikePayload(createBlankMaintenancePayload());
+        return createBlankMaintenancePayload();
       }
 
-      const payload = createBlankMaintenancePayload();
-      payload.orderNo = detail.orderNo ?? payload.orderNo;
-      payload.quotationNo = detail.quotationNo ?? payload.quotationNo;
-      payload.store = {
-        estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
-        creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
-        bookMethod: detail.store?.bookMethod ?? '',
-        reservationDate: detail.store?.reservationDate ?? null,
-        repairDate: detail.store?.repairDate ?? null
+      const payload = {
+        orderNo: detail.orderNo ?? '',
+        quotationNo: detail.quotationNo ?? '',
+        store: {
+          estimationTechnicianUid: detail.store?.estimationTechnicianUid ?? '',
+          creatorTechnicianUid: detail.store?.creatorTechnicianUid ?? '',
+          bookMethod: detail.store?.bookMethod ?? '',
+          reservationDate: detail.store?.reservationDate ?? null,
+          repairDate: detail.store?.repairDate ?? null
+        },
+        car: {
+          carUid: detail.car?.carUid ?? ''
+        },
+        customer: {
+          customerUid: detail.customer?.customerUid ?? ''
+        },
+        categoryRemarks: {
+          dent: detail.categoryRemarks?.dent ?? '',
+          paint: detail.categoryRemarks?.paint ?? '',
+          other: detail.categoryRemarks?.other ?? ''
+        },
+        remark: typeof detail.remark === 'string' ? detail.remark : '',
+        photos: buildPhotoCollectionFromDetail(detail),
+        carBodyConfirmation: detail.carBodyConfirmation
+          ? {
+              signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
+              damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
+                ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
+                    start: {
+                      x: marker?.start?.x ?? marker?.start?.X ?? 0,
+                      y: marker?.start?.y ?? marker?.start?.Y ?? 0
+                    },
+                    end: {
+                      x: marker?.end?.x ?? marker?.end?.X ?? 0,
+                      y: marker?.end?.y ?? marker?.end?.Y ?? 0
+                    },
+                    hasDent: !!marker?.hasDent,
+                    hasScratch: !!marker?.hasScratch,
+                    hasPaintPeel: !!marker?.hasPaintPeel,
+                    remark: marker?.remark ?? ''
+                  }))
+                : []
+            }
+          : undefined,
+        maintenance: detail.maintenance
+          ? {
+              reserveCar: detail.maintenance.reserveCar ?? false,
+              applyCoating: detail.maintenance.applyCoating ?? false,
+              applyWrapping: detail.maintenance.applyWrapping ?? false,
+              hasRepainted: detail.maintenance.hasRepainted ?? false,
+              needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
+              otherFee: typeof detail.maintenance.otherFee === 'number' ? detail.maintenance.otherFee : 0,
+              estimatedRepairDays:
+                typeof detail.maintenance.estimatedRepairDays === 'number'
+                  ? detail.maintenance.estimatedRepairDays
+                  : 0,
+              estimatedRepairHours:
+                typeof detail.maintenance.estimatedRepairHours === 'number'
+                  ? detail.maintenance.estimatedRepairHours
+                  : 0,
+              estimatedRestorationPercentage:
+                typeof detail.maintenance.estimatedRestorationPercentage === 'number'
+                  ? detail.maintenance.estimatedRestorationPercentage
+                  : 0,
+              suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
+              unrepairableReason: detail.maintenance.unrepairableReason ?? '',
+              roundingDiscount:
+                typeof detail.maintenance.roundingDiscount === 'number'
+                  ? detail.maintenance.roundingDiscount
+                  : 0,
+              percentageDiscount:
+                typeof detail.maintenance.percentageDiscount === 'number'
+                  ? detail.maintenance.percentageDiscount
+                  : 0,
+              discountReason: detail.maintenance.discountReason ?? '',
+              remark: detail.maintenance.remark ?? '',
+              categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments)
+            }
+          : undefined
       };
-      payload.car = {
-        carUid: detail.car?.carUid ?? ''
-      };
-      payload.customer = {
-        customerUid: detail.customer?.customerUid ?? ''
-      };
-      payload.categoryRemarks = {
-        dent: detail.categoryRemarks?.dent ?? '',
-        paint: detail.categoryRemarks?.paint ?? '',
-        other: detail.categoryRemarks?.other ?? ''
-      };
-      payload.remark = detail.remark ?? '';
-      payload.photos = buildPhotoCollectionFromDetail(detail);
-      payload.carBodyConfirmation = detail.carBodyConfirmation
-        ? {
-            signaturePhotoUid: detail.carBodyConfirmation.signaturePhotoUid ?? '',
-            damageMarkers: Array.isArray(detail.carBodyConfirmation.damageMarkers)
-              ? detail.carBodyConfirmation.damageMarkers.map((marker) => ({
-                  start: {
-                    x: marker?.start?.x ?? marker?.start?.X ?? 0,
-                    y: marker?.start?.y ?? marker?.start?.Y ?? 0
-                  },
-                  end: {
-                    x: marker?.end?.x ?? marker?.end?.X ?? 0,
-                    y: marker?.end?.y ?? marker?.end?.Y ?? 0
-                  },
-                  hasDent: !!marker?.hasDent,
-                  hasScratch: !!marker?.hasScratch,
-                  hasPaintPeel: !!marker?.hasPaintPeel,
-                  remark: marker?.remark ?? ''
-                }))
-              : []
-          }
-        : null;
-      if (detail.maintenance) {
-        const adjustments = normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments);
-        const maintenancePayload = {
-          reserveCar: detail.maintenance.reserveCar ?? false,
-          applyCoating: detail.maintenance.applyCoating ?? false,
-          applyWrapping: detail.maintenance.applyWrapping ?? false,
-          hasRepainted: detail.maintenance.hasRepainted ?? false,
-          needToolEvaluation: detail.maintenance.needToolEvaluation ?? false,
-          otherFee: detail.maintenance.otherFee ?? 0,
-          estimatedRepairDays: detail.maintenance.estimatedRepairDays ?? 0,
-          estimatedRepairHours: detail.maintenance.estimatedRepairHours ?? 0,
-          estimatedRestorationPercentage: detail.maintenance.estimatedRestorationPercentage ?? 0,
-          suggestedPaintReason: detail.maintenance.suggestedPaintReason ?? '',
-          unrepairableReason: detail.maintenance.unrepairableReason ?? '',
-          roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
-          percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
-          discountReason: detail.maintenance.discountReason ?? '',
-          remark: detail.maintenance.remark ?? ''
-        };
 
-        if (Object.keys(adjustments).length > 0) {
-          maintenancePayload.categoryAdjustments = adjustments;
-        }
-
-        payload.maintenance = maintenancePayload;
-      }
-
-      trimQuotationLikePayload(payload);
-      return payload;
+      return ensureMaintenanceEditPayloadShape(payload);
     };
 
     // ---------- Vue Application ----------
@@ -1004,13 +1193,13 @@
           cancelReason: '',
           clearReservation: true,
           detailPreview: '',
-          editPayload: JSON.stringify(trimQuotationLikePayload(createBlankQuotationPayload()), null, 2)
+          editPayload: JSON.stringify(createBlankQuotationPayload(), null, 2)
         });
         const maintenanceForm = reactive({
           orderNo: '',
           terminateReason: '',
           detailPreview: '',
-          editPayload: JSON.stringify(trimQuotationLikePayload(createBlankMaintenancePayload()), null, 2)
+          editPayload: JSON.stringify(createBlankMaintenancePayload(), null, 2)
         });
         const logs = ref([]);
         const lastResponse = ref('等待操作...');
@@ -1172,13 +1361,8 @@
                 }
                 try {
                   const restored = JSON.parse(parsed.quotationForm.editPayload);
-                  if (restored && typeof restored === 'object' && restored.maintenance) {
-                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
-                      restored.maintenance.categoryAdjustments
-                    );
-                  }
-                  trimQuotationLikePayload(restored);
-                  return JSON.stringify(restored, null, 2);
+                  const formatted = ensureQuotationEditPayloadShape(restored);
+                  return JSON.stringify(formatted, null, 2);
                 } catch (error) {
                   console.warn('估價單編輯範本解析失敗，維持原始字串。', error);
                   return parsed.quotationForm.editPayload;
@@ -1194,13 +1378,8 @@
                 }
                 try {
                   const restored = JSON.parse(parsed.maintenanceForm.editPayload);
-                  if (restored && typeof restored === 'object' && restored.maintenance) {
-                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
-                      restored.maintenance.categoryAdjustments
-                    );
-                  }
-                  trimQuotationLikePayload(restored);
-                  return JSON.stringify(restored, null, 2);
+                  const formatted = ensureMaintenanceEditPayloadShape(restored);
+                  return JSON.stringify(formatted, null, 2);
                 } catch (error) {
                   console.warn('維修單編輯範本解析失敗，維持原始字串。', error);
                   return parsed.maintenanceForm.editPayload;
