@@ -391,9 +391,7 @@
         });
         const createRequestText = ref(`{
   "store": {
-    "estimationTechnicianUid": "",
-    "creatorTechnicianUid": "",
-    "bookMethod": "LINE 預約"
+    "estimationTechnicianUid": ""
   },
   "car": {
     "carUid": ""
@@ -406,52 +404,10 @@
       {
         "photo": "",
         "position": "左前門",
-        "dentStatus": "需烤漆",
-        "description": "建議同時處理刮痕",
-        "estimatedAmount": 4648
+        "description": "測試損傷位置",
+        "estimatedAmount": 4500
       }
-    ],
-    "beauty": [],
-    "paint": [],
-    "other": []
-  },
-  "carBodyConfirmation": {
-    "signaturePhotoUid": "",
-    "damageMarkers": []
-  },
-  "maintenance": {
-    "reserveCar": false,
-    "applyCoating": false,
-    "applyWrapping": false,
-    "hasRepainted": false,
-    "needToolEvaluation": false,
-    "otherFee": 0,
-    "roundingDiscount": 0,
-    "percentageDiscount": 0,
-    "discountReason": "",
-    "estimatedRepairDays": 0,
-    "estimatedRepairHours": 0,
-    "estimatedRestorationPercentage": 100,
-    "suggestedPaintReason": null,
-    "unrepairableReason": null,
-    "categoryAdjustments": {
-      "dent": {
-        "otherFee": 0,
-        "percentageDiscount": 0,
-        "discountReason": ""
-      },
-      "paint": {
-        "otherFee": 0,
-        "percentageDiscount": 0,
-        "discountReason": ""
-      },
-      "other": {
-        "otherFee": 0,
-        "percentageDiscount": 0,
-        "discountReason": ""
-      }
-    },
-    "remark": "測試建立估價單"
+    ]
   }
 }`);
         const createResponse = ref('');
@@ -518,7 +474,6 @@
           return {
             photo: normalizedPhoto,
             position: '左前門',
-            dentStatus: '需烤漆',
             description: '建議同時處理刮痕',
             estimatedAmount: 4648
           };
@@ -570,7 +525,7 @@
         return groups;
       };
 
-    // 說明：補齊維修分類折扣結構，確保凹痕、板烤與其他皆具備預設欄位
+      // 說明：補齊維修分類折扣結構，確保操作流程仍能推入需要的分類資料
       const ensureMaintenanceCategoryAdjustments = (payload) => {
         if (!payload || typeof payload !== 'object') {
           return payload;
@@ -595,6 +550,259 @@
         return payload;
       };
 
+      // 說明：移除沒有實際資料的照片分類，避免輸出冗餘空陣列
+      const prunePhotoGroupsForDisplay = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return payload;
+        }
+
+        const photos = payload.photos && typeof payload.photos === 'object' ? payload.photos : null;
+        if (!photos) {
+          delete payload.photos;
+          return payload;
+        }
+
+        const normalized = {};
+        Object.keys(photos).forEach((category) => {
+          const items = Array.isArray(photos[category]) ? photos[category] : [];
+          const filtered = items
+            .map((item) => {
+              if (!item || typeof item !== 'object') {
+                return null;
+              }
+
+              const photo = typeof item.photo === 'string' ? item.photo.trim() : '';
+              if (!photo) {
+                return null;
+              }
+
+              const normalizedItem = { photo };
+              if (typeof item.position === 'string' && item.position.trim()) {
+                normalizedItem.position = item.position.trim();
+              }
+              if (typeof item.description === 'string' && item.description.trim()) {
+                normalizedItem.description = item.description.trim();
+              }
+              if (typeof item.dentStatus === 'string' && item.dentStatus.trim()) {
+                normalizedItem.dentStatus = item.dentStatus.trim();
+              }
+              if (typeof item.fixType === 'string' && item.fixType.trim()) {
+                normalizedItem.fixType = item.fixType.trim();
+              }
+              if (typeof item.estimatedAmount === 'number') {
+                normalizedItem.estimatedAmount = item.estimatedAmount;
+              }
+              return normalizedItem;
+            })
+            .filter(Boolean);
+
+          if (filtered.length > 0) {
+            normalized[category] = filtered;
+          }
+        });
+
+        if (Object.keys(normalized).length > 0) {
+          payload.photos = normalized;
+        } else {
+          delete payload.photos;
+        }
+
+        return payload;
+      };
+
+      // 說明：整理維修設定，僅保留有填寫數值或文字的欄位
+      const trimMaintenanceForDisplay = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return payload;
+        }
+
+        const maintenance = payload.maintenance && typeof payload.maintenance === 'object'
+          ? payload.maintenance
+          : null;
+
+        if (!maintenance) {
+          delete payload.maintenance;
+          return payload;
+        }
+
+        const normalized = {};
+
+        const keepBoolean = (value) => value === true;
+        const keepNumber = (value) => typeof value === 'number' && value !== 0;
+        const keepString = (value) => typeof value === 'string' && value.trim();
+
+        if (keepBoolean(maintenance.reserveCar)) {
+          normalized.reserveCar = true;
+        }
+        if (keepBoolean(maintenance.applyCoating)) {
+          normalized.applyCoating = true;
+        }
+        if (keepBoolean(maintenance.applyWrapping)) {
+          normalized.applyWrapping = true;
+        }
+        if (keepBoolean(maintenance.hasRepainted)) {
+          normalized.hasRepainted = true;
+        }
+        if (keepBoolean(maintenance.needToolEvaluation)) {
+          normalized.needToolEvaluation = true;
+        }
+
+        if (keepNumber(maintenance.otherFee)) {
+          normalized.otherFee = maintenance.otherFee;
+        }
+        if (keepNumber(maintenance.roundingDiscount)) {
+          normalized.roundingDiscount = maintenance.roundingDiscount;
+        }
+        if (keepNumber(maintenance.percentageDiscount)) {
+          normalized.percentageDiscount = maintenance.percentageDiscount;
+        }
+        if (keepString(maintenance.discountReason)) {
+          normalized.discountReason = maintenance.discountReason.trim();
+        }
+        if (keepNumber(maintenance.estimatedRepairDays)) {
+          normalized.estimatedRepairDays = maintenance.estimatedRepairDays;
+        }
+        if (keepNumber(maintenance.estimatedRepairHours)) {
+          normalized.estimatedRepairHours = maintenance.estimatedRepairHours;
+        }
+        if (keepNumber(maintenance.estimatedRestorationPercentage)) {
+          normalized.estimatedRestorationPercentage = maintenance.estimatedRestorationPercentage;
+        }
+        if (keepString(maintenance.suggestedPaintReason)) {
+          normalized.suggestedPaintReason = maintenance.suggestedPaintReason.trim();
+        }
+        if (keepString(maintenance.unrepairableReason)) {
+          normalized.unrepairableReason = maintenance.unrepairableReason.trim();
+        }
+        if (keepString(maintenance.remark)) {
+          normalized.remark = maintenance.remark.trim();
+        }
+
+        const adjustments = maintenance.categoryAdjustments && typeof maintenance.categoryAdjustments === 'object'
+          ? maintenance.categoryAdjustments
+          : null;
+
+        if (adjustments) {
+          const filteredAdjustments = {};
+          Object.keys(adjustments).forEach((category) => {
+            const template = buildCategoryAdjustmentTemplate(adjustments[category]);
+            const hasOtherFee = keepNumber(template.otherFee);
+            const hasDiscount = keepNumber(template.percentageDiscount);
+            const hasReason = keepString(template.discountReason);
+            if (hasOtherFee || hasDiscount || hasReason) {
+              filteredAdjustments[category] = {
+                otherFee: hasOtherFee ? template.otherFee : 0,
+                percentageDiscount: hasDiscount ? template.percentageDiscount : 0,
+                discountReason: hasReason ? template.discountReason.trim() : ''
+              };
+            }
+          });
+
+          if (Object.keys(filteredAdjustments).length > 0) {
+            normalized.categoryAdjustments = filteredAdjustments;
+          }
+        }
+
+        if (Object.keys(normalized).length > 0) {
+          payload.maintenance = normalized;
+        } else {
+          delete payload.maintenance;
+        }
+
+        return payload;
+      };
+
+      // 說明：清理車體確認資料，僅保留簽名或有效標記
+      const trimCarBodyConfirmationForDisplay = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return payload;
+        }
+
+        const confirmation = payload.carBodyConfirmation && typeof payload.carBodyConfirmation === 'object'
+          ? payload.carBodyConfirmation
+          : null;
+
+        if (!confirmation) {
+          delete payload.carBodyConfirmation;
+          return payload;
+        }
+
+        const normalized = {};
+        if (typeof confirmation.signaturePhotoUid === 'string' && confirmation.signaturePhotoUid.trim()) {
+          normalized.signaturePhotoUid = confirmation.signaturePhotoUid.trim();
+        }
+
+        if (Array.isArray(confirmation.damageMarkers)) {
+          const markers = confirmation.damageMarkers
+            .map((marker) => {
+              if (!marker || typeof marker !== 'object') {
+                return null;
+              }
+
+              const normalizedMarker = {
+                x: typeof marker.x === 'number' ? marker.x : 0,
+                y: typeof marker.y === 'number' ? marker.y : 0,
+                hasDent: !!marker.hasDent,
+                hasScratch: !!marker.hasScratch,
+                hasPaintPeel: !!marker.hasPaintPeel
+              };
+
+              if (typeof marker.remark === 'string' && marker.remark.trim()) {
+                normalizedMarker.remark = marker.remark.trim();
+              }
+
+              const hasDefect = normalizedMarker.hasDent || normalizedMarker.hasScratch || normalizedMarker.hasPaintPeel;
+              if (!hasDefect && !normalizedMarker.remark) {
+                return null;
+              }
+
+              return normalizedMarker;
+            })
+            .filter(Boolean);
+
+          if (markers.length > 0) {
+            normalized.damageMarkers = markers;
+          }
+        }
+
+        if (Object.keys(normalized).length > 0) {
+          payload.carBodyConfirmation = normalized;
+        } else {
+          delete payload.carBodyConfirmation;
+        }
+
+        return payload;
+      };
+
+      // 說明：移除店家欄位中空白或舊系統遺留的欄位
+      const trimStoreInfoForDisplay = (payload) => {
+        if (!payload || typeof payload !== 'object' || !payload.store || typeof payload.store !== 'object') {
+          return payload;
+        }
+
+        const store = payload.store;
+        const removableKeys = [
+          'creatorTechnicianUid',
+          'bookMethod',
+          'reservationDate',
+          'repairDate',
+          'storeUid',
+          'storeName',
+          'storeCode',
+          'estimationTechnicianName',
+          'creatorTechnicianName'
+        ];
+
+        removableKeys.forEach((key) => {
+          const value = store[key];
+          if (value == null || (typeof value === 'string' && !value.trim())) {
+            delete store[key];
+          }
+        });
+
+        return payload;
+      };
+
         // 套用圖片至指定類別，允許多筆資料堆疊以模擬多處損傷
         const appendPhotoItem = (photoUid, options = {}) => {
           const { notify = true, log = true, category = 'dent' } = options;
@@ -616,6 +824,8 @@
             groups[normalizedCategory] = groups[normalizedCategory] || [];
             groups[normalizedCategory].push(payload);
 
+            prunePhotoGroupsForDisplay(parsed);
+            trimMaintenanceForDisplay(parsed);
             createRequestText.value = JSON.stringify(parsed, null, 2);
             persistSettings();
 
@@ -852,6 +1062,10 @@
 
           ensurePhotoGroups(clone);
           ensureMaintenanceCategoryAdjustments(clone);
+          prunePhotoGroupsForDisplay(clone);
+          trimMaintenanceForDisplay(clone);
+          trimCarBodyConfirmationForDisplay(clone);
+          trimStoreInfoForDisplay(clone);
 
           return clone;
         };
@@ -1013,6 +1227,10 @@
 
           ensurePhotoGroups(parsed);
           ensureMaintenanceCategoryAdjustments(parsed);
+          prunePhotoGroupsForDisplay(parsed);
+          trimMaintenanceForDisplay(parsed);
+          trimCarBodyConfirmationForDisplay(parsed);
+          trimStoreInfoForDisplay(parsed);
 
           loading.create = true;
           try {
@@ -1056,6 +1274,10 @@
             const parsed = JSON.parse(createRequestText.value);
             ensurePhotoGroups(parsed);
             ensureMaintenanceCategoryAdjustments(parsed);
+            prunePhotoGroupsForDisplay(parsed);
+            trimMaintenanceForDisplay(parsed);
+            trimCarBodyConfirmationForDisplay(parsed);
+            trimStoreInfoForDisplay(parsed);
             createRequestText.value = JSON.stringify(parsed, null, 2);
             message.success('已格式化 JSON。');
             persistSettings();
@@ -1126,6 +1348,10 @@
                   const restored = JSON.parse(parsed.createRequestText);
                   ensurePhotoGroups(restored);
                   ensureMaintenanceCategoryAdjustments(restored);
+                  prunePhotoGroupsForDisplay(restored);
+                  trimMaintenanceForDisplay(restored);
+                  trimCarBodyConfirmationForDisplay(restored);
+                  trimStoreInfoForDisplay(restored);
                   createRequestText.value = JSON.stringify(restored, null, 2);
                 } catch (error) {
                   console.warn('載入儲存估價單 JSON 時解析失敗，將沿用原字串。', error);
