@@ -624,6 +624,7 @@ public class QuotationService : IQuotationService
 
         // remark 改以包裝 JSON 儲存傷痕、簽名與折扣資訊，仍保留純文字備註於 PlainRemark。
         var hasExplicitCategoryAdjustments = HasCategoryAdjustments(requestedCategoryAdjustments);
+        var primaryFixType = ExtractPrimaryQuotationFixType(fixTypeDisplayName);
         var financials = CalculateMaintenanceFinancialSummary(
             normalizedDamages,
             legacyOtherFee,
@@ -631,7 +632,8 @@ public class QuotationService : IQuotationService
             legacyPercentageDiscount,
             rawDiscountReason,
             requestedCategoryAdjustments,
-            hasExplicitCategoryAdjustments);
+            hasExplicitCategoryAdjustments,
+            primaryFixType);
         var otherFee = financials.OtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount;
         var discountReason = financials.DiscountReason ?? rawDiscountReason;
@@ -882,6 +884,10 @@ public class QuotationService : IQuotationService
         var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
         var mergedCategoryAdjustments = MergeCategoryAdjustments(extraData?.CategoryAdjustments, columnCategoryAdjustments);
         var hasExplicitCategoryAdjustments = HasCategoryAdjustments(extraData?.CategoryAdjustments);
+        var aggregatedFixType = string.IsNullOrWhiteSpace(quotation.FixType)
+            ? DetermineOverallFixType(normalizedDamages)
+            : quotation.FixType;
+        var primaryFixType = ExtractPrimaryQuotationFixType(aggregatedFixType);
         var financials = CalculateMaintenanceFinancialSummary(
             normalizedDamages,
             storedOtherFee,
@@ -889,14 +895,17 @@ public class QuotationService : IQuotationService
             storedPercentageDiscount,
             storedDiscountReason,
             mergedCategoryAdjustments,
-            hasExplicitCategoryAdjustments);
+            hasExplicitCategoryAdjustments,
+            primaryFixType);
         var otherFee = financials.OtherFee ?? storedOtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount ?? storedPercentageDiscount;
         var discountReason = NormalizeOptionalText(financials.DiscountReason ?? storedDiscountReason);
-        // 舊資料僅需沿用舊欄位，因此在缺少新版資料時不回傳類別結構。
-        var categoryAdjustments = financials.HasExplicitAdjustments
-            ? CloneCategoryAdjustments(financials.Adjustments)
-            : null;
+        // 舊資料需依維修類型帶出對應欄位，因此只要存在資料即回傳分類結構。
+        QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments = null;
+        if (financials.HasAdjustmentData)
+        {
+            categoryAdjustments = CloneCategoryAdjustments(financials.Adjustments);
+        }
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
@@ -1343,6 +1352,7 @@ public class QuotationService : IQuotationService
         }
 
         var hasRequestedCategoryAdjustments = HasCategoryAdjustments(requestedCategoryAdjustments);
+        var primaryFixType = ExtractPrimaryQuotationFixType(resolvedFixType ?? quotation.FixType);
         var financials = CalculateMaintenanceFinancialSummary(
             effectiveDamages,
             legacyOtherFee,
@@ -1350,7 +1360,8 @@ public class QuotationService : IQuotationService
             legacyPercentageDiscount,
             rawDiscountReason,
             requestedCategoryAdjustments,
-            hasRequestedCategoryAdjustments);
+            hasRequestedCategoryAdjustments,
+            primaryFixType);
         var otherFee = financials.OtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount;
         var discountReason = financials.DiscountReason ?? rawDiscountReason;
@@ -2438,14 +2449,16 @@ public class QuotationService : IQuotationService
         decimal? percentageDiscount,
         string? discountReason,
         QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments,
-        bool hasExplicitAdjustments)
+        bool hasExplicitAdjustments,
+        string? fallbackFixType)
     {
         var normalizedReason = NormalizeOptionalText(discountReason);
         var normalization = NormalizeMaintenanceAdjustments(
             categoryAdjustments,
             otherFee,
             percentageDiscount,
-            normalizedReason);
+            normalizedReason,
+            ResolveCategoryKeyFromFixType(fallbackFixType));
         var adjustments = normalization.Adjustments;
         // 僅在外部明確標註有帶入類別資料時，才視為使用新版格式。
         var explicitAdjustments = hasExplicitAdjustments && normalization.HasExplicitAdjustments;
@@ -2613,24 +2626,30 @@ public class QuotationService : IQuotationService
         QuotationMaintenanceCategoryAdjustmentCollection? source,
         decimal? fallbackOtherFee,
         decimal? fallbackPercentageDiscount,
-        string? fallbackDiscountReason)
+        string? fallbackDiscountReason,
+        string? fallbackCategoryKey)
     {
         var adjustments = CloneCategoryAdjustments(source);
         var hasExplicitAdjustments = HasCategoryAdjustments(source);
 
+        var targetCategory = EnsureCategoryAdjustment(adjustments, fallbackCategoryKey);
+
         if (!HasOtherFee(adjustments) && fallbackOtherFee.HasValue)
         {
-            adjustments.Other.OtherFee = fallbackOtherFee;
+            // 舊資料缺少類別結構時，依據維修類型推回指定類別欄位。
+            targetCategory.OtherFee = fallbackOtherFee;
         }
 
         if (!HasPercentageDiscount(adjustments) && fallbackPercentageDiscount.HasValue)
         {
-            adjustments.Other.PercentageDiscount = fallbackPercentageDiscount;
+            // 同步折扣趴數至對應類別，讓舊資料也能顯示在新畫面。
+            targetCategory.PercentageDiscount = fallbackPercentageDiscount;
         }
 
         if (!HasDiscountReason(adjustments) && !string.IsNullOrWhiteSpace(fallbackDiscountReason))
         {
-            adjustments.Other.DiscountReason = fallbackDiscountReason;
+            // 補齊折扣原因，避免舊資料顯示於錯誤區塊。
+            targetCategory.DiscountReason = fallbackDiscountReason;
         }
 
         return new MaintenanceAdjustmentNormalizationResult
@@ -3903,6 +3922,27 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
+    /// 取得指定類別鍵值對應的折扣設定，若不存在則建立預設實例。
+    /// </summary>
+    private static QuotationMaintenanceCategoryAdjustment EnsureCategoryAdjustment(
+        QuotationMaintenanceCategoryAdjustmentCollection adjustments,
+        string? categoryKey)
+    {
+        // 預設回落至 other，避免舊資料缺少維修類型時落在空集合。
+        var normalizedKey = string.IsNullOrWhiteSpace(categoryKey)
+            ? "other"
+            : categoryKey;
+
+        return normalizedKey switch
+        {
+            "dent" => adjustments.Dent ??= new QuotationMaintenanceCategoryAdjustment(),
+            "paint" => adjustments.Paint ??= new QuotationMaintenanceCategoryAdjustment(),
+            "other" => adjustments.Other ??= new QuotationMaintenanceCategoryAdjustment(),
+            _ => adjustments.Other ??= new QuotationMaintenanceCategoryAdjustment()
+        };
+    }
+
+    /// <summary>
     /// 將類別索引正規化為 dent / paint / other。
     /// </summary>
     private static string? NormalizeCategoryKey(string? key)
@@ -3920,6 +3960,23 @@ public class QuotationService : IQuotationService
             "other" or "其他" => "other",
             _ => null
         };
+    }
+
+    /// <summary>
+    /// 透過維修類型解析類別鍵值，供舊資料回填至正確欄位。
+    /// </summary>
+    private static string? ResolveCategoryKeyFromFixType(string? fixType)
+    {
+        if (string.IsNullOrWhiteSpace(fixType))
+        {
+            return null;
+        }
+
+        // 先以正規化鍵值比對，若失敗則使用顯示名稱再行轉換。
+        var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(fixType)
+            ?? QuotationDamageFixTypeHelper.ResolveDisplayName(fixType);
+
+        return NormalizeCategoryKey(normalizedFixType);
     }
 
     /// <summary>
