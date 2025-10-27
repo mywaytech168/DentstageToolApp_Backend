@@ -1281,19 +1281,19 @@ public class QuotationCarBodyChecklistItem
 }
 
 /// <summary>
-/// 車體受損標記資訊，透過座標定位並標記損傷類型。
+/// 車體受損標記資訊，透過起點與終點座標描述刮痕方向並標記損傷類型。
 /// </summary>
 public class QuotationCarBodyDamageMarker
 {
     /// <summary>
-    /// 標記在示意圖上的 X 座標（0~1），用於呈現水平位置。
+    /// 受損範圍的起點座標，採 0~1 的相對位置以對應示意圖。
     /// </summary>
-    public double? X { get; set; }
+    public QuotationCarBodyMarkerPoint Start { get; set; } = new();
 
     /// <summary>
-    /// 標記在示意圖上的 Y 座標（0~1），用於呈現垂直位置。
+    /// 受損範圍的終點座標，採 0~1 的相對位置以對應示意圖。
     /// </summary>
-    public double? Y { get; set; }
+    public QuotationCarBodyMarkerPoint End { get; set; } = new();
 
     /// <summary>
     /// 是否為凹痕，對應前端勾選的凹痕類型。
@@ -1314,5 +1314,71 @@ public class QuotationCarBodyDamageMarker
     /// 補充備註，協助記錄詳細損傷描述。
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 舊版 X 座標欄位，保留解析既有資料並轉寫為起點座標使用。
+    /// </summary>
+    [JsonPropertyName("x")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double? LegacyX
+    {
+        get => null;
+        set
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Start ??= new QuotationCarBodyMarkerPoint();
+            Start.X = value;
+            End ??= new QuotationCarBodyMarkerPoint();
+            if (!End.X.HasValue)
+            {
+                End.X = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 舊版 Y 座標欄位，保留解析既有資料並轉寫為起點座標使用。
+    /// </summary>
+    [JsonPropertyName("y")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double? LegacyY
+    {
+        get => null;
+        set
+        {
+            if (!value.HasValue)
+            {
+                return;
+            }
+
+            Start ??= new QuotationCarBodyMarkerPoint();
+            Start.Y = value;
+            End ??= new QuotationCarBodyMarkerPoint();
+            if (!End.Y.HasValue)
+            {
+                End.Y = value;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// 車體損傷標記座標點，以 0~1 的比例紀錄於示意圖。
+/// </summary>
+public class QuotationCarBodyMarkerPoint
+{
+    /// <summary>
+    /// 代表水平方向的相對座標，0 為最左側，1 為最右側。
+    /// </summary>
+    public double? X { get; set; }
+
+    /// <summary>
+    /// 代表垂直方向的相對座標，0 為最上方，1 為最下方。
+    /// </summary>
+    public double? Y { get; set; }
 }
 

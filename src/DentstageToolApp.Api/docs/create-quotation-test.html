@@ -756,9 +756,17 @@
                 return null;
               }
 
+              const normalizePoint = (point) => {
+                const safePoint = point && typeof point === 'object' ? point : {};
+                return {
+                  x: typeof safePoint.x === 'number' ? safePoint.x : 0,
+                  y: typeof safePoint.y === 'number' ? safePoint.y : 0
+                };
+              };
+
               const normalizedMarker = {
-                x: typeof marker.x === 'number' ? marker.x : 0,
-                y: typeof marker.y === 'number' ? marker.y : 0,
+                start: normalizePoint(marker.start),
+                end: normalizePoint(marker.end),
                 hasDent: !!marker.hasDent,
                 hasScratch: !!marker.hasScratch,
                 hasPaintPeel: !!marker.hasPaintPeel
@@ -769,7 +777,9 @@
               }
 
               const hasDefect = normalizedMarker.hasDent || normalizedMarker.hasScratch || normalizedMarker.hasPaintPeel;
-              if (!hasDefect && !normalizedMarker.remark) {
+              const startHasValue = normalizedMarker.start.x !== 0 || normalizedMarker.start.y !== 0;
+              const endHasValue = normalizedMarker.end.x !== 0 || normalizedMarker.end.y !== 0;
+              if (!hasDefect && !normalizedMarker.remark && !startHasValue && !endHasValue) {
                 return null;
               }
 
