@@ -95,6 +95,31 @@
       paint: '板烤',
       other: '其他'
     };
+    // 說明：定義維修折扣的預設分類，保證測試資料可對應後端分類欄位
+    const MAINTENANCE_CATEGORY_BASE_KEYS = ['dent', 'paint', 'other'];
+
+    // 說明：建立分類折扣的初始結構，統一維修金額與折扣欄位型別
+    const buildCategoryAdjustmentTemplate = (source) => {
+      const adjustment = {
+        otherFee: 0,
+        percentageDiscount: 0,
+        discountReason: ''
+      };
+
+      if (source && typeof source === 'object') {
+        if (typeof source.otherFee === 'number') {
+          adjustment.otherFee = source.otherFee;
+        }
+        if (typeof source.percentageDiscount === 'number') {
+          adjustment.percentageDiscount = source.percentageDiscount;
+        }
+        if (typeof source.discountReason === 'string') {
+          adjustment.discountReason = source.discountReason;
+        }
+      }
+
+      return adjustment;
+    };
 
     const App = {
       // ---------- 模板區 ----------
@@ -403,11 +428,29 @@
     "otherFee": 0,
     "roundingDiscount": 0,
     "percentageDiscount": 0,
+    "discountReason": "",
     "estimatedRepairDays": 0,
     "estimatedRepairHours": 0,
     "estimatedRestorationPercentage": 100,
     "suggestedPaintReason": null,
     "unrepairableReason": null,
+    "categoryAdjustments": {
+      "dent": {
+        "otherFee": 0,
+        "percentageDiscount": 0,
+        "discountReason": ""
+      },
+      "paint": {
+        "otherFee": 0,
+        "percentageDiscount": 0,
+        "discountReason": ""
+      },
+      "other": {
+        "otherFee": 0,
+        "percentageDiscount": 0,
+        "discountReason": ""
+      }
+    },
     "remark": "測試建立估價單"
   }
 }`);
@@ -523,9 +566,34 @@
             groups[key] = normalizedItems;
           });
 
-          target.photos = groups;
-          return groups;
-        };
+        target.photos = groups;
+        return groups;
+      };
+
+    // 說明：補齊維修分類折扣結構，確保凹痕、板烤與其他皆具備預設欄位
+      const ensureMaintenanceCategoryAdjustments = (payload) => {
+        if (!payload || typeof payload !== 'object') {
+          return payload;
+        }
+
+        const maintenance = payload.maintenance && typeof payload.maintenance === 'object'
+          ? payload.maintenance
+          : {};
+
+        const rawAdjustments = maintenance.categoryAdjustments && typeof maintenance.categoryAdjustments === 'object'
+          ? maintenance.categoryAdjustments
+          : {};
+
+        const normalized = {};
+
+        MAINTENANCE_CATEGORY_BASE_KEYS.forEach((key) => {
+          normalized[key] = buildCategoryAdjustmentTemplate(rawAdjustments[key]);
+        });
+
+        maintenance.categoryAdjustments = normalized;
+        payload.maintenance = maintenance;
+        return payload;
+      };
 
         // 套用圖片至指定類別，允許多筆資料堆疊以模擬多處損傷
         const appendPhotoItem = (photoUid, options = {}) => {
@@ -540,6 +608,7 @@
           try {
             const parsed = JSON.parse(createRequestText.value || '{}');
             const groups = ensurePhotoGroups(parsed);
+            ensureMaintenanceCategoryAdjustments(parsed);
             // 說明：若未指定或帶入無效類別則回退至凹痕分類，確保資料結構一致
             const normalizedCategory = PHOTO_CATEGORY_KEYS.includes(category) ? category : 'dent';
 
@@ -781,6 +850,9 @@
             });
           }
 
+          ensurePhotoGroups(clone);
+          ensureMaintenanceCategoryAdjustments(clone);
+
           return clone;
         };
 
@@ -939,6 +1011,9 @@
             return;
           }
 
+          ensurePhotoGroups(parsed);
+          ensureMaintenanceCategoryAdjustments(parsed);
+
           loading.create = true;
           try {
             const response = await fetch(buildUrl('/quotations/create'), {
@@ -979,6 +1054,8 @@
         const formatRequestJson = () => {
           try {
             const parsed = JSON.parse(createRequestText.value);
+            ensurePhotoGroups(parsed);
+            ensureMaintenanceCategoryAdjustments(parsed);
             createRequestText.value = JSON.stringify(parsed, null, 2);
             message.success('已格式化 JSON。');
             persistSettings();
@@ -1044,7 +1121,17 @@
               if (parsed.deviceKey) loginForm.deviceKey = parsed.deviceKey;
               if (parsed.accessToken) authState.accessToken = parsed.accessToken;
               if (parsed.refreshToken) authState.refreshToken = parsed.refreshToken;
-              if (parsed.createRequestText) createRequestText.value = parsed.createRequestText;
+              if (parsed.createRequestText) {
+                try {
+                  const restored = JSON.parse(parsed.createRequestText);
+                  ensurePhotoGroups(restored);
+                  ensureMaintenanceCategoryAdjustments(restored);
+                  createRequestText.value = JSON.stringify(restored, null, 2);
+                } catch (error) {
+                  console.warn('載入儲存估價單 JSON 時解析失敗，將沿用原字串。', error);
+                  createRequestText.value = parsed.createRequestText;
+                }
+              }
             }
           } catch (error) {
             console.warn('載入儲存設定時發生錯誤：', error);
