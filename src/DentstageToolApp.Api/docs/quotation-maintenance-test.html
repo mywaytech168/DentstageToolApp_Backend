@@ -76,6 +76,47 @@
     // ---------- 常數區 ----------
     const STORAGE_KEY = 'dentstage-quotation-maintenance-test-settings';
     const PHOTO_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
+    const MAINTENANCE_CATEGORY_KEYS = ['dent', 'paint', 'other'];
+
+    // 說明：建立分類折扣的預設值，確保維修設定可直接對應 API 欄位
+    const createEmptyCategoryAdjustments = () => {
+      const template = {};
+      MAINTENANCE_CATEGORY_KEYS.forEach((key) => {
+        template[key] = {
+          otherFee: 0,
+          percentageDiscount: 0,
+          discountReason: ''
+        };
+      });
+      return template;
+    };
+
+    // 說明：將詳情回傳的分類折扣轉換成測試頁可直接編輯的結構
+    const normalizeCategoryAdjustments = (source) => {
+      const adjustments = createEmptyCategoryAdjustments();
+      if (!source || typeof source !== 'object') {
+        return adjustments;
+      }
+
+      MAINTENANCE_CATEGORY_KEYS.forEach((key) => {
+        const raw = source[key];
+        if (!raw || typeof raw !== 'object') {
+          return;
+        }
+
+        if (typeof raw.otherFee === 'number') {
+          adjustments[key].otherFee = raw.otherFee;
+        }
+        if (typeof raw.percentageDiscount === 'number') {
+          adjustments[key].percentageDiscount = raw.percentageDiscount;
+        }
+        if (typeof raw.discountReason === 'string') {
+          adjustments[key].discountReason = raw.discountReason;
+        }
+      });
+
+      return adjustments;
+    };
 
     // ---------- 輔助函式區 ----------
     /**
@@ -126,6 +167,7 @@
         roundingDiscount: 0,
         percentageDiscount: 0,
         discountReason: '',
+        categoryAdjustments: createEmptyCategoryAdjustments(),
         remark: ''
       }
     });
@@ -172,6 +214,7 @@
         roundingDiscount: 0,
         percentageDiscount: 0,
         discountReason: '',
+        categoryAdjustments: createEmptyCategoryAdjustments(),
         remark: ''
       }
     });
@@ -372,6 +415,7 @@
             roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
             percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
             discountReason: detail.maintenance.discountReason ?? '',
+            categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments),
             remark: detail.maintenance.remark ?? ''
           }
         : payload.maintenance;
@@ -440,6 +484,7 @@
             roundingDiscount: detail.maintenance.roundingDiscount ?? 0,
             percentageDiscount: detail.maintenance.percentageDiscount ?? 0,
             discountReason: detail.maintenance.discountReason ?? '',
+            categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments),
             remark: detail.maintenance.remark ?? ''
           }
         : payload.maintenance;
@@ -805,12 +850,44 @@
               reservationDate: parsed.quotationForm.reservationDate ?? quotationForm.reservationDate,
               cancelReason: parsed.quotationForm.cancelReason ?? quotationForm.cancelReason,
               clearReservation: parsed.quotationForm.clearReservation ?? quotationForm.clearReservation,
-              editPayload: parsed.quotationForm.editPayload ?? quotationForm.editPayload
+              editPayload: (() => {
+                if (!parsed.quotationForm.editPayload) {
+                  return quotationForm.editPayload;
+                }
+                try {
+                  const restored = JSON.parse(parsed.quotationForm.editPayload);
+                  if (restored && typeof restored === 'object' && restored.maintenance) {
+                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                      restored.maintenance.categoryAdjustments
+                    );
+                  }
+                  return JSON.stringify(restored, null, 2);
+                } catch (error) {
+                  console.warn('估價單編輯範本解析失敗，維持原始字串。', error);
+                  return parsed.quotationForm.editPayload;
+                }
+              })()
             });
             if (parsed.maintenanceForm) Object.assign(maintenanceForm, {
               orderNo: parsed.maintenanceForm.orderNo ?? maintenanceForm.orderNo,
               terminateReason: parsed.maintenanceForm.terminateReason ?? maintenanceForm.terminateReason,
-              editPayload: parsed.maintenanceForm.editPayload ?? maintenanceForm.editPayload
+              editPayload: (() => {
+                if (!parsed.maintenanceForm.editPayload) {
+                  return maintenanceForm.editPayload;
+                }
+                try {
+                  const restored = JSON.parse(parsed.maintenanceForm.editPayload);
+                  if (restored && typeof restored === 'object' && restored.maintenance) {
+                    restored.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                      restored.maintenance.categoryAdjustments
+                    );
+                  }
+                  return JSON.stringify(restored, null, 2);
+                } catch (error) {
+                  console.warn('維修單編輯範本解析失敗，維持原始字串。', error);
+                  return parsed.maintenanceForm.editPayload;
+                }
+              })()
             });
             lastResponse.value = '已載入上次儲存的設定，可直接開始測試。';
           } catch (error) {
@@ -951,6 +1028,11 @@
           loading.updateQuotation = true;
           try {
             const payload = safeParse(quotationForm.editPayload || '{}');
+            if (payload && typeof payload === 'object' && payload.maintenance) {
+              payload.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                payload.maintenance.categoryAdjustments
+              );
+            }
             const response = await authorizedFetch('/quotations/edit', {
               method: 'POST',
               body: JSON.stringify(payload)
@@ -1161,6 +1243,11 @@
           loading.updateOrder = true;
           try {
             const payload = safeParse(maintenanceForm.editPayload || '{}');
+            if (payload && typeof payload === 'object' && payload.maintenance) {
+              payload.maintenance.categoryAdjustments = normalizeCategoryAdjustments(
+                payload.maintenance.categoryAdjustments
+              );
+            }
             const response = await authorizedFetch('/maintenance-orders/edit', {
               method: 'POST',
               body: JSON.stringify(payload)
