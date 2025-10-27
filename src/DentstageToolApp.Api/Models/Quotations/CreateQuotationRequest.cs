@@ -370,11 +370,10 @@ public class QuotationMaintenanceCategoryAdjustmentCollection
     public QuotationMaintenanceCategoryAdjustment Paint { get; set; } = new();
 
     /// <summary>
-    /// 美容類別的額外費用與折扣設定，僅供舊版資料顯示時使用。
+    /// 美容類別的額外費用與折扣設定，固定輸出欄位以支援舊資料顯示。
     /// </summary>
     [JsonPropertyName("beauty")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public QuotationMaintenanceCategoryAdjustment? Beauty { get; set; }
+    public QuotationMaintenanceCategoryAdjustment Beauty { get; set; } = new();
 
     /// <summary>
     /// 其他類別的額外費用與折扣設定。

@@ -1063,6 +1063,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             categoryAdjustments.Paint = new QuotationMaintenanceCategoryAdjustment();
         }
+        if (categoryAdjustments.Beauty is null)
+        {
+            // 舊資料未帶入美容分類時，仍建立空物件以確保回傳鍵值齊全。
+            categoryAdjustments.Beauty = new QuotationMaintenanceCategoryAdjustment();
+        }
         if (categoryAdjustments.Other is null)
         {
             categoryAdjustments.Other = new QuotationMaintenanceCategoryAdjustment();
@@ -1162,13 +1167,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             Dent = CloneCategoryAdjustment(source.Dent),
             Paint = CloneCategoryAdjustment(source.Paint),
+            Beauty = CloneCategoryAdjustment(source.Beauty),
             Other = CloneCategoryAdjustment(source.Other)
         };
-
-        if (HasCategoryAdjustmentValue(source.Beauty))
-        {
-            clone.Beauty = CloneCategoryAdjustment(source.Beauty);
-        }
 
         if (!HasCategoryAdjustmentValue(clone.Other) && HasCategoryAdjustmentValue(clone.Beauty))
         {
