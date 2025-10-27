@@ -623,17 +623,20 @@ public class QuotationService : IQuotationService
         var quotationNo = BuildQuotationNo(serialNumber, createdAt);
 
         // remark 改以包裝 JSON 儲存傷痕、簽名與折扣資訊，仍保留純文字備註於 PlainRemark。
+        var hasExplicitCategoryAdjustments = HasCategoryAdjustments(requestedCategoryAdjustments);
         var financials = CalculateMaintenanceFinancialSummary(
             normalizedDamages,
             legacyOtherFee,
             roundingDiscount,
             legacyPercentageDiscount,
             rawDiscountReason,
-            requestedCategoryAdjustments);
+            requestedCategoryAdjustments,
+            hasExplicitCategoryAdjustments);
         var otherFee = financials.OtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount;
         var discountReason = financials.DiscountReason ?? rawDiscountReason;
-        var categoryAdjustments = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var categoryAdjustmentsForStorage = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var categoryAdjustmentsForExtra = financials.HasExplicitAdjustments ? financials.Adjustments : null;
         var valuation = financials.Valuation;
 
         var extraData = BuildExtraData(
@@ -648,7 +651,7 @@ public class QuotationService : IQuotationService
             estimatedRestorationPercentage,
             suggestedPaintReason,
             unrepairableReason,
-            categoryAdjustments);
+            categoryAdjustmentsForExtra);
         var remarkPayload = SerializeRemark(maintenanceRemark, extraData);
 
         cancellationToken.ThrowIfCancellationRequested();
@@ -724,7 +727,7 @@ public class QuotationService : IQuotationService
         };
 
         // ---------- 類別折扣欄位同步 ----------
-        ApplyCategoryAdjustments(quotationEntity, categoryAdjustments);
+        ApplyCategoryAdjustments(quotationEntity, categoryAdjustmentsForStorage);
 
         // ---------- 狀態初始化 ----------
         // 建立估價單時若填寫不能維修原因，直接套用 115 不能維修狀態，避免落入取消流程。
@@ -878,20 +881,22 @@ public class QuotationService : IQuotationService
         // 透過合併 remark JSON 與資料庫欄位的資料，確保新寫入欄位的折扣資料能在詳情頁顯示，同時保留舊資料的相容性。
         var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
         var mergedCategoryAdjustments = MergeCategoryAdjustments(extraData?.CategoryAdjustments, columnCategoryAdjustments);
+        var hasExplicitCategoryAdjustments = HasCategoryAdjustments(extraData?.CategoryAdjustments);
         var financials = CalculateMaintenanceFinancialSummary(
             normalizedDamages,
             storedOtherFee,
             roundingDiscount,
             storedPercentageDiscount,
             storedDiscountReason,
-            mergedCategoryAdjustments);
+            mergedCategoryAdjustments,
+            hasExplicitCategoryAdjustments);
         var otherFee = financials.OtherFee ?? storedOtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount ?? storedPercentageDiscount;
         var discountReason = NormalizeOptionalText(financials.DiscountReason ?? storedDiscountReason);
-        // 若沒有明確的折扣設定，仍回傳合併後的欄位內容，避免新欄位資料被忽略。
-        var categoryAdjustments = financials.HasAdjustmentData
-            ? financials.Adjustments
-            : CloneCategoryAdjustments(mergedCategoryAdjustments);
+        // 舊資料僅需沿用舊欄位，因此在缺少新版資料時不回傳類別結構。
+        var categoryAdjustments = financials.HasExplicitAdjustments
+            ? CloneCategoryAdjustments(financials.Adjustments)
+            : null;
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
         var estimatedRepairHours = quotation.FixExpectHour ?? extraData?.EstimatedRepairHours;
@@ -1337,23 +1342,26 @@ public class QuotationService : IQuotationService
             }
         }
 
+        var hasRequestedCategoryAdjustments = HasCategoryAdjustments(requestedCategoryAdjustments);
         var financials = CalculateMaintenanceFinancialSummary(
             effectiveDamages,
             legacyOtherFee,
             roundingDiscount,
             legacyPercentageDiscount,
             rawDiscountReason,
-            requestedCategoryAdjustments);
+            requestedCategoryAdjustments,
+            hasRequestedCategoryAdjustments);
         var otherFee = financials.OtherFee;
         var percentageDiscount = financials.EffectivePercentageDiscount;
         var discountReason = financials.DiscountReason ?? rawDiscountReason;
-        var categoryAdjustments = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var categoryAdjustmentsForStorage = financials.HasAdjustmentData ? financials.Adjustments : null;
+        var categoryAdjustmentsForExtra = financials.HasExplicitAdjustments ? financials.Adjustments : null;
         var valuation = financials.Valuation;
 
         quotation.Discount = roundingDiscount;
         quotation.DiscountPercent = percentageDiscount;
         quotation.DiscountReason = discountReason;
-        ApplyCategoryAdjustments(quotation, categoryAdjustments);
+        ApplyCategoryAdjustments(quotation, categoryAdjustmentsForStorage);
         quotation.FixTimeHour = fixTimeHour;
         quotation.FixTimeMin = fixTimeMin;
         quotation.FixExpectDay = fixExpectDay;
@@ -1423,7 +1431,7 @@ public class QuotationService : IQuotationService
             estimatedRestorationPercentage,
             suggestedPaintReason,
             unrepairableReason,
-            categoryAdjustments);
+            categoryAdjustmentsForExtra);
         quotation.Remark = SerializeRemark(maintenanceRemark, extraData);
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -2420,13 +2428,17 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 綜合傷痕、類別費用與折扣資訊，計算估價金額與折扣摘要。
     /// </summary>
+    /// <param name="hasExplicitAdjustments">
+    /// 指出是否為新版類別格式的資料來源，避免舊資料被誤判為新格式。
+    /// </param>
     private static MaintenanceFinancialSummary CalculateMaintenanceFinancialSummary(
         List<QuotationDamageItem> damages,
         decimal? otherFee,
         decimal? roundingDiscount,
         decimal? percentageDiscount,
         string? discountReason,
-        QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments)
+        QuotationMaintenanceCategoryAdjustmentCollection? categoryAdjustments,
+        bool hasExplicitAdjustments)
     {
         var normalizedReason = NormalizeOptionalText(discountReason);
         var normalization = NormalizeMaintenanceAdjustments(
@@ -2435,6 +2447,8 @@ public class QuotationService : IQuotationService
             percentageDiscount,
             normalizedReason);
         var adjustments = normalization.Adjustments;
+        // 僅在外部明確標註有帶入類別資料時，才視為使用新版格式。
+        var explicitAdjustments = hasExplicitAdjustments && normalization.HasExplicitAdjustments;
         var categoryTotals = CalculateCategoryDamageTotals(damages);
 
         decimal aggregatedOtherFeeValue = 0m;
@@ -2509,6 +2523,7 @@ public class QuotationService : IQuotationService
         {
             Adjustments = adjustments,
             HasAdjustmentData = HasCategoryAdjustments(adjustments),
+            HasExplicitAdjustments = explicitAdjustments,
             OtherFee = aggregatedOtherFee,
             EffectivePercentageDiscount = effectivePercentage,
             DiscountReason = discountReasonSummary,
@@ -4540,6 +4555,11 @@ public class QuotationService : IQuotationService
         /// 是否存在任一類別設定資料，用於決定是否輸出至 remark。
         /// </summary>
         public bool HasAdjustmentData { get; init; }
+
+        /// <summary>
+        /// 是否確實帶入新版類別調整資料，供判斷回傳格式使用。
+        /// </summary>
+        public bool HasExplicitAdjustments { get; init; }
 
         /// <summary>
         /// 額外費用的加總結果。
