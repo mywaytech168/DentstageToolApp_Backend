@@ -193,6 +193,36 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         var referenceOrder = orders.FirstOrDefault();
 
+        // ---------- 報價資料補強區 ----------
+        // 先收集所有工單已載入的報價單，方便後續統一挑選車輛資訊來源。
+        var quotationCandidates = orders
+            .Select(order => order.Quatation)
+            .Where(quatation => quatation is not null)
+            .Cast<Quatation>()
+            .ToList();
+
+        var referenceQuotation = quotationCandidates.FirstOrDefault();
+
+        if (referenceQuotation is null)
+        {
+            // 若工單無對應報價單，額外查詢同車牌的最新估價資料，補齊車輛欄位。
+            referenceQuotation = await _dbContext.Quatations
+                .AsNoTracking()
+                .Where(quatation =>
+                    quatation.CarNo == normalizedPlate
+                    || quatation.CarNo == trimmedPlate
+                    || quatation.CarNoInput == normalizedPlate
+                    || quatation.CarNoInput == trimmedPlate
+                    || quatation.CarNoInputGlobal == trimmedPlate)
+                .OrderByDescending(quatation => quatation.ModificationTimestamp ?? quatation.CreationTimestamp ?? DateTime.MinValue)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (referenceQuotation is not null)
+            {
+                quotationCandidates.Add(referenceQuotation);
+            }
+        }
+
         // ---------- 車輛識別整理區 ----------
         // 依序從車輛主檔、工單與估價單補齊識別碼，避免資料缺漏。
         var carUid = ResolveFirstValue(
@@ -200,19 +230,79 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
                 car?.CarUid,
                 referenceOrder?.CarUid,
                 referenceOrder?.Quatation?.CarUid,
+                referenceQuotation?.CarUid,
                 orders.Select(o => o.CarUid),
-                orders.Select(o => o.Quatation?.CarUid)));
+                orders.Select(o => o.Quatation?.CarUid),
+                quotationCandidates.Select(quatation => quatation.CarUid)));
 
         // 品牌與車型識別碼僅存於估價資料，因此收集所有工單估價資訊後挑選第一筆有效值。
         var brandUid = ResolveFirstValue(
             BuildCandidateList(
                 referenceOrder?.Quatation?.BrandUid,
-                orders.Select(o => o.Quatation?.BrandUid)));
+                referenceQuotation?.BrandUid,
+                orders.Select(o => o.Quatation?.BrandUid),
+                quotationCandidates.Select(quatation => quatation.BrandUid)));
 
         var modelUid = ResolveFirstValue(
             BuildCandidateList(
                 referenceOrder?.Quatation?.ModelUid,
-                orders.Select(o => o.Quatation?.ModelUid)));
+                referenceQuotation?.ModelUid,
+                orders.Select(o => o.Quatation?.ModelUid),
+                quotationCandidates.Select(quatation => quatation.ModelUid)));
+
+        var brand = ResolveFirstValue(
+            BuildCandidateList(
+                car?.Brand,
+                referenceOrder?.Brand,
+                referenceOrder?.Quatation?.Brand,
+                referenceQuotation?.Brand,
+                orders.Select(order => order.Brand),
+                orders.Select(order => order.Quatation?.Brand),
+                quotationCandidates.Select(quatation => quatation.Brand)));
+
+        var model = ResolveFirstValue(
+            BuildCandidateList(
+                car?.Model,
+                referenceOrder?.Model,
+                referenceOrder?.Quatation?.Model,
+                referenceQuotation?.Model,
+                orders.Select(order => order.Model),
+                orders.Select(order => order.Quatation?.Model),
+                quotationCandidates.Select(quatation => quatation.Model)));
+
+        var color = ResolveFirstValue(
+            BuildCandidateList(
+                car?.Color,
+                referenceOrder?.Color,
+                referenceOrder?.Quatation?.Color,
+                referenceQuotation?.Color,
+                orders.Select(order => order.Color),
+                orders.Select(order => order.Quatation?.Color),
+                quotationCandidates.Select(quatation => quatation.Color)));
+
+        var carRemark = ResolveFirstValue(
+            BuildCandidateList(
+                car?.CarRemark,
+                referenceOrder?.CarRemark,
+                referenceOrder?.Quatation?.CarRemark,
+                referenceQuotation?.CarRemark,
+                orders.Select(order => order.CarRemark),
+                orders.Select(order => order.Quatation?.CarRemark),
+                quotationCandidates.Select(quatation => quatation.CarRemark)));
+
+        var milageCandidates = new List<int?>
+        {
+            car?.Milage,
+            referenceOrder?.Milage,
+            referenceOrder?.Quatation?.Milage,
+            referenceQuotation?.Milage
+        };
+
+        milageCandidates.AddRange(orders.Select(order => order.Milage));
+        milageCandidates.AddRange(orders.Select(order => order.Quatation?.Milage));
+        milageCandidates.AddRange(quotationCandidates.Select(quatation => quatation.Milage));
+
+        var milage = ResolveFirstValue(milageCandidates);
 
         var response = new CarPlateMaintenanceHistoryResponse
         {
@@ -220,12 +310,12 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             CarUid = carUid,
             BrandUid = brandUid,
             ModelUid = modelUid,
-            Brand = car?.Brand ?? referenceOrder?.Brand,
-            Model = car?.Model ?? referenceOrder?.Model,
-            Color = car?.Color ?? referenceOrder?.Color,
+            Brand = brand,
+            Model = model,
+            Color = color,
             HasMaintenanceRecords = recordItems.Count > 0,
-            Milage = car?.Milage ?? referenceOrder?.Milage,
-            CarRemark = car?.CarRemark ?? referenceOrder?.CarRemark,
+            Milage = milage,
+            CarRemark = carRemark,
             Records = recordItems,
             Message = recordItems.Count > 0
                 ? "查詢成功，已列出歷史維修資料。"
@@ -294,6 +384,26 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             }
 
             return candidate.Trim();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 從候選集合中挑選第一個有值的數值型別，適用於里程等欄位。
+    /// </summary>
+    /// <typeparam name="T">值型別，例如 int 或 decimal。</typeparam>
+    /// <param name="candidates">候選集合。</param>
+    /// <returns>第一個有值的元素；若皆為 null 則回傳 null。</returns>
+    private static T? ResolveFirstValue<T>(IEnumerable<T?> candidates)
+        where T : struct
+    {
+        foreach (var candidate in candidates)
+        {
+            if (candidate.HasValue)
+            {
+                return candidate.Value;
+            }
         }
 
         return null;

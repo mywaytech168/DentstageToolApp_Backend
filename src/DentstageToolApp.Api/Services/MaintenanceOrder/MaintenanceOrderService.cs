@@ -994,6 +994,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private static QuotationMaintenanceDetail BuildMaintenanceDetail(Order order, QuotationMaintenanceDetail? quotationMaintenance)
     {
+        var hasExplicitCategoryAdjustments = HasCategoryAdjustments(quotationMaintenance?.CategoryAdjustments);
+
         var maintenance = quotationMaintenance is null
             ? new QuotationMaintenanceDetail()
             : new QuotationMaintenanceDetail
@@ -1061,6 +1063,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             categoryAdjustments.Paint = new QuotationMaintenanceCategoryAdjustment();
         }
+        if (categoryAdjustments.Beauty is null)
+        {
+            // 舊資料未帶入美容分類時，仍建立空物件以確保回傳鍵值齊全。
+            categoryAdjustments.Beauty = new QuotationMaintenanceCategoryAdjustment();
+        }
         if (categoryAdjustments.Other is null)
         {
             categoryAdjustments.Other = new QuotationMaintenanceCategoryAdjustment();
@@ -1109,9 +1116,41 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             categoryAdjustments.Other.DiscountReason = NormalizeOptionalText(order.OtherDiscountReason);
         }
 
-        maintenance.CategoryAdjustments = categoryAdjustments;
+        // 若缺少新版欄位資料代表舊資料流程，回傳 null 讓前端維持舊格式。
+        maintenance.CategoryAdjustments = hasExplicitCategoryAdjustments ? categoryAdjustments : null;
 
         return maintenance;
+    }
+
+    /// <summary>
+    /// 判斷是否有攜帶新版類別折扣資料，供舊資料沿用舊格式顯示。
+    /// </summary>
+    private static bool HasCategoryAdjustments(QuotationMaintenanceCategoryAdjustmentCollection? collection)
+    {
+        if (collection is null)
+        {
+            return false;
+        }
+
+        return HasCategoryAdjustmentValue(collection.Dent)
+            || HasCategoryAdjustmentValue(collection.Paint)
+            || HasCategoryAdjustmentValue(collection.Other)
+            || HasCategoryAdjustmentValue(collection.Beauty);
+    }
+
+    /// <summary>
+    /// 判斷單一類別是否有額外費用或折扣描述。
+    /// </summary>
+    private static bool HasCategoryAdjustmentValue(QuotationMaintenanceCategoryAdjustment? adjustment)
+    {
+        if (adjustment is null)
+        {
+            return false;
+        }
+
+        return adjustment.OtherFee.HasValue
+            || adjustment.PercentageDiscount.HasValue
+            || !string.IsNullOrWhiteSpace(adjustment.DiscountReason);
     }
 
     /// <summary>
@@ -1124,12 +1163,21 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             return new QuotationMaintenanceCategoryAdjustmentCollection();
         }
 
-        return new QuotationMaintenanceCategoryAdjustmentCollection
+        var clone = new QuotationMaintenanceCategoryAdjustmentCollection
         {
             Dent = CloneCategoryAdjustment(source.Dent),
             Paint = CloneCategoryAdjustment(source.Paint),
+            Beauty = CloneCategoryAdjustment(source.Beauty),
             Other = CloneCategoryAdjustment(source.Other)
         };
+
+        if (!HasCategoryAdjustmentValue(clone.Other) && HasCategoryAdjustmentValue(clone.Beauty))
+        {
+            // 舊資料若僅存在美容欄位，仍需同步到其他分類以維持後端計算。
+            clone.Other = CloneCategoryAdjustment(clone.Beauty);
+        }
+
+        return clone;
     }
 
     /// <summary>
