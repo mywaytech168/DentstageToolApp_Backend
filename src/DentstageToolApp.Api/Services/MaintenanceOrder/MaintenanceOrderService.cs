@@ -1129,7 +1129,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         return HasCategoryAdjustmentValue(collection.Dent)
             || HasCategoryAdjustmentValue(collection.Paint)
-            || HasCategoryAdjustmentValue(collection.Other);
+            || HasCategoryAdjustmentValue(collection.Other)
+            || HasCategoryAdjustmentValue(collection.Beauty);
     }
 
     /// <summary>
@@ -1157,12 +1158,25 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             return new QuotationMaintenanceCategoryAdjustmentCollection();
         }
 
-        return new QuotationMaintenanceCategoryAdjustmentCollection
+        var clone = new QuotationMaintenanceCategoryAdjustmentCollection
         {
             Dent = CloneCategoryAdjustment(source.Dent),
             Paint = CloneCategoryAdjustment(source.Paint),
             Other = CloneCategoryAdjustment(source.Other)
         };
+
+        if (HasCategoryAdjustmentValue(source.Beauty))
+        {
+            clone.Beauty = CloneCategoryAdjustment(source.Beauty);
+        }
+
+        if (!HasCategoryAdjustmentValue(clone.Other) && HasCategoryAdjustmentValue(clone.Beauty))
+        {
+            // 舊資料若僅存在美容欄位，仍需同步到其他分類以維持後端計算。
+            clone.Other = CloneCategoryAdjustment(clone.Beauty);
+        }
+
+        return clone;
     }
 
     /// <summary>
