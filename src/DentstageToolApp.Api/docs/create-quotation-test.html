@@ -406,6 +406,8 @@
     "estimatedRepairDays": 0,
     "estimatedRepairHours": 0,
     "estimatedRestorationPercentage": 100,
+    "suggestedPaintReason": null,
+    "unrepairableReason": null,
     "remark": "測試建立估價單"
   }
 }`);
@@ -747,6 +749,41 @@
         };
 
         // 從後端取得估價單建立的隨機草稿資料
+        // 清理草稿中不再需要顯示的舊欄位，避免測試頁面混淆前端開發者
+        const sanitizeDraftForDisplay = (draft) => {
+          if (!draft || typeof draft !== 'object') {
+            return draft;
+          }
+
+          const clone = JSON.parse(JSON.stringify(draft));
+
+          if (clone.car && typeof clone.car === 'object') {
+            // 移除車輛區塊中已廢棄的 UID 與里程欄位
+            ['brandUid', 'modelUid', 'mileage'].forEach((key) => {
+              if (clone.car[key] == null) {
+                delete clone.car[key];
+              }
+            });
+          }
+
+          if (clone.carBodyConfirmation && typeof clone.carBodyConfirmation === 'object') {
+            // 舊版標註圖與簽名欄位改以 PhotoUID 呈現，因此一律剔除
+            delete clone.carBodyConfirmation.annotatedImage;
+            delete clone.carBodyConfirmation.signature;
+          }
+
+          if (clone.maintenance && typeof clone.maintenance === 'object') {
+            // 舊版工時欄位改由預估天數與小時呈現，測試資料不再顯示
+            ['fixTimeHour', 'fixTimeMin', 'fixExpectDay', 'fixExpectHour'].forEach((key) => {
+              if (key in clone.maintenance) {
+                delete clone.maintenance[key];
+              }
+            });
+          }
+
+          return clone;
+        };
+
         const fetchRandomDraft = async () => {
           if (!hasToken.value) {
             message.warning('請先完成登入。');
@@ -767,7 +804,8 @@
             }
 
             const data = await response.json();
-            createRequestText.value = JSON.stringify(data.draft, null, 2);
+            const sanitizedDraft = sanitizeDraftForDisplay(data.draft);
+            createRequestText.value = JSON.stringify(sanitizedDraft, null, 2);
             randomSummary.technician = normalizeSummary(data.technician);
             randomSummary.store = normalizeSummary(data.store);
             randomSummary.customer = normalizeSummary(data.customer);

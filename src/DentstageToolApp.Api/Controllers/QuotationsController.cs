@@ -140,11 +140,16 @@ public class QuotationsController : ControllerBase
               ]
             },
           "maintenance": {
-            "fixType": "凹痕",
-            "reserveCar": true,
+            "reserveCar": false,
+            "applyCoating": true,
+            "applyWrapping": true,
+            "hasRepainted": true,
+            "needToolEvaluation": false,
             "estimatedRepairDays": 1,
-            "estimatedRepairHours": 6,
-            "estimatedRestorationPercentage": 90,
+            "estimatedRepairHours": 3,
+            "estimatedRestorationPercentage": 91,
+            "suggestedPaintReason": null,
+            "unrepairableReason": null,
             "categoryAdjustments": {
               "dent": {
                 "otherFee": 300,
