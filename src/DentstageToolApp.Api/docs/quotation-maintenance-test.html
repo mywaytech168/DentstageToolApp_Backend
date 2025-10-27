@@ -76,7 +76,7 @@
     // ---------- 常數區 ----------
     const STORAGE_KEY = 'dentstage-quotation-maintenance-test-settings';
     const PHOTO_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
-    const MAINTENANCE_CATEGORY_KEYS = ['dent', 'paint', 'other'];
+    const MAINTENANCE_CATEGORY_KEYS = ['dent', 'beauty', 'paint', 'other'];
 
     // 說明：建立分類折扣的預設值，確保維修設定可直接對應 API 欄位
     const createEmptyCategoryAdjustments = () => ({});
@@ -88,6 +88,7 @@
         return adjustments;
       }
 
+      let hasActualAdjustment = false;
       MAINTENANCE_CATEGORY_KEYS.forEach((key) => {
         const raw = source[key];
         if (!raw || typeof raw !== 'object') {
@@ -104,10 +105,25 @@
             percentageDiscount,
             discountReason
           };
+          hasActualAdjustment = true;
         }
       });
 
-      return adjustments;
+      if (hasActualAdjustment && !Object.prototype.hasOwnProperty.call(adjustments, 'beauty')) {
+        const beautySource = source.beauty;
+        const beautyFee = typeof beautySource?.otherFee === 'number' ? beautySource.otherFee : 0;
+        const beautyDiscount = typeof beautySource?.percentageDiscount === 'number' ? beautySource.percentageDiscount : 0;
+        const beautyReason = typeof beautySource?.discountReason === 'string' ? beautySource.discountReason.trim() : '';
+        adjustments.beauty = beautyFee !== 0 || beautyDiscount !== 0 || beautyReason
+          ? {
+              otherFee: beautyFee,
+              percentageDiscount: beautyDiscount,
+              discountReason: beautyReason
+            }
+          : {};
+      }
+
+      return hasActualAdjustment ? adjustments : {};
     };
 
     // 說明：移除店家欄位中不必要的屬性，保留估價技師 UID 即可
@@ -239,6 +255,7 @@
 
       if (maintenance.categoryAdjustments && typeof maintenance.categoryAdjustments === 'object') {
         const filtered = {};
+        let hasActualAdjustment = false;
         Object.keys(maintenance.categoryAdjustments).forEach((key) => {
           const template = maintenance.categoryAdjustments[key];
           const otherFee = typeof template?.otherFee === 'number' ? template.otherFee : 0;
@@ -251,10 +268,25 @@
               percentageDiscount,
               discountReason
             };
+            hasActualAdjustment = true;
           }
         });
 
-        if (Object.keys(filtered).length > 0) {
+        if (hasActualAdjustment) {
+          if (!Object.prototype.hasOwnProperty.call(filtered, 'beauty')) {
+            const beautySource = maintenance.categoryAdjustments.beauty;
+            const beautyFee = typeof beautySource?.otherFee === 'number' ? beautySource.otherFee : 0;
+            const beautyDiscount = typeof beautySource?.percentageDiscount === 'number' ? beautySource.percentageDiscount : 0;
+            const beautyReason = typeof beautySource?.discountReason === 'string' ? beautySource.discountReason.trim() : '';
+            filtered.beauty = beautyFee !== 0 || beautyDiscount !== 0 || beautyReason
+              ? {
+                  otherFee: beautyFee,
+                  percentageDiscount: beautyDiscount,
+                  discountReason: beautyReason
+                }
+              : {};
+          }
+
           normalized.categoryAdjustments = filtered;
         }
       }

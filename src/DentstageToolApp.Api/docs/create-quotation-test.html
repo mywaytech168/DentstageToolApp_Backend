@@ -95,8 +95,8 @@
       paint: '板烤',
       other: '其他'
     };
-    // 說明：定義維修折扣的預設分類，保證測試資料可對應後端分類欄位
-    const MAINTENANCE_CATEGORY_BASE_KEYS = ['dent', 'paint', 'other'];
+    // 說明：定義維修折扣的預設分類，固定包含美容欄位以支援舊資料
+    const MAINTENANCE_CATEGORY_BASE_KEYS = ['dent', 'beauty', 'paint', 'other'];
 
     // 說明：建立分類折扣的初始結構，統一維修金額與折扣欄位型別
     const buildCategoryAdjustmentTemplate = (source) => {
@@ -684,6 +684,8 @@
 
         if (adjustments) {
           const filteredAdjustments = {};
+          let hasActualAdjustment = false;
+
           Object.keys(adjustments).forEach((category) => {
             const template = buildCategoryAdjustmentTemplate(adjustments[category]);
             const hasOtherFee = keepNumber(template.otherFee);
@@ -695,10 +697,25 @@
                 percentageDiscount: hasDiscount ? template.percentageDiscount : 0,
                 discountReason: hasReason ? template.discountReason.trim() : ''
               };
+              hasActualAdjustment = true;
             }
           });
 
-          if (Object.keys(filteredAdjustments).length > 0) {
+          if (hasActualAdjustment) {
+            if (!Object.prototype.hasOwnProperty.call(filteredAdjustments, 'beauty')) {
+              const beautyTemplate = buildCategoryAdjustmentTemplate(adjustments.beauty);
+              const beautyOtherFee = keepNumber(beautyTemplate.otherFee);
+              const beautyDiscount = keepNumber(beautyTemplate.percentageDiscount);
+              const beautyReason = keepString(beautyTemplate.discountReason);
+              filteredAdjustments.beauty = beautyOtherFee || beautyDiscount || beautyReason
+                ? {
+                    otherFee: beautyOtherFee ? beautyTemplate.otherFee : 0,
+                    percentageDiscount: beautyDiscount ? beautyTemplate.percentageDiscount : 0,
+                    discountReason: beautyReason ? beautyTemplate.discountReason.trim() : ''
+                  }
+                : {};
+            }
+
             normalized.categoryAdjustments = filteredAdjustments;
           }
         }

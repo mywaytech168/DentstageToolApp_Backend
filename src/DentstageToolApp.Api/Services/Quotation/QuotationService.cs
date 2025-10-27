@@ -2672,8 +2672,8 @@ public class QuotationService : IQuotationService
         }
         else if (!HasCategoryAdjustmentValue(adjustments.Beauty))
         {
-            // 移除空白的美容設定，避免新資料多出無內容欄位。
-            adjustments.Beauty = null;
+            // 保留空白美容欄位，確保回傳結構固定包含 beauty 鍵值。
+            adjustments.Beauty ??= new QuotationMaintenanceCategoryAdjustment();
         }
 
         return new MaintenanceAdjustmentNormalizationResult
@@ -2860,13 +2860,9 @@ public class QuotationService : IQuotationService
         {
             Dent = CloneCategoryAdjustment(source?.Dent),
             Paint = CloneCategoryAdjustment(source?.Paint),
+            Beauty = CloneCategoryAdjustment(source?.Beauty),
             Other = CloneCategoryAdjustment(source?.Other)
         };
-
-        if (HasCategoryAdjustmentValue(source?.Beauty))
-        {
-            clone.Beauty = CloneCategoryAdjustment(source?.Beauty);
-        }
 
         if (!HasCategoryAdjustmentValue(clone.Other) && HasCategoryAdjustmentValue(clone.Beauty))
         {
