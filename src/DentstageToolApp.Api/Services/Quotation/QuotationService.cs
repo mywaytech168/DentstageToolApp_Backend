@@ -3842,12 +3842,20 @@ public class QuotationService : IQuotationService
             ? source.DamageMarkers
                 .Select(marker => new QuotationCarBodyDamageMarker
                 {
-                    X = marker.X,
-                    Y = marker.Y,
-                    HasDent = marker.HasDent,
-                    HasScratch = marker.HasScratch,
-                    HasPaintPeel = marker.HasPaintPeel,
-                    Remark = marker.Remark
+                    Start = new QuotationCarBodyMarkerPoint
+                    {
+                        X = marker?.Start?.X,
+                        Y = marker?.Start?.Y
+                    },
+                    End = new QuotationCarBodyMarkerPoint
+                    {
+                        X = marker?.End?.X,
+                        Y = marker?.End?.Y
+                    },
+                    HasDent = marker?.HasDent ?? false,
+                    HasScratch = marker?.HasScratch ?? false,
+                    HasPaintPeel = marker?.HasPaintPeel ?? false,
+                    Remark = marker?.Remark
                 })
                 .ToList()
             : new List<QuotationCarBodyDamageMarker>();
@@ -4128,8 +4136,16 @@ public class QuotationService : IQuotationService
         {
             markers.Add(new QuotationCarBodyDamageMarker
             {
-                X = Math.Round(random.NextDouble(), 2),
-                Y = Math.Round(random.NextDouble(), 2),
+                Start = new QuotationCarBodyMarkerPoint
+                {
+                    X = Math.Round(random.NextDouble(), 2),
+                    Y = Math.Round(random.NextDouble(), 2)
+                },
+                End = new QuotationCarBodyMarkerPoint
+                {
+                    X = Math.Round(random.NextDouble(), 2),
+                    Y = Math.Round(random.NextDouble(), 2)
+                },
                 HasDent = true,
                 HasScratch = random.Next(2) == 0,
                 HasPaintPeel = random.Next(2) == 0,

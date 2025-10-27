@@ -974,12 +974,20 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         var markers = carBody.DamageMarkers?.Select(marker => new QuotationCarBodyDamageMarker
         {
-            X = marker.X,
-            Y = marker.Y,
-            HasDent = marker.HasDent,
-            HasScratch = marker.HasScratch,
-            HasPaintPeel = marker.HasPaintPeel,
-            Remark = marker.Remark
+            Start = new QuotationCarBodyMarkerPoint
+            {
+                X = marker?.Start?.X,
+                Y = marker?.Start?.Y
+            },
+            End = new QuotationCarBodyMarkerPoint
+            {
+                X = marker?.End?.X,
+                Y = marker?.End?.Y
+            },
+            HasDent = marker?.HasDent ?? false,
+            HasScratch = marker?.HasScratch ?? false,
+            HasPaintPeel = marker?.HasPaintPeel ?? false,
+            Remark = marker?.Remark
         }).ToList() ?? new List<QuotationCarBodyDamageMarker>();
 
         return new QuotationCarBodyConfirmationResponse

@@ -164,15 +164,37 @@
                                                 "items": {
                                                     "type": "object",
                                                     "properties": {
-                                                        "x": {
-                                                            "type": "number",
-                                                            "format": "double",
-                                                            "description": "\u6a19\u8a18\u7684 X \u5ea7\u6a19 (0-1)\u3002"
+                                                        "start": {
+                                                            "type": "object",
+                                                            "description": "\u53d7\u640d\u8def\u5f91\u7684\u8d77\u9ede\u5ea7\u6a19\u3002",
+                                                            "properties": {
+                                                                "x": {
+                                                                    "type": "number",
+                                                                    "format": "double",
+                                                                    "description": "\u8d77\u9ede X \u5ea7\u6a19 (0-1)\u3002"
+                                                                },
+                                                                "y": {
+                                                                    "type": "number",
+                                                                    "format": "double",
+                                                                    "description": "\u8d77\u9ede Y \u5ea7\u6a19 (0-1)\u3002"
+                                                                }
+                                                            }
                                                         },
-                                                        "y": {
-                                                            "type": "number",
-                                                            "format": "double",
-                                                            "description": "\u6a19\u8a18\u7684 Y \u5ea7\u6a19 (0-1)\u3002"
+                                                        "end": {
+                                                            "type": "object",
+                                                            "description": "\u53d7\u640d\u8def\u5f91\u7684\u7d50\u675f\u5ea7\u6a19\u3002",
+                                                            "properties": {
+                                                                "x": {
+                                                                    "type": "number",
+                                                                    "format": "double",
+                                                                    "description": "\u7d50\u675f X \u5ea7\u6a19 (0-1)\u3002"
+                                                                },
+                                                                "y": {
+                                                                    "type": "number",
+                                                                    "format": "double",
+                                                                    "description": "\u7d50\u675f Y \u5ea7\u6a19 (0-1)\u3002"
+                                                                }
+                                                            }
                                                         },
                                                         "hasDent": {
                                                             "type": "boolean",
@@ -341,8 +363,8 @@
                                     "signaturePhotoUid": "Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8",
                                     "damageMarkers": [
                                         {
-                                            "x": 0.42,
-                                            "y": 0.63,
+                                            "start": { "x": 0.42, "y": 0.63 },
+                                            "end": { "x": 0.58, "y": 0.68 },
                                             "hasDent": true,
                                             "hasScratch": false,
                                             "hasPaintPeel": false,
