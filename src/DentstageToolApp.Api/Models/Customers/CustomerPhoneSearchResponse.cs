@@ -58,6 +58,11 @@ public class CustomerPhoneSearchItem
     public string? Phone { get; set; }
 
     /// <summary>
+    /// 客戶電子郵件，提供客服透過信箱聯繫或確認帳號資訊。
+    /// </summary>
+    public string? Email { get; set; }
+
+    /// <summary>
     /// 客戶分類，例如一般客戶或企業客戶。
     /// </summary>
     public string? Category { get; set; }
