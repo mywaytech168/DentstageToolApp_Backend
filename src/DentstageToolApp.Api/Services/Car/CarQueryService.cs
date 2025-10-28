@@ -523,14 +523,19 @@ public class CarQueryService : ICarQueryService
             ? (IReadOnlyCollection<MaintenanceOrderSummaryResponse>)orderList
             : Array.Empty<MaintenanceOrderSummaryResponse>();
 
+        // 先拆解品牌與型號，避免資料庫僅填寫合併欄位時出現缺漏。
+        var (brand, model) = ResolveCarBrandAndModel(car);
+
         return new CarPlateSearchItem
         {
-            CarUid = car.CarUid,
-            CarPlateNumber = car.CarNo,
-            Brand = car.Brand,
-            Model = car.Model,
-            Color = car.Color,
-            Remark = car.CarRemark,
+            // 使用正規化後的 UID，確保前後端比對時不受多餘空白影響。
+            CarUid = normalizedUid,
+            // 將車牌資料與其他描述欄位一併正規化，提供乾淨的字串給前端顯示。
+            CarPlateNumber = NormalizeOptionalText(car.CarNo),
+            Brand = brand,
+            Model = model,
+            Color = NormalizeOptionalText(car.Color),
+            Remark = NormalizeOptionalText(car.CarRemark),
             Mileage = car.Milage,
             CreatedAt = car.CreationTimestamp,
             UpdatedAt = car.ModificationTimestamp,
@@ -754,5 +759,66 @@ public class CarQueryService : ICarQueryService
         }
 
         return text.Trim();
+    }
+
+    /// <summary>
+    /// 組合品牌與型號資訊，確保回傳資料具備完整的顯示欄位。
+    /// </summary>
+    private static (string? Brand, string? Model) ResolveCarBrandAndModel(CarEntity car)
+    {
+        // 先使用資料表中原始欄位，若已填寫則直接回傳。
+        var brand = NormalizeOptionalText(car.Brand);
+        var model = NormalizeOptionalText(car.Model);
+        if (!string.IsNullOrEmpty(brand) && !string.IsNullOrEmpty(model))
+        {
+            return (brand, model);
+        }
+
+        // 若原始欄位缺少資料，嘗試拆解合併欄位 BrandModel 以補足資訊。
+        var brandModel = NormalizeOptionalText(car.BrandModel);
+        if (string.IsNullOrEmpty(brandModel))
+        {
+            return (brand, model);
+        }
+
+        // 將常見分隔符號轉成空白後拆解，避免不同輸入格式造成解析失敗。
+        var separators = new[] { '／', '/', '|', '｜', '-', '－' };
+        var normalizedCombined = brandModel;
+        foreach (var separator in separators)
+        {
+            normalizedCombined = normalizedCombined.Replace(separator, ' ');
+        }
+
+        var parts = normalizedCombined
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return (brand, model);
+        }
+
+        // 優先填入品牌資訊，若仍缺少型號則將剩餘文字視為型號名稱。
+        if (string.IsNullOrEmpty(brand))
+        {
+            brand = parts[0];
+        }
+
+        if (string.IsNullOrEmpty(model) && parts.Length >= 2)
+        {
+            model = string.Join(' ', parts.Skip(1));
+        }
+
+        // 若品牌與型號皆為空，僅剩單一片段時，將其視為型號以避免回傳空字串。
+        if (string.IsNullOrEmpty(model) && string.IsNullOrEmpty(brand))
+        {
+            model = parts[0];
+        }
+
+        // 當原先已有品牌，但 BrandModel 只帶入型號名稱時，需補齊型號欄位以符合前端需求。
+        if (string.IsNullOrEmpty(model) && parts.Length == 1 && !string.Equals(parts[0], brand, StringComparison.OrdinalIgnoreCase))
+        {
+            model = parts[0];
+        }
+
+        return (brand, model);
     }
 }
