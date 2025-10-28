@@ -35,4 +35,14 @@ public interface ICustomerLookupService
     Task<CustomerPhoneSearchResponse> SearchByPhoneAsync(
         CustomerPhoneSearchRequest request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 透過電話號碼搜尋客戶並同時回傳估價單與維修單清單。
+    /// </summary>
+    /// <param name="request">電話搜尋的查詢條件。</param>
+    /// <param name="cancellationToken">取消權杖，用於中止長時間查詢。</param>
+    /// <returns>回傳完整客戶清單與相關歷史紀錄。</returns>
+    Task<CustomerPhoneSearchDetailResponse> SearchCustomerWithDetailsAsync(
+        CustomerPhoneSearchRequest request,
+        CancellationToken cancellationToken);
 }

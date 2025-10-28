@@ -159,6 +159,29 @@ public class CustomerLookupService : ICustomerLookupService
         CustomerPhoneSearchRequest request,
         CancellationToken cancellationToken)
     {
+        // 先取得包含估價單與維修單的詳細結果，再轉換為精簡版本回傳給前端使用。
+        var detailResponse = await SearchCustomerWithDetailsAsync(request, cancellationToken);
+
+        var simpleCustomers = detailResponse.Customers
+            .Select(ConvertToSimpleItem)
+            .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
+            .ToList();
+
+        return new CustomerPhoneSearchResponse
+        {
+            QueryPhone = detailResponse.QueryPhone,
+            QueryDigits = detailResponse.QueryDigits,
+            Customers = simpleCustomers,
+            MaintenanceSummary = detailResponse.MaintenanceSummary,
+            Message = detailResponse.Message
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<CustomerPhoneSearchDetailResponse> SearchCustomerWithDetailsAsync(
+        CustomerPhoneSearchRequest request,
+        CancellationToken cancellationToken)
+    {
         if (request is null)
         {
             throw new CustomerLookupException(HttpStatusCode.BadRequest, "請提供查詢條件。");
@@ -175,7 +198,7 @@ public class CustomerLookupService : ICustomerLookupService
         var digitsPattern = string.IsNullOrEmpty(phoneDigits) ? null : $"%{phoneDigits}%";
         var rawPattern = $"%{normalizedPhone}%";
 
-        _logger.LogInformation("執行電話搜尋，關鍵字：{Phone}，純數字：{Digits}。", normalizedPhone, phoneDigits);
+        _logger.LogInformation("執行電話搜尋（含歷史），關鍵字：{Phone}，純數字：{Digits}。", normalizedPhone, phoneDigits);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -225,24 +248,23 @@ public class CustomerLookupService : ICustomerLookupService
 
         // ---------- 組裝回應 ----------
         var customerItems = customerEntities
-            .Select(customer => MapToCustomerItem(customer, quotationMap, orderMap))
+            .Select(customer => MapToCustomerDetailItem(customer, quotationMap, orderMap))
             .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
             .ToList();
 
         var summary = BuildMaintenanceSummary(relatedOrders);
 
-        var response = new CustomerPhoneSearchResponse
+        var response = new CustomerPhoneSearchDetailResponse
         {
             QueryPhone = normalizedPhone,
             QueryDigits = phoneDigits,
-            // 將整理後的客戶清單直接回傳，讓前端能一次取得所有可能的比對結果。
             Customers = customerItems,
             MaintenanceSummary = summary,
             Message = BuildMessage(customerItems.Count, summary.TotalOrders)
         };
 
         _logger.LogInformation(
-            "電話搜尋完成，找到 {CustomerCount} 位客戶與 {OrderCount} 筆維修單。",
+            "電話搜尋完成（含歷史），找到 {CustomerCount} 位客戶與 {OrderCount} 筆維修單。",
             customerItems.Count,
             summary.TotalOrders);
 
@@ -502,7 +524,7 @@ public class CustomerLookupService : ICustomerLookupService
         return map;
     }
 
-    private static CustomerPhoneSearchItem MapToCustomerItem(
+    private static CustomerPhoneSearchDetailItem MapToCustomerDetailItem(
         DentstageToolApp.Infrastructure.Entities.Customer customer,
         IReadOnlyDictionary<string, List<QuotationSummaryResponse>> quotationMap,
         IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap)
@@ -519,7 +541,7 @@ public class CustomerLookupService : ICustomerLookupService
             ? (IReadOnlyCollection<MaintenanceOrderSummaryResponse>)orderList
             : Array.Empty<MaintenanceOrderSummaryResponse>();
 
-        return new CustomerPhoneSearchItem
+        return new CustomerPhoneSearchDetailItem
         {
             CustomerUid = customer.CustomerUid,
             CustomerName = customer.Name,
@@ -535,6 +557,28 @@ public class CustomerLookupService : ICustomerLookupService
             ModifiedAt = customer.ModificationTimestamp,
             Quotations = quotations,
             MaintenanceOrders = orders
+        };
+    }
+
+    /// <summary>
+    /// 將包含歷史資料的客戶項目轉換成精簡版本，提供無歷史資料需求的端點使用。
+    /// </summary>
+    private static CustomerPhoneSearchItem ConvertToSimpleItem(CustomerPhoneSearchDetailItem detailItem)
+    {
+        return new CustomerPhoneSearchItem
+        {
+            CustomerUid = detailItem.CustomerUid,
+            CustomerName = detailItem.CustomerName,
+            Phone = detailItem.Phone,
+            Email = detailItem.Email,
+            Category = detailItem.Category,
+            Gender = detailItem.Gender,
+            County = detailItem.County,
+            Township = detailItem.Township,
+            Source = detailItem.Source,
+            Remark = detailItem.Remark,
+            CreatedAt = detailItem.CreatedAt,
+            ModifiedAt = detailItem.ModifiedAt
         };
     }
 
