@@ -165,7 +165,7 @@ public class BrandsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "brandUid": "B_45AC5C9D-9B56-4B01-A510-72F0C28F58AA",
+          "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
           "brandName": "DentStage 豪華車系"
         }
         """)]

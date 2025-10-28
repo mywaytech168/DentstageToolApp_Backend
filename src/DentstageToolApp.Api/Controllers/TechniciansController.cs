@@ -195,10 +195,9 @@ public class TechniciansController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "technicianUid": "Tc_5C6F4A52-1B43-447B-A4A0-8F6D8B6F9E11",
-          "technicianName": "李大華",
-          "jobTitle": "主任技師",
-          "storeUid": "St_4D9E1F72-9931-4E6B-9A4C-3E2B7C8D5F10"
+          "technicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+          "technicianName": "測試技師",
+          "jobTitle": "主任技師"
         }
         """)]
     [ProducesResponseType(typeof(EditTechnicianResponse), StatusCodes.Status200OK)]

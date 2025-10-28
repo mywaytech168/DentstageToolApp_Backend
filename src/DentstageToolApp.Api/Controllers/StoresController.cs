@@ -167,7 +167,7 @@ public class StoresController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "storeUid": "St_28E50A91-6DA5-4A66-9BA9-6C318D2A9E12",
+          "storeUid": "S_4F2A15F7-F0E2-2349-A6B0-BCCB27419ADB",
           "deviceName": "台南服務平板"
         }
         """)]
