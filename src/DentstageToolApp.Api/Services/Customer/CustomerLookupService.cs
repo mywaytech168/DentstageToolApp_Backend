@@ -5,7 +5,10 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Customers;
+using DentstageToolApp.Api.Models.MaintenanceOrders;
 using DentstageToolApp.Api.Models.Pagination;
+using DentstageToolApp.Api.Models.Quotations;
+using DentstageToolApp.Api.Services.Shared;
 using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -193,16 +196,36 @@ public class CustomerLookupService : ICustomerLookupService
 
         var customerEntities = await customersQuery.ToListAsync(cancellationToken);
 
-        // ---------- 查詢相關維修單 ----------
+        // ---------- 查詢相關估價單與維修單 ----------
+        var relatedQuotations = await FetchRelatedQuotationsAsync(
+            normalizedPhone,
+            phoneDigits,
+            customerEntities,
+            cancellationToken);
+
         var relatedOrders = await FetchRelatedOrdersAsync(
             normalizedPhone,
             phoneDigits,
             customerEntities,
             cancellationToken);
 
+        // ---------- 摘要資料整理 ----------
+        var quotationSummaries = await SummaryMappingHelper.BuildQuotationSummariesAsync(
+            _dbContext,
+            relatedQuotations,
+            cancellationToken);
+
+        var maintenanceSummaries = await SummaryMappingHelper.BuildMaintenanceSummariesAsync(
+            _dbContext,
+            relatedOrders,
+            cancellationToken);
+
+        var quotationMap = BuildCustomerQuotationMap(relatedQuotations, quotationSummaries);
+        var orderMap = BuildCustomerOrderMap(relatedOrders, maintenanceSummaries);
+
         // ---------- 組裝回應 ----------
         var customerItems = customerEntities
-            .Select(MapToCustomerItem)
+            .Select(customer => MapToCustomerItem(customer, quotationMap, orderMap))
             .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
             .ToList();
 
@@ -226,6 +249,70 @@ public class CustomerLookupService : ICustomerLookupService
     }
 
     // ---------- 方法區 ----------
+
+    /// <summary>
+    /// 以電話號碼與客戶清單取得相關估價單資料。
+    /// </summary>
+    private async Task<List<Quatation>> FetchRelatedQuotationsAsync(
+        string normalizedPhone,
+        string phoneDigits,
+        IReadOnlyCollection<DentstageToolApp.Infrastructure.Entities.Customer> customerEntities,
+        CancellationToken cancellationToken)
+    {
+        var quotations = new Dictionary<string, Quatation>(StringComparer.OrdinalIgnoreCase);
+
+        var rawPattern = $"%{normalizedPhone}%";
+        var quotationsByRawPhone = await _dbContext.Quatations
+            .AsNoTracking()
+            .Where(quotation =>
+                (quotation.Phone != null && EF.Functions.Like(quotation.Phone, rawPattern))
+                || (quotation.PhoneInput != null && EF.Functions.Like(quotation.PhoneInput, rawPattern))
+                || (quotation.PhoneInputGlobal != null && EF.Functions.Like(quotation.PhoneInputGlobal, rawPattern)))
+            .ToListAsync(cancellationToken);
+
+        MergeQuotations(quotations, quotationsByRawPhone);
+
+        if (!string.IsNullOrEmpty(phoneDigits))
+        {
+            var digitsPattern = $"%{phoneDigits}%";
+            var quotationsByDigits = await _dbContext.Quatations
+                .AsNoTracking()
+                .Where(quotation =>
+                    (quotation.Phone != null && EF.Functions.Like(quotation.Phone, digitsPattern))
+                    || (quotation.PhoneInput != null && EF.Functions.Like(quotation.PhoneInput, digitsPattern))
+                    || (quotation.PhoneInputGlobal != null && EF.Functions.Like(quotation.PhoneInputGlobal, digitsPattern)))
+                .ToListAsync(cancellationToken);
+
+            MergeQuotations(quotations, quotationsByDigits);
+        }
+
+        if (customerEntities.Count > 0)
+        {
+            var customerUids = customerEntities
+                .Select(customer => NormalizeOptionalText(customer.CustomerUid))
+                .Where(uid => uid is not null)
+                .Select(uid => uid!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (customerUids.Count > 0)
+            {
+                var quotationsByCustomer = await _dbContext.Quatations
+                    .AsNoTracking()
+                    .Where(quotation =>
+                        quotation.CustomerUid != null && customerUids.Contains(quotation.CustomerUid))
+                    .ToListAsync(cancellationToken);
+
+                MergeQuotations(quotations, quotationsByCustomer);
+            }
+        }
+
+        return quotations
+            .Values
+            .OrderByDescending(quotation => quotation.CreationTimestamp ?? DateTime.MinValue)
+            .ThenByDescending(quotation => quotation.QuotationNo)
+            .ToList();
+    }
 
     /// <summary>
     /// 以電話號碼與客戶清單取得相關維修單資料。
@@ -314,10 +401,123 @@ public class CustomerLookupService : ICustomerLookupService
     }
 
     /// <summary>
-    /// 將資料庫客戶實體轉為 API 回傳模型。
+    /// 合併估價單集合，避免重複加入相同報價單。
     /// </summary>
-    private static CustomerPhoneSearchItem MapToCustomerItem(DentstageToolApp.Infrastructure.Entities.Customer customer)
+    private static void MergeQuotations(IDictionary<string, Quatation> target, IEnumerable<Quatation> source)
     {
+        foreach (var quotation in source)
+        {
+            if (string.IsNullOrWhiteSpace(quotation.QuotationUid))
+            {
+                continue;
+            }
+
+            if (target.ContainsKey(quotation.QuotationUid))
+            {
+                continue;
+            }
+
+            target[quotation.QuotationUid] = quotation;
+        }
+    }
+
+    /// <summary>
+    /// 建立客戶對估價單摘要的對照表，方便後續直接取用。
+    /// </summary>
+    private static IReadOnlyDictionary<string, List<QuotationSummaryResponse>> BuildCustomerQuotationMap(
+        IReadOnlyList<Quatation> quotations,
+        IReadOnlyList<QuotationSummaryResponse> summaries)
+    {
+        var map = new Dictionary<string, List<QuotationSummaryResponse>>(StringComparer.OrdinalIgnoreCase);
+        var count = Math.Min(quotations.Count, summaries.Count);
+
+        for (var i = 0; i < count; i++)
+        {
+            var quotation = quotations[i];
+            var summary = summaries[i];
+            var normalizedUid = NormalizeOptionalText(quotation.CustomerUid);
+            if (normalizedUid is null)
+            {
+                continue;
+            }
+
+            if (!map.TryGetValue(normalizedUid, out var list))
+            {
+                list = new List<QuotationSummaryResponse>();
+                map[normalizedUid] = list;
+            }
+
+            list.Add(summary);
+        }
+
+        foreach (var key in map.Keys.ToList())
+        {
+            map[key] = map[key]
+                .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(item => item.QuotationNo)
+                .ToList();
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// 建立客戶對維修單摘要的對照表。
+    /// </summary>
+    private static IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> BuildCustomerOrderMap(
+        IReadOnlyList<Order> orders,
+        IReadOnlyList<MaintenanceOrderSummaryResponse> summaries)
+    {
+        var map = new Dictionary<string, List<MaintenanceOrderSummaryResponse>>(StringComparer.OrdinalIgnoreCase);
+        var count = Math.Min(orders.Count, summaries.Count);
+
+        for (var i = 0; i < count; i++)
+        {
+            var order = orders[i];
+            var summary = summaries[i];
+            var normalizedUid = NormalizeOptionalText(order.CustomerUid);
+            if (normalizedUid is null)
+            {
+                continue;
+            }
+
+            if (!map.TryGetValue(normalizedUid, out var list))
+            {
+                list = new List<MaintenanceOrderSummaryResponse>();
+                map[normalizedUid] = list;
+            }
+
+            list.Add(summary);
+        }
+
+        foreach (var key in map.Keys.ToList())
+        {
+            map[key] = map[key]
+                .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
+                .ThenByDescending(item => item.OrderNo)
+                .ToList();
+        }
+
+        return map;
+    }
+
+    private static CustomerPhoneSearchItem MapToCustomerItem(
+        DentstageToolApp.Infrastructure.Entities.Customer customer,
+        IReadOnlyDictionary<string, List<QuotationSummaryResponse>> quotationMap,
+        IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap)
+    {
+        var normalizedUid = NormalizeOptionalText(customer.CustomerUid);
+
+        var quotations = normalizedUid is not null &&
+            quotationMap.TryGetValue(normalizedUid, out var quotationList)
+            ? (IReadOnlyCollection<QuotationSummaryResponse>)quotationList
+            : Array.Empty<QuotationSummaryResponse>();
+
+        var orders = normalizedUid is not null &&
+            orderMap.TryGetValue(normalizedUid, out var orderList)
+            ? (IReadOnlyCollection<MaintenanceOrderSummaryResponse>)orderList
+            : Array.Empty<MaintenanceOrderSummaryResponse>();
+
         return new CustomerPhoneSearchItem
         {
             CustomerUid = customer.CustomerUid,
@@ -330,7 +530,9 @@ public class CustomerLookupService : ICustomerLookupService
             Source = customer.Source,
             Remark = customer.ConnectRemark,
             CreatedAt = customer.CreationTimestamp,
-            ModifiedAt = customer.ModificationTimestamp
+            ModifiedAt = customer.ModificationTimestamp,
+            Quotations = quotations,
+            MaintenanceOrders = orders
         };
     }
 
@@ -479,6 +681,19 @@ public class CustomerLookupService : ICustomerLookupService
     {
         var digits = new string(phone.Where(char.IsDigit).ToArray());
         return digits;
+    }
+
+    /// <summary>
+    /// 正規化可選文字欄位，將空白字串轉換為 null，方便後續比對。
+    /// </summary>
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     // ---------- 生命週期 ----------
