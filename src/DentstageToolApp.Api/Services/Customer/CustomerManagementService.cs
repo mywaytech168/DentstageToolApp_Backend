@@ -124,8 +124,8 @@ public class CustomerManagementService : ICustomerManagementService
 
         // ---------- 參數整理區 ----------
         var customerUid = NormalizeRequiredText(request.CustomerUid, "客戶識別碼");
-        var customerName = NormalizeRequiredText(request.CustomerName, "客戶名稱");
         var operatorLabel = NormalizeOperator(operatorName);
+        var customerName = NormalizeOptionalText(request.CustomerName);
         var customerType = NormalizeOptionalText(request.Category);
         var gender = NormalizeOptionalText(request.Gender);
         var county = NormalizeOptionalText(request.County);
@@ -135,7 +135,7 @@ public class CustomerManagementService : ICustomerManagementService
         var reason = NormalizeOptionalText(request.Reason);
         var remark = NormalizeOptionalText(request.Remark);
         var phone = NormalizeOptionalText(request.Phone);
-        var phoneQuery = NormalizePhoneQuery(phone);
+        var phoneQuery = phone is null ? null : NormalizePhoneQuery(phone);
 
         // 查找既有客戶資料，避免更新不存在的紀錄。
         var customerEntity = await _dbContext.Customers
@@ -148,50 +148,155 @@ public class CustomerManagementService : ICustomerManagementService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        // ---------- 資料檢核區 ----------
-        if (!string.IsNullOrEmpty(phoneQuery))
-        {
-            var duplicate = await _dbContext.Customers
-                .AsNoTracking()
-                .AnyAsync(customer =>
-                        customer.CustomerUid != customerUid
-                        && (
-                            customer.PhoneQuery == phoneQuery
-                            || customer.Phone == phone
-                        ),
-                    cancellationToken);
+        var hasUpdates = false;
 
-            if (duplicate)
+        // ---------- 資料檢核區 ----------
+        if (!string.IsNullOrEmpty(phone) && phoneQuery is not null)
+        {
+            var existingPhone = customerEntity.Phone ?? string.Empty;
+            var existingQuery = customerEntity.PhoneQuery ?? string.Empty;
+
+            var shouldCheckDuplicate =
+                !string.Equals(existingPhone, phone, StringComparison.Ordinal)
+                || !string.Equals(existingQuery, phoneQuery, StringComparison.Ordinal);
+
+            if (shouldCheckDuplicate)
             {
-                throw new CustomerManagementException(HttpStatusCode.Conflict, "該聯絡電話已存在客戶資料，請勿重複新增。");
+                var duplicate = await _dbContext.Customers
+                    .AsNoTracking()
+                    .AnyAsync(
+                        customer =>
+                            customer.CustomerUid != customerUid
+                            && (
+                                customer.PhoneQuery == phoneQuery
+                                || customer.Phone == phone
+                            ),
+                        cancellationToken);
+
+                if (duplicate)
+                {
+                    throw new CustomerManagementException(HttpStatusCode.Conflict, "該聯絡電話已存在客戶資料，請勿重複新增。");
+                }
             }
         }
 
         // ---------- 實體更新區 ----------
-        var now = DateTime.UtcNow;
-        customerEntity.Name = customerName;
-        customerEntity.CustomerType = customerType;
-        customerEntity.Gender = gender;
-        customerEntity.Phone = phone;
-        customerEntity.PhoneQuery = phoneQuery;
-        customerEntity.Email = email;
-        customerEntity.County = county;
-        customerEntity.Township = township;
-        customerEntity.Source = source;
-        customerEntity.Reason = reason;
-        customerEntity.ConnectRemark = remark;
-        customerEntity.ModificationTimestamp = now;
-        customerEntity.ModifiedBy = operatorLabel;
+        if (!string.IsNullOrWhiteSpace(customerName)
+            && !string.Equals(customerEntity.Name, customerName, StringComparison.Ordinal))
+        {
+            customerEntity.Name = customerName;
+            hasUpdates = true;
+        }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(customerType)
+            && !string.Equals(customerEntity.CustomerType, customerType, StringComparison.Ordinal))
+        {
+            customerEntity.CustomerType = customerType;
+            hasUpdates = true;
+        }
 
-        _logger.LogInformation("操作人員 {Operator} 編輯客戶 {CustomerUid} ({CustomerName}) 成功。", operatorLabel, customerEntity.CustomerUid, customerEntity.Name);
+        if (!string.IsNullOrWhiteSpace(gender)
+            && !string.Equals(customerEntity.Gender, gender, StringComparison.Ordinal))
+        {
+            customerEntity.Gender = gender;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(county)
+            && !string.Equals(customerEntity.County, county, StringComparison.Ordinal))
+        {
+            customerEntity.County = county;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(township)
+            && !string.Equals(customerEntity.Township, township, StringComparison.Ordinal))
+        {
+            customerEntity.Township = township;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(email)
+            && !string.Equals(customerEntity.Email, email, StringComparison.Ordinal))
+        {
+            customerEntity.Email = email;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(source)
+            && !string.Equals(customerEntity.Source, source, StringComparison.Ordinal))
+        {
+            customerEntity.Source = source;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(reason)
+            && !string.Equals(customerEntity.Reason, reason, StringComparison.Ordinal))
+        {
+            customerEntity.Reason = reason;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(remark)
+            && !string.Equals(customerEntity.ConnectRemark, remark, StringComparison.Ordinal))
+        {
+            customerEntity.ConnectRemark = remark;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(phone))
+        {
+            var existingPhone = customerEntity.Phone ?? string.Empty;
+            var existingQuery = customerEntity.PhoneQuery ?? string.Empty;
+            var newQuery = phoneQuery ?? string.Empty;
+
+            if (!string.Equals(existingPhone, phone, StringComparison.Ordinal)
+                || !string.Equals(existingQuery, newQuery, StringComparison.Ordinal))
+            {
+                customerEntity.Phone = phone;
+                customerEntity.PhoneQuery = phoneQuery;
+                hasUpdates = true;
+            }
+        }
+
+        DateTime responseTime;
+        string responseMessage;
+
+        if (hasUpdates)
+        {
+            var now = DateTime.UtcNow;
+            customerEntity.ModificationTimestamp = now;
+            customerEntity.ModifiedBy = operatorLabel;
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            responseTime = now;
+            responseMessage = "已更新客戶資料。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯客戶 {CustomerUid} ({CustomerName}) 成功。",
+                operatorLabel,
+                customerEntity.CustomerUid,
+                customerEntity.Name);
+        }
+        else
+        {
+            responseTime = customerEntity.ModificationTimestamp
+                ?? customerEntity.CreationTimestamp
+                ?? DateTime.UtcNow;
+            responseMessage = "未提供需更新的客戶欄位，資料維持不變。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯客戶 {CustomerUid} 時未提供新的更新內容，維持原始資料。",
+                operatorLabel,
+                customerEntity.CustomerUid);
+        }
 
         // ---------- 組裝回應區 ----------
         return new EditCustomerResponse
         {
             CustomerUid = customerEntity.CustomerUid,
-            CustomerName = customerEntity.Name ?? customerName,
+            CustomerName = customerEntity.Name ?? string.Empty,
             Phone = customerEntity.Phone,
             Category = customerEntity.CustomerType,
             Gender = customerEntity.Gender,
@@ -201,8 +306,8 @@ public class CustomerManagementService : ICustomerManagementService
             Source = customerEntity.Source,
             Reason = customerEntity.Reason,
             Remark = customerEntity.ConnectRemark,
-            UpdatedAt = now,
-            Message = "已更新客戶資料。"
+            UpdatedAt = responseTime,
+            Message = responseMessage
         };
     }
 

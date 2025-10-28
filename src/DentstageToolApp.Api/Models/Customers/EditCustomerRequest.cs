@@ -17,7 +17,6 @@ public class EditCustomerRequest
     /// <summary>
     /// 客戶名稱，更新時仍為必填欄位。
     /// </summary>
-    [Required(ErrorMessage = "請輸入客戶名稱。")]
     [StringLength(100, ErrorMessage = "客戶名稱長度不得超過 100 個字元。")]
     public string? CustomerName { get; set; }
 

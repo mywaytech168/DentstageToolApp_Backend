@@ -81,7 +81,8 @@ public class StoreManagementService : IStoreManagementService
 
         // ---------- 參數整理區 ----------
         var storeUid = NormalizeRequiredText(request.StoreUid, "門市識別碼");
-        var storeName = NormalizeRequiredText(request.StoreName, "門市名稱");
+        // 門市名稱允許不帶值，表示不調整該欄位。
+        var storeName = NormalizeOptionalText(request.StoreName);
         var operatorLabel = NormalizeOperator(operatorName);
 
         var entity = await _dbContext.Stores
@@ -94,29 +95,58 @@ public class StoreManagementService : IStoreManagementService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var duplicate = await _dbContext.Stores
-            .AsNoTracking()
-            .AnyAsync(store => store.StoreUid != storeUid && store.StoreName == storeName, cancellationToken);
+        var hasUpdates = false;
 
-        if (duplicate)
+        if (!string.IsNullOrWhiteSpace(storeName)
+            && !string.Equals(storeName, entity.StoreName, StringComparison.Ordinal))
         {
-            throw new StoreManagementException(HttpStatusCode.Conflict, "門市名稱已存在於其他門市，請重新命名。");
+            var duplicate = await _dbContext.Stores
+                .AsNoTracking()
+                .AnyAsync(
+                    store => store.StoreUid != storeUid && store.StoreName == storeName,
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new StoreManagementException(HttpStatusCode.Conflict, "門市名稱已存在於其他門市，請重新命名。");
+            }
+
+            entity.StoreName = storeName;
+            hasUpdates = true;
         }
 
-        // ---------- 實體更新區 ----------
-        entity.StoreName = storeName;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        DateTime responseTime;
+        string responseMessage;
 
-        var now = DateTime.UtcNow;
-        _logger.LogInformation("操作人員 {Operator} 編輯門市 {StoreUid} ({StoreName}) 成功。", operatorLabel, entity.StoreUid, entity.StoreName);
+        if (hasUpdates)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            responseTime = DateTime.UtcNow;
+            responseMessage = "已更新門市資料。";
 
-        // ---------- 組裝回應區 ----------
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯門市 {StoreUid} ({StoreName}) 成功。",
+                operatorLabel,
+                entity.StoreUid,
+                entity.StoreName);
+        }
+        else
+        {
+            responseTime = DateTime.UtcNow;
+            responseMessage = "未提供需更新的門市欄位，資料維持不變。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯門市 {StoreUid} 時未提供新的更新內容，維持原始資料。",
+                operatorLabel,
+                entity.StoreUid);
+        }
+
         return new EditStoreResponse
         {
             StoreUid = entity.StoreUid,
             StoreName = entity.StoreName,
-            UpdatedAt = now,
-            Message = "已更新門市資料。"
+            UpdatedAt = responseTime,
+            Message = responseMessage
         };
     }
 
@@ -193,6 +223,19 @@ public class StoreManagementService : IStoreManagementService
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new StoreManagementException(HttpStatusCode.BadRequest, $"{fieldName}為必填欄位，請重新輸入。");
+        }
+
+        return value.Trim();
+    }
+
+    /// <summary>
+    /// 處理可選文字欄位，空值表示呼叫端未要求更新。
+    /// </summary>
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
         }
 
         return value.Trim();

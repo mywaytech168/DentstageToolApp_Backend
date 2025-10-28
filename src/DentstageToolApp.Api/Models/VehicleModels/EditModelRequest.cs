@@ -17,9 +17,8 @@ public class EditModelRequest
     /// <summary>
     /// 車型名稱。
     /// </summary>
-    [Required(ErrorMessage = "請輸入車型名稱。")]
     [MaxLength(100, ErrorMessage = "車型名稱長度不可超過 100 個字元。")]
-    public string ModelName { get; set; } = string.Empty;
+    public string? ModelName { get; set; }
 
     /// <summary>
     /// 對應的品牌識別碼，可為 null 表示未指定品牌。

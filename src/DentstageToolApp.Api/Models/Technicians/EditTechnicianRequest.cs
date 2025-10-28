@@ -17,9 +17,8 @@ public class EditTechnicianRequest
     /// <summary>
     /// 更新後的技師姓名。
     /// </summary>
-    [Required(ErrorMessage = "請輸入技師姓名。")]
     [MaxLength(100, ErrorMessage = "技師姓名長度不可超過 100 個字元。")]
-    public string TechnicianName { get; set; } = string.Empty;
+    public string? TechnicianName { get; set; }
 
     /// <summary>
     /// 更新後的技師職稱。
@@ -30,7 +29,6 @@ public class EditTechnicianRequest
     /// <summary>
     /// 更新後的所屬門市識別碼。
     /// </summary>
-    [Required(ErrorMessage = "請選擇技師所屬門市。")]
     [MaxLength(100, ErrorMessage = "門市識別碼長度不可超過 100 個字元。")]
-    public string StoreUid { get; set; } = string.Empty;
+    public string? StoreUid { get; set; }
 }
