@@ -42,6 +42,11 @@ public class CarPlateSearchItem
     public string CarUid { get; set; } = string.Empty;
 
     /// <summary>
+    /// 車輛品牌識別碼，方便前端對應品牌下拉選單。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
     /// 車牌號碼。
     /// </summary>
     public string? CarPlateNumber { get; set; }
@@ -50,6 +55,11 @@ public class CarPlateSearchItem
     /// 車輛品牌名稱。
     /// </summary>
     public string? Brand { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼，協助前端預選車型。
+    /// </summary>
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車輛型號名稱。
