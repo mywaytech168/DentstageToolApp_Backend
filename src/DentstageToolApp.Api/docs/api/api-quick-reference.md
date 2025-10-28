@@ -85,7 +85,7 @@ Authorization: Bearer {舊的AccessToken}
 | POST | `/api/customers` | 新增客戶資料。 | Body 採 JSON，對應 `CreateCustomerRequest`。 |
 | POST | `/api/customers/edit` | 編輯客戶資料。 | Body 採 JSON，對應 `EditCustomerRequest`。 |
 | POST | `/api/customers/phone-search` | 依電話搜尋客戶與維修統計。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`，僅回傳客戶基本資料與統計。 |
-| POST | `/api/customers/customer-phone-search` | 依電話搜尋客戶並取得完整歷史紀錄。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`，回傳估價單與維修單清單。 |
+| POST | `/api/customers/customer-phone-search` | 依電話搜尋客戶並取得完整歷史紀錄。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`，回傳單一 `customer` 物件並附帶 `quotations` 與 `maintenanceOrders`。 |
 
 ## 品牌模組（`api/brands`）
 
@@ -138,7 +138,7 @@ Content-Type: application/json
   "phone": "0988123456"
 }
 ```
-- 與精簡版相同的請求結構，回傳 `quotations` 與 `maintenanceOrders`。 【F:src/DentstageToolApp.Api/Models/Customers/CustomerPhoneSearchResponse.cs†L55-L86】
+- 與精簡版相同的請求結構，回傳 `customer` 物件，內含 `quotations` 與 `maintenanceOrders` 陣列。 【F:src/DentstageToolApp.Api/Models/Customers/CustomerPhoneSearchResponse.cs†L25-L82】
 
 ---
 
