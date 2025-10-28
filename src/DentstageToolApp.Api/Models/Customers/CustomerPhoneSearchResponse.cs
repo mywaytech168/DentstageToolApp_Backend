@@ -6,10 +6,9 @@ using DentstageToolApp.Api.Models.Quotations;
 namespace DentstageToolApp.Api.Models.Customers;
 
 /// <summary>
-/// 電話搜尋 API 的基底回傳模型，提供查詢條件與摘要資料。
+/// 電話搜尋 API 的標準回傳模型，提供查詢條件、客戶清單與統計資訊。
 /// </summary>
-/// <typeparam name="TItem">客戶清單的資料型別。</typeparam>
-public class CustomerPhoneSearchResponseBase<TItem>
+public class CustomerPhoneSearchResponse
 {
     /// <summary>
     /// 前端輸入的查詢電話，經過去除前後空白後的結果，方便確認查詢條件。
@@ -24,8 +23,8 @@ public class CustomerPhoneSearchResponseBase<TItem>
     /// <summary>
     /// 查詢到的客戶資料清單，依建立時間倒序排列，方便前端依需求挑選對應客戶。
     /// </summary>
-    public IReadOnlyCollection<TItem> Customers { get; set; }
-        = Array.Empty<TItem>();
+    public IReadOnlyCollection<CustomerPhoneSearchItem> Customers { get; set; }
+        = Array.Empty<CustomerPhoneSearchItem>();
 
     /// <summary>
     /// 與電話相關的維修紀錄統計資訊。
@@ -40,17 +39,36 @@ public class CustomerPhoneSearchResponseBase<TItem>
 }
 
 /// <summary>
-/// 電話搜尋 API 的標準回傳模型，提供基本客戶資訊。
+/// 電話搜尋 API 的詳細回傳模型，使用單一客戶物件呈現歷史資訊。
 /// </summary>
-public class CustomerPhoneSearchResponse : CustomerPhoneSearchResponseBase<CustomerPhoneSearchItem>
+public class CustomerPhoneSearchDetailResponse
 {
-}
+    /// <summary>
+    /// 前端輸入的查詢電話，經過去除前後空白後的結果，方便確認查詢條件。
+    /// </summary>
+    public string QueryPhone { get; set; } = string.Empty;
 
-/// <summary>
-/// 電話搜尋 API 的詳細回傳模型，補充估價單與維修單清單。
-/// </summary>
-public class CustomerPhoneSearchDetailResponse : CustomerPhoneSearchResponseBase<CustomerPhoneSearchDetailItem>
-{
+    /// <summary>
+    /// 將電話轉為純數字後的結果，對應資料庫 PhoneQuery 欄位。
+    /// </summary>
+    public string QueryDigits { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 單一客戶的詳細資訊，包含估價單與維修單清單。
+    /// </summary>
+    public CustomerPhoneSearchDetailItem? Customer { get; set; }
+        = null;
+
+    /// <summary>
+    /// 與電話相關的維修紀錄統計資訊。
+    /// </summary>
+    public CustomerMaintenanceSummary MaintenanceSummary { get; set; } =
+        new CustomerMaintenanceSummary();
+
+    /// <summary>
+    /// 供前端呈現的人性化訊息，例如是否查到客戶或維修紀錄。
+    /// </summary>
+    public string Message { get; set; } = string.Empty;
 }
 
 /// <summary>
