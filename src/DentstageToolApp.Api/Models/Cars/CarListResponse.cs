@@ -31,6 +31,11 @@ public class CarListItem
     public string CarUid { get; set; } = string.Empty;
 
     /// <summary>
+    /// 車輛品牌識別碼，方便列表直接顯示對應品牌。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
     /// 車牌號碼。
     /// </summary>
     public string? CarPlateNumber { get; set; }
@@ -39,6 +44,11 @@ public class CarListItem
     /// 車輛品牌名稱。
     /// </summary>
     public string? Brand { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼，供前端列表標示所屬車型。
+    /// </summary>
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車輛型號名稱。

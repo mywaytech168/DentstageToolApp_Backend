@@ -49,22 +49,20 @@ public class CarQueryService : ICarQueryService
                 page,
                 pageSize);
 
-            var items = await _dbContext.Cars
+            var carEntities = await _dbContext.Cars
                 .AsNoTracking()
                 .OrderByDescending(car => car.CreationTimestamp)
                 .ThenBy(car => car.CarUid)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(car => new CarListItem
-                {
-                    CarUid = car.CarUid,
-                    CarPlateNumber = car.CarNo,
-                    Brand = car.Brand,
-                    Model = car.Model,
-                    Mileage = car.Milage,
-                    CreatedAt = car.CreationTimestamp
-                })
                 .ToListAsync(cancellationToken);
+
+            // 先整理品牌與車型的 UID 對照，避免後續逐筆查詢產生效能瓶頸。
+            var brandModelUidMap = await ResolveBrandModelUidsAsync(carEntities, cancellationToken);
+
+            var items = carEntities
+                .Select(car => MapToCarListItem(car, brandModelUidMap))
+                .ToList();
 
             var totalCount = await _dbContext.Cars.CountAsync(cancellationToken);
 
@@ -125,19 +123,28 @@ public class CarQueryService : ICarQueryService
                 throw new CarQueryServiceException(HttpStatusCode.NotFound, "找不到對應的車輛資料。");
             }
 
+            // 透過品牌與型號對照表補上 UID，確保明細頁可顯示完整識別資訊。
+            var brandModelUidMap = await ResolveBrandModelUidsAsync(new[] { entity }, cancellationToken);
+            var normalizedUid = NormalizeOptionalText(entity.CarUid) ?? string.Empty;
+            brandModelUidMap.TryGetValue(normalizedUid, out var brandModelUids);
+
+            var (brandName, modelName) = ResolveCarBrandAndModel(entity);
+
             return new CarDetailResponse
             {
-                CarUid = entity.CarUid,
-                CarPlateNumber = entity.CarNo,
-                Brand = entity.Brand,
-                Model = entity.Model,
-                Color = entity.Color,
-                Remark = entity.CarRemark,
+                CarUid = normalizedUid,
+                BrandUid = brandModelUids.BrandUid,
+                CarPlateNumber = NormalizeOptionalText(entity.CarNo),
+                Brand = brandName,
+                ModelUid = brandModelUids.ModelUid,
+                Model = modelName,
+                Color = NormalizeOptionalText(entity.Color),
+                Remark = NormalizeOptionalText(entity.CarRemark),
                 Mileage = entity.Milage,
                 CreatedAt = entity.CreationTimestamp,
                 UpdatedAt = entity.ModificationTimestamp,
-                CreatedBy = entity.CreatedBy,
-                ModifiedBy = entity.ModifiedBy
+                CreatedBy = NormalizeOptionalText(entity.CreatedBy),
+                ModifiedBy = NormalizeOptionalText(entity.ModifiedBy)
             };
         }
         catch (OperationCanceledException)
@@ -223,8 +230,11 @@ public class CarQueryService : ICarQueryService
             var quotationMap = BuildCarQuotationMap(carEntities, relatedQuotations, quotationSummaries);
             var orderMap = BuildCarOrderMap(carEntities, relatedOrders, orderSummaries);
 
+            var brandModelUidMap = await ResolveBrandModelUidsAsync(carEntities, cancellationToken);
+            EnrichBrandModelUids(brandModelUidMap, relatedQuotations);
+
             var carItems = carEntities
-                .Select(car => MapToCarPlateItem(car, quotationMap, orderMap))
+                .Select(car => MapToCarPlateItem(car, quotationMap, orderMap, brandModelUidMap))
                 .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
                 .ToList();
 
@@ -506,12 +516,40 @@ public class CarQueryService : ICarQueryService
     }
 
     /// <summary>
+    /// 建立車輛列表項目，補齊品牌與型號的顯示資訊與 UID。
+    /// </summary>
+    private static CarListItem MapToCarListItem(
+        CarEntity car,
+        IReadOnlyDictionary<string, (string? BrandUid, string? ModelUid)> brandModelUidMap)
+    {
+        var normalizedUid = NormalizeOptionalText(car.CarUid) ?? string.Empty;
+        var brandModel = brandModelUidMap.TryGetValue(normalizedUid, out var brandModelPair)
+            ? brandModelPair
+            : (BrandUid: (string?)null, ModelUid: (string?)null);
+
+        var (brand, model) = ResolveCarBrandAndModel(car);
+
+        return new CarListItem
+        {
+            CarUid = normalizedUid,
+            BrandUid = brandModel.BrandUid,
+            CarPlateNumber = NormalizeOptionalText(car.CarNo),
+            Brand = brand,
+            ModelUid = brandModel.ModelUid,
+            Model = model,
+            Mileage = car.Milage,
+            CreatedAt = car.CreationTimestamp
+        };
+    }
+
+    /// <summary>
     /// 建立車輛查詢回傳項目。
     /// </summary>
     private static CarPlateSearchItem MapToCarPlateItem(
         CarEntity car,
         IReadOnlyDictionary<string, List<QuotationSummaryResponse>> quotationMap,
-        IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap)
+        IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap,
+        IReadOnlyDictionary<string, (string? BrandUid, string? ModelUid)> brandModelUidMap)
     {
         var normalizedUid = NormalizeOptionalText(car.CarUid) ?? string.Empty;
 
@@ -525,14 +563,19 @@ public class CarQueryService : ICarQueryService
 
         // 先拆解品牌與型號，避免資料庫僅填寫合併欄位時出現缺漏。
         var (brand, model) = ResolveCarBrandAndModel(car);
+        var brandModel = brandModelUidMap.TryGetValue(normalizedUid, out var brandModelPair)
+            ? brandModelPair
+            : (BrandUid: (string?)null, ModelUid: (string?)null);
 
         return new CarPlateSearchItem
         {
             // 使用正規化後的 UID，確保前後端比對時不受多餘空白影響。
             CarUid = normalizedUid,
+            BrandUid = brandModel.BrandUid,
             // 將車牌資料與其他描述欄位一併正規化，提供乾淨的字串給前端顯示。
             CarPlateNumber = NormalizeOptionalText(car.CarNo),
             Brand = brand,
+            ModelUid = brandModel.ModelUid,
             Model = model,
             Color = NormalizeOptionalText(car.Color),
             Remark = NormalizeOptionalText(car.CarRemark),
@@ -542,6 +585,247 @@ public class CarQueryService : ICarQueryService
             Quotations = quotations,
             MaintenanceOrders = orders
         };
+    }
+
+    /// <summary>
+    /// 建立車輛品牌與型號 UID 對照表，供各 API 補齊識別碼使用。
+    /// </summary>
+    private async Task<Dictionary<string, (string? BrandUid, string? ModelUid)>> ResolveBrandModelUidsAsync(
+        IReadOnlyCollection<CarEntity> cars,
+        CancellationToken cancellationToken)
+    {
+        var map = new Dictionary<string, (string? BrandUid, string? ModelUid)>(StringComparer.OrdinalIgnoreCase);
+        if (cars.Count == 0)
+        {
+            return map;
+        }
+
+        // 先整理車輛的品牌與型號名稱，後續一次查詢資料庫避免重複連線。
+        var carInfos = new List<(string CarUid, string? BrandName, string? ModelName)>(cars.Count);
+        var brandNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var modelNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var car in cars)
+        {
+            var normalizedUid = NormalizeOptionalText(car.CarUid);
+            if (normalizedUid is null)
+            {
+                continue;
+            }
+
+            var (brand, model) = ResolveCarBrandAndModel(car);
+            if (!string.IsNullOrEmpty(brand))
+            {
+                brandNames.Add(brand);
+            }
+
+            if (!string.IsNullOrEmpty(model))
+            {
+                modelNames.Add(model);
+            }
+
+            carInfos.Add((normalizedUid, brand, model));
+        }
+
+        if (carInfos.Count == 0)
+        {
+            return map;
+        }
+
+        var brandLookup = await LoadBrandUidMapAsync(brandNames, cancellationToken);
+        var brandUidSet = new HashSet<string>(brandLookup.Values, StringComparer.OrdinalIgnoreCase);
+        var modelLookup = await LoadModelUidMapAsync(modelNames, brandUidSet, cancellationToken);
+
+        foreach (var info in carInfos)
+        {
+            var brandUid = LookupBrandUid(info.BrandName, brandLookup);
+            var modelUid = LookupModelUid(info.BrandName, info.ModelName, brandLookup, modelLookup);
+            map[info.CarUid] = (brandUid, modelUid);
+        }
+
+        return map;
+    }
+
+    /// <summary>
+    /// 從資料庫載入品牌名稱對應的 UID，供車輛資料補齊識別碼。
+    /// </summary>
+    private async Task<Dictionary<string, string>> LoadBrandUidMapAsync(
+        HashSet<string> brandNames,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (brandNames.Count == 0)
+        {
+            return result;
+        }
+
+        var brandNameList = brandNames.ToList();
+        var brandRecords = await _dbContext.Brands
+            .AsNoTracking()
+            .Where(brand => brandNameList.Contains(brand.BrandName))
+            .Select(brand => new { brand.BrandUid, brand.BrandName })
+            .ToListAsync(cancellationToken);
+
+        foreach (var record in brandRecords)
+        {
+            var normalizedName = NormalizeOptionalText(record.BrandName);
+            var normalizedUid = NormalizeOptionalText(record.BrandUid);
+            if (normalizedName is null || normalizedUid is null)
+            {
+                continue;
+            }
+
+            if (!result.ContainsKey(normalizedName))
+            {
+                result[normalizedName] = normalizedUid;
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 從資料庫載入車型名稱對應的 UID，支援依品牌加速比對。
+    /// </summary>
+    private async Task<ModelLookup> LoadModelUidMapAsync(
+        HashSet<string> modelNames,
+        HashSet<string> brandUids,
+        CancellationToken cancellationToken)
+    {
+        var lookup = new ModelLookup();
+        if (modelNames.Count == 0)
+        {
+            return lookup;
+        }
+
+        var modelNameList = modelNames.ToList();
+
+        var query = _dbContext.Models
+            .AsNoTracking()
+            .Where(model => modelNameList.Contains(model.ModelName));
+
+        if (brandUids.Count > 0)
+        {
+            var brandUidList = brandUids.ToList();
+            query = query.Where(model =>
+                (model.BrandUid != null && brandUidList.Contains(model.BrandUid))
+                || model.BrandUid == null);
+        }
+
+        var modelRecords = await query
+            .Select(model => new { model.ModelUid, model.ModelName, model.BrandUid })
+            .ToListAsync(cancellationToken);
+
+        foreach (var record in modelRecords)
+        {
+            var normalizedModelName = NormalizeOptionalText(record.ModelName);
+            var normalizedModelUid = NormalizeOptionalText(record.ModelUid);
+            if (normalizedModelName is null || normalizedModelUid is null)
+            {
+                continue;
+            }
+
+            var normalizedBrandUid = NormalizeOptionalText(record.BrandUid);
+            if (normalizedBrandUid is not null)
+            {
+                var key = BuildModelKey(normalizedBrandUid, normalizedModelName);
+                if (!lookup.ByBrand.ContainsKey(key))
+                {
+                    lookup.ByBrand[key] = normalizedModelUid;
+                }
+            }
+
+            if (!lookup.ByName.ContainsKey(normalizedModelName))
+            {
+                lookup.ByName[normalizedModelName] = normalizedModelUid;
+            }
+        }
+
+        return lookup;
+    }
+
+    /// <summary>
+    /// 透過品牌名稱尋找對應的品牌 UID。
+    /// </summary>
+    private static string? LookupBrandUid(string? brandName, IReadOnlyDictionary<string, string> brandLookup)
+    {
+        if (string.IsNullOrEmpty(brandName))
+        {
+            return null;
+        }
+
+        return brandLookup.TryGetValue(brandName, out var brandUid) ? brandUid : null;
+    }
+
+    /// <summary>
+    /// 透過品牌與車型名稱組合尋找車型 UID，若品牌不明則回傳名稱對應的第一筆結果。
+    /// </summary>
+    private static string? LookupModelUid(
+        string? brandName,
+        string? modelName,
+        IReadOnlyDictionary<string, string> brandLookup,
+        ModelLookup modelLookup)
+    {
+        if (string.IsNullOrEmpty(modelName))
+        {
+            return null;
+        }
+
+        string? resolvedBrandUid = null;
+        if (!string.IsNullOrEmpty(brandName) && brandLookup.TryGetValue(brandName, out var mappedBrandUid))
+        {
+            resolvedBrandUid = mappedBrandUid;
+        }
+
+        if (!string.IsNullOrEmpty(resolvedBrandUid))
+        {
+            var key = BuildModelKey(resolvedBrandUid, modelName);
+            if (modelLookup.ByBrand.TryGetValue(key, out var modelUidByBrand))
+            {
+                return modelUidByBrand;
+            }
+        }
+
+        return modelLookup.ByName.TryGetValue(modelName, out var modelUidByName)
+            ? modelUidByName
+            : null;
+    }
+
+    /// <summary>
+    /// 建立品牌與車型的索引鍵，讓字典能針對品牌內的型號進行查詢。
+    /// </summary>
+    private static string BuildModelKey(string brandUid, string modelName)
+    {
+        return $"{brandUid}::{modelName}";
+    }
+
+    /// <summary>
+    /// 利用報價單補齊車輛對應的品牌與車型 UID，避免舊資料缺少識別碼。
+    /// </summary>
+    private static void EnrichBrandModelUids(
+        IDictionary<string, (string? BrandUid, string? ModelUid)> brandModelUidMap,
+        IReadOnlyCollection<Quatation> quotations)
+    {
+        if (quotations.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var quotation in quotations)
+        {
+            var normalizedCarUid = NormalizeOptionalText(quotation.CarUid);
+            if (normalizedCarUid is null)
+            {
+                continue;
+            }
+
+            brandModelUidMap.TryGetValue(normalizedCarUid, out var current);
+
+            var brandUid = current.BrandUid ?? NormalizeOptionalText(quotation.BrandUid);
+            var modelUid = current.ModelUid ?? NormalizeOptionalText(quotation.ModelUid);
+
+            brandModelUidMap[normalizedCarUid] = (brandUid, modelUid);
+        }
     }
 
     /// <summary>
@@ -820,5 +1104,15 @@ public class CarQueryService : ICarQueryService
         }
 
         return (brand, model);
+    }
+
+    /// <summary>
+    /// 車型查詢使用的快取結構，提供品牌與名稱兩種索引方式。
+    /// </summary>
+    private sealed class ModelLookup
+    {
+        public Dictionary<string, string> ByBrand { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, string> ByName { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }
