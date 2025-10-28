@@ -83,7 +83,8 @@ public class BrandManagementService : IBrandManagementService
 
         // ---------- 參數整理區 ----------
         var brandUid = NormalizeRequiredText(request.BrandUid, "品牌識別碼");
-        var brandName = NormalizeRequiredText(request.BrandName, "品牌名稱");
+        // 品牌名稱改為可選欄位，若未填寫則沿用既有資料。
+        var brandName = NormalizeOptionalText(request.BrandName);
         var operatorLabel = NormalizeOperator(operatorName);
 
         var brandEntity = await _dbContext.Brands
@@ -96,29 +97,59 @@ public class BrandManagementService : IBrandManagementService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var duplicate = await _dbContext.Brands
-            .AsNoTracking()
-            .AnyAsync(brand => brand.BrandUid != brandUid && brand.BrandName == brandName, cancellationToken);
+        var hasUpdates = false;
 
-        if (duplicate)
+        if (!string.IsNullOrWhiteSpace(brandName)
+            && !string.Equals(brandName, brandEntity.BrandName, StringComparison.Ordinal))
         {
-            throw new BrandManagementException(HttpStatusCode.Conflict, "品牌名稱已存在於其他品牌，請重新命名。");
+            var duplicate = await _dbContext.Brands
+                .AsNoTracking()
+                .AnyAsync(
+                    brand => brand.BrandUid != brandUid && brand.BrandName == brandName,
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new BrandManagementException(HttpStatusCode.Conflict, "品牌名稱已存在於其他品牌，請重新命名。");
+            }
+
+            // 僅在確定有變動時才覆寫資料庫，避免空送造成不必要的更新。
+            brandEntity.BrandName = brandName;
+            hasUpdates = true;
         }
 
-        // ---------- 實體更新區 ----------
-        brandEntity.BrandName = brandName;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        DateTime responseTime;
+        string responseMessage;
 
-        var now = DateTime.UtcNow;
-        _logger.LogInformation("操作人員 {Operator} 編輯品牌 {BrandUid} ({BrandName}) 成功。", operatorLabel, brandEntity.BrandUid, brandEntity.BrandName);
+        if (hasUpdates)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            responseTime = DateTime.UtcNow;
+            responseMessage = "已更新品牌資料。";
 
-        // ---------- 組裝回應區 ----------
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯品牌 {BrandUid} ({BrandName}) 成功。",
+                operatorLabel,
+                brandEntity.BrandUid,
+                brandEntity.BrandName);
+        }
+        else
+        {
+            responseTime = DateTime.UtcNow;
+            responseMessage = "未提供需更新的品牌欄位，資料維持不變。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯品牌 {BrandUid} 時未提供新的更新內容，維持原始資料。",
+                operatorLabel,
+                brandEntity.BrandUid);
+        }
+
         return new EditBrandResponse
         {
             BrandUid = brandEntity.BrandUid,
             BrandName = brandEntity.BrandName,
-            UpdatedAt = now,
-            Message = "已更新品牌資料。"
+            UpdatedAt = responseTime,
+            Message = responseMessage
         };
     }
 
@@ -195,6 +226,19 @@ public class BrandManagementService : IBrandManagementService
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new BrandManagementException(HttpStatusCode.BadRequest, $"{fieldName}為必填欄位，請重新輸入。");
+        }
+
+        return value.Trim();
+    }
+
+    /// <summary>
+    /// 處理可選字串欄位，空值直接回傳 null 代表不更新。
+    /// </summary>
+    private static string? NormalizeOptionalText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
         }
 
         return value.Trim();

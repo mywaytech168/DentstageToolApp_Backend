@@ -17,7 +17,6 @@ public class EditBrandRequest
     /// <summary>
     /// 品牌更新後的名稱。
     /// </summary>
-    [Required(ErrorMessage = "請輸入品牌名稱。")]
     [MaxLength(100, ErrorMessage = "品牌名稱長度不可超過 100 個字元。")]
-    public string BrandName { get; set; } = string.Empty;
+    public string? BrandName { get; set; }
 }

@@ -94,9 +94,9 @@ public class ModelManagementService : IModelManagementService
 
         // ---------- 參數整理區 ----------
         var modelUid = NormalizeRequiredText(request.ModelUid, "車型識別碼");
-        var modelName = NormalizeRequiredText(request.ModelName, "車型名稱");
-        var brandUid = NormalizeOptionalText(request.BrandUid);
         var operatorLabel = NormalizeOperator(operatorName);
+        var modelName = NormalizeOptionalText(request.ModelName);
+        var brandUid = NormalizeOptionalText(request.BrandUid);
 
         var modelEntity = await _dbContext.Models
             .FirstOrDefaultAsync(model => model.ModelUid == modelUid, cancellationToken);
@@ -107,33 +107,84 @@ public class ModelManagementService : IModelManagementService
         }
 
         DentstageToolApp.Infrastructure.Entities.Brand? brandEntity = null;
-        if (!string.IsNullOrEmpty(brandUid))
+        if (!string.IsNullOrWhiteSpace(brandUid))
         {
             brandEntity = await ResolveBrandAsync(brandUid, cancellationToken);
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var duplicate = await _dbContext.Models
-            .AsNoTracking()
-            .AnyAsync(model =>
-                model.ModelUid != modelUid
-                && model.ModelName == modelName
-                && (model.BrandUid ?? string.Empty) == (brandUid ?? string.Empty),
-                cancellationToken);
+        var targetModelName = !string.IsNullOrWhiteSpace(modelName) ? modelName : modelEntity.ModelName;
+        var targetBrandUid = modelEntity.BrandUid;
 
-        if (duplicate)
+        if (!string.IsNullOrWhiteSpace(brandUid))
         {
-            throw new ModelManagementException(HttpStatusCode.Conflict, "車型名稱已存在於其他車型中，請重新命名。");
+            targetBrandUid = brandEntity?.BrandUid;
+        }
+
+        var isNameChanged = !string.IsNullOrWhiteSpace(modelName)
+            && !string.Equals(modelEntity.ModelName, targetModelName, StringComparison.Ordinal);
+        var isBrandChanged = !string.IsNullOrWhiteSpace(brandUid)
+            && !string.Equals(modelEntity.BrandUid, targetBrandUid, StringComparison.Ordinal);
+
+        var hasUpdates = false;
+
+        // ---------- 資料檢核區 ----------
+        if (isNameChanged || isBrandChanged)
+        {
+            var duplicate = await _dbContext.Models
+                .AsNoTracking()
+                .AnyAsync(
+                    model =>
+                        model.ModelUid != modelUid
+                        && model.ModelName == targetModelName
+                        && (model.BrandUid ?? string.Empty) == (targetBrandUid ?? string.Empty),
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new ModelManagementException(HttpStatusCode.Conflict, "車型名稱已存在於其他車型中，請重新命名。");
+            }
         }
 
         // ---------- 實體更新區 ----------
-        modelEntity.ModelName = modelName;
-        modelEntity.BrandUid = brandEntity?.BrandUid;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        if (isNameChanged)
+        {
+            modelEntity.ModelName = targetModelName;
+            hasUpdates = true;
+        }
 
-        var now = DateTime.UtcNow;
-        _logger.LogInformation("操作人員 {Operator} 編輯車型 {ModelUid} ({ModelName}) 成功。", operatorLabel, modelEntity.ModelUid, modelEntity.ModelName);
+        if (isBrandChanged)
+        {
+            modelEntity.BrandUid = targetBrandUid;
+            hasUpdates = true;
+        }
+
+        DateTime responseTime;
+        string responseMessage;
+
+        if (hasUpdates)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            responseTime = DateTime.UtcNow;
+            responseMessage = "已更新車型資料。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯車型 {ModelUid} ({ModelName}) 成功。",
+                operatorLabel,
+                modelEntity.ModelUid,
+                modelEntity.ModelName);
+        }
+        else
+        {
+            responseTime = DateTime.UtcNow;
+            responseMessage = "未提供需更新的車型欄位，資料維持不變。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯車型 {ModelUid} 時未提供新的更新內容，維持原始資料。",
+                operatorLabel,
+                modelEntity.ModelUid);
+        }
 
         // ---------- 組裝回應區 ----------
         return new EditModelResponse
@@ -141,8 +192,8 @@ public class ModelManagementService : IModelManagementService
             ModelUid = modelEntity.ModelUid,
             ModelName = modelEntity.ModelName,
             BrandUid = modelEntity.BrandUid,
-            UpdatedAt = now,
-            Message = "已更新車型資料。"
+            UpdatedAt = responseTime,
+            Message = responseMessage
         };
     }
 
