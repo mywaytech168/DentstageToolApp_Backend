@@ -13,6 +13,7 @@ using DentstageToolApp.Infrastructure.Data;
 using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using CarEntity = DentstageToolApp.Infrastructure.Entities.Car;
 
 namespace DentstageToolApp.Api.Services.Car;
 
@@ -267,7 +268,7 @@ public class CarQueryService : ICarQueryService
     private async Task<List<Quatation>> FetchQuotationsByCarAsync(
         string normalizedPlate,
         string plateKey,
-        IReadOnlyCollection<Car> carEntities,
+        IReadOnlyCollection<CarEntity> carEntities,
         CancellationToken cancellationToken)
     {
         var quotations = new Dictionary<string, Quatation>(StringComparer.OrdinalIgnoreCase);
@@ -331,7 +332,7 @@ public class CarQueryService : ICarQueryService
     private async Task<List<Order>> FetchOrdersByCarAsync(
         string normalizedPlate,
         string plateKey,
-        IReadOnlyCollection<Car> carEntities,
+        IReadOnlyCollection<CarEntity> carEntities,
         CancellationToken cancellationToken)
     {
         var orders = new Dictionary<string, Order>(StringComparer.OrdinalIgnoreCase);
@@ -393,7 +394,7 @@ public class CarQueryService : ICarQueryService
     /// 建立車輛與估價單摘要的對照表。
     /// </summary>
     private static IReadOnlyDictionary<string, List<QuotationSummaryResponse>> BuildCarQuotationMap(
-        IReadOnlyCollection<Car> carEntities,
+        IReadOnlyCollection<CarEntity> carEntities,
         IReadOnlyList<Quatation> quotations,
         IReadOnlyList<QuotationSummaryResponse> summaries)
     {
@@ -449,7 +450,7 @@ public class CarQueryService : ICarQueryService
     /// 建立車輛與維修單摘要的對照表。
     /// </summary>
     private static IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> BuildCarOrderMap(
-        IReadOnlyCollection<Car> carEntities,
+        IReadOnlyCollection<CarEntity> carEntities,
         IReadOnlyList<Order> orders,
         IReadOnlyList<MaintenanceOrderSummaryResponse> summaries)
     {
@@ -505,7 +506,7 @@ public class CarQueryService : ICarQueryService
     /// 建立車輛查詢回傳項目。
     /// </summary>
     private static CarPlateSearchItem MapToCarPlateItem(
-        Car car,
+        CarEntity car,
         IReadOnlyDictionary<string, List<QuotationSummaryResponse>> quotationMap,
         IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap)
     {
@@ -604,7 +605,7 @@ public class CarQueryService : ICarQueryService
     /// 建立車輛 UID 與車牌對照表，供單據快速對應車輛。
     /// </summary>
     private static (HashSet<string> CarUidSet, Dictionary<string, List<string>> PlateMap) BuildCarLookup(
-        IReadOnlyCollection<Car> carEntities)
+        IReadOnlyCollection<CarEntity> carEntities)
     {
         var carUidSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var plateMap = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
