@@ -119,7 +119,7 @@ public class CarsController : ControllerBase
     /// <remarks>
     /// {"carPlate": "ABC-1234"}
     /// </remarks>
-    [HttpPost("plate-search")]
+    [HttpPost("car-plate-search")]
     [SwaggerMockRequestExample(
         """
         {

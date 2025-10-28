@@ -294,6 +294,58 @@ public class CustomersController : ControllerBase
     }
 
     /// <summary>
+    /// 透過電話搜尋客戶並取得估價單、維修單的完整清單。
+    /// </summary>
+    /// <remarks>
+    /// {"phone": "0988963537"}
+    /// </remarks>
+    [HttpPost("customer-phone-search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "phone": "0988123456"
+        }
+        """)]
+    [ProducesResponseType(typeof(CustomerPhoneSearchDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CustomerPhoneSearchDetailResponse>> SearchCustomerByPhoneWithDetailsAsync(
+        [FromBody] CustomerPhoneSearchRequest? request,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BuildProblemDetails(HttpStatusCode.BadRequest, "請提供欲查詢的電話號碼。", "電話搜尋失敗");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            // 回傳包含估價單與維修單的完整結果，方便後台詳查客戶歷史。
+            var response = await _customerLookupService.SearchCustomerWithDetailsAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (CustomerLookupException ex)
+        {
+            _logger.LogWarning(ex, "電話搜尋失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "電話搜尋失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("電話搜尋流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "電話搜尋已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "電話搜尋流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "電話搜尋失敗");
+        }
+    }
+
+    /// <summary>
     /// 刪除客戶資料，刪除前會確認是否仍有報價單、工單或黑名單紀錄。
     /// </summary>
     [HttpPost("delete")]

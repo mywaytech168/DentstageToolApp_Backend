@@ -1388,7 +1388,17 @@
                   phone: '0988123456'
                 },
                 requiresAuth: true,
-                description: '依電話查詢客戶資料與維修次數統計。'
+                description: '依電話查詢客戶資料與維修次數統計（不含歷史清單）。'
+              },
+              {
+                name: '電話搜尋客戶（含歷史）',
+                method: 'POST',
+                path: '/customers/customer-phone-search',
+                template: {
+                  phone: '0988123456'
+                },
+                requiresAuth: true,
+                description: '依電話查詢客戶並取得單一 customer 物件，其內含估價單與維修單清單。'
               }
             ]
           },
