@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.MaintenanceOrders;
+using DentstageToolApp.Api.Models.Quotations;
 
 namespace DentstageToolApp.Api.Models.Customers;
 
@@ -95,6 +97,18 @@ public class CustomerPhoneSearchItem
     /// 客戶資料最後修改時間。
     /// </summary>
     public DateTime? ModifiedAt { get; set; }
+
+    /// <summary>
+    /// 與客戶相關的估價單清單，依建立時間倒序排列。
+    /// </summary>
+    public IReadOnlyCollection<QuotationSummaryResponse> Quotations { get; set; }
+        = Array.Empty<QuotationSummaryResponse>();
+
+    /// <summary>
+    /// 與客戶相關的維修單清單，依建立時間倒序排列。
+    /// </summary>
+    public IReadOnlyCollection<MaintenanceOrderSummaryResponse> MaintenanceOrders { get; set; }
+        = Array.Empty<MaintenanceOrderSummaryResponse>();
 }
 
 /// <summary>

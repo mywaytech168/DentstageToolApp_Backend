@@ -25,4 +25,12 @@ public interface ICarQueryService
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>回傳單筆車輛詳細資料。</returns>
     Task<CarDetailResponse> GetCarAsync(string carUid, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 透過車牌關鍵字查詢車輛與相關單據。
+    /// </summary>
+    /// <param name="request">車牌搜尋條件。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>回傳符合條件的車輛集合。</returns>
+    Task<CarPlateSearchResponse> SearchByPlateAsync(CarPlateSearchRequest request, CancellationToken cancellationToken);
 }
