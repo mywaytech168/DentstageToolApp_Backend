@@ -102,9 +102,9 @@ public class TechnicianManagementService : ITechnicianManagementService
 
         // ---------- 參數整理區 ----------
         var technicianUid = NormalizeRequiredText(request.TechnicianUid, "技師識別碼", 100);
-        var technicianName = NormalizeRequiredText(request.TechnicianName, "技師姓名", 100);
+        var technicianName = NormalizeOptionalText(request.TechnicianName, 100);
         var jobTitle = NormalizeOptionalText(request.JobTitle, 50);
-        var storeUid = NormalizeRequiredText(request.StoreUid, "門市識別碼", 100);
+        var storeUid = NormalizeOptionalText(request.StoreUid, 100);
         var operatorLabel = NormalizeOperator(operatorName);
 
         var entity = await _dbContext.Technicians
@@ -117,37 +117,98 @@ public class TechnicianManagementService : ITechnicianManagementService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var storeExists = await _dbContext.Stores
-            .AsNoTracking()
-            .AnyAsync(store => store.StoreUid == storeUid, cancellationToken);
+        string? finalStoreUid = entity.StoreUid;
+        var isStoreUpdateProvided = !string.IsNullOrWhiteSpace(storeUid);
 
-        if (!storeExists)
+        if (isStoreUpdateProvided)
         {
-            throw new TechnicianManagementException(HttpStatusCode.NotFound, "找不到對應的門市資料，請確認識別碼是否正確。");
+            finalStoreUid = storeUid!;
+
+            if (!string.Equals(entity.StoreUid, finalStoreUid, StringComparison.Ordinal))
+            {
+                var storeExists = await _dbContext.Stores
+                    .AsNoTracking()
+                    .AnyAsync(store => store.StoreUid == finalStoreUid, cancellationToken);
+
+                if (!storeExists)
+                {
+                    throw new TechnicianManagementException(HttpStatusCode.NotFound, "找不到對應的門市資料，請確認識別碼是否正確。");
+                }
+            }
         }
 
-        var duplicate = await _dbContext.Technicians
-            .AsNoTracking()
-            .AnyAsync(technician => technician.TechnicianUid != technicianUid && technician.StoreUid == storeUid && technician.TechnicianName == technicianName, cancellationToken);
+        var finalTechnicianName = !string.IsNullOrWhiteSpace(technicianName) ? technicianName : entity.TechnicianName;
+        var isNameChanged = !string.IsNullOrWhiteSpace(technicianName)
+            && !string.Equals(entity.TechnicianName, finalTechnicianName, StringComparison.Ordinal);
+        var isStoreChanged = isStoreUpdateProvided
+            && !string.Equals(entity.StoreUid, finalStoreUid, StringComparison.Ordinal);
 
-        if (duplicate)
+        // ---------- 資料檢核區 ----------
+        if (isNameChanged || isStoreChanged)
         {
-            throw new TechnicianManagementException(HttpStatusCode.Conflict, "該門市已存在相同姓名的技師，請重新輸入。");
+            var duplicate = await _dbContext.Technicians
+                .AsNoTracking()
+                .AnyAsync(
+                    technician =>
+                        technician.TechnicianUid != technicianUid
+                        && (technician.StoreUid ?? string.Empty) == (finalStoreUid ?? string.Empty)
+                        && (technician.TechnicianName ?? string.Empty) == (finalTechnicianName ?? string.Empty),
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new TechnicianManagementException(HttpStatusCode.Conflict, "該門市已存在相同姓名的技師，請重新輸入。");
+            }
         }
 
         // ---------- 實體更新區 ----------
-        entity.TechnicianName = technicianName;
-        entity.JobTitle = jobTitle;
-        entity.StoreUid = storeUid;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        var hasUpdates = false;
 
-        var now = DateTime.UtcNow;
-        _logger.LogInformation(
-            "操作人員 {Operator} 編輯技師 {TechnicianUid} ({TechnicianName}) 成功，隸屬門市 {StoreUid}。",
-            operatorLabel,
-            entity.TechnicianUid,
-            entity.TechnicianName,
-            entity.StoreUid);
+        if (isNameChanged)
+        {
+            entity.TechnicianName = finalTechnicianName!;
+            hasUpdates = true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(jobTitle)
+            && !string.Equals(entity.JobTitle, jobTitle, StringComparison.Ordinal))
+        {
+            entity.JobTitle = jobTitle;
+            hasUpdates = true;
+        }
+
+        if (isStoreChanged)
+        {
+            entity.StoreUid = finalStoreUid;
+            hasUpdates = true;
+        }
+
+        DateTime responseTime;
+        string responseMessage;
+
+        if (hasUpdates)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            responseTime = DateTime.UtcNow;
+            responseMessage = "已更新技師資料。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯技師 {TechnicianUid} ({TechnicianName}) 成功，隸屬門市 {StoreUid}。",
+                operatorLabel,
+                entity.TechnicianUid,
+                entity.TechnicianName,
+                entity.StoreUid);
+        }
+        else
+        {
+            responseTime = DateTime.UtcNow;
+            responseMessage = "未提供需更新的技師欄位，資料維持不變。";
+
+            _logger.LogInformation(
+                "操作人員 {Operator} 編輯技師 {TechnicianUid} 時未提供新的更新內容，維持原始資料。",
+                operatorLabel,
+                entity.TechnicianUid);
+        }
 
         // ---------- 組裝回應區 ----------
         return new EditTechnicianResponse
@@ -156,8 +217,8 @@ public class TechnicianManagementService : ITechnicianManagementService
             TechnicianName = entity.TechnicianName,
             JobTitle = entity.JobTitle,
             StoreUid = entity.StoreUid ?? string.Empty,
-            UpdatedAt = now,
-            Message = "已更新技師資料。"
+            UpdatedAt = responseTime,
+            Message = responseMessage
         };
     }
 
