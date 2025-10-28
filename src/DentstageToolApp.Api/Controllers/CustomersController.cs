@@ -193,17 +193,18 @@ public class CustomersController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "customerUid": "Cu_1B65002E-EEC5-42FA-BBBB-6F5E4708610A",
-          "customerName": "林小華",
-          "phone": "0988123456",
-          "category": "一般客戶",
-          "gender": "Male",
-          "county": "高雄市",
-          "township": "左營區",
-          "email": "demo@dentstage.com",
-          "source": "Facebook",
-          "reason": "想了解凹痕修復方案",
-          "remark": "首次到店，請協助安排體驗"
+            "customerUid": "Cu_E1545903-EBBA-468C-B929-52028CAD98C3",
+            "customerName": "林小華",
+            "phone": "0988123456",
+            "email": "test@gmail.com",
+            "category": "一般客戶",
+            "gender": "Male",
+            "county": "高雄市",
+            "township": "左營區",
+            "source": "Facebook",
+            "remark": "首次到店，請協助安排體驗",
+            "createdAt": "2025-06-29T13:15:04",
+            "modifiedAt": "2025-10-28T08:08:36"
         }
         """)]
     [ProducesResponseType(typeof(EditCustomerResponse), StatusCodes.Status200OK)]
