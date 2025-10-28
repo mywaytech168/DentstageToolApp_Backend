@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using DentstageToolApp.Api.Models.MaintenanceOrders;
+using DentstageToolApp.Api.Models.Quotations;
 
 namespace DentstageToolApp.Api.Models.Customers;
 
@@ -19,10 +21,9 @@ public class CustomerPhoneSearchResponse
     public string QueryDigits { get; set; } = string.Empty;
 
     /// <summary>
-    /// 查詢到的客戶清單。
+    /// 查詢到的客戶資料，由於電話查詢僅需單筆結果，因此只保留最符合的客戶。
     /// </summary>
-    public IReadOnlyCollection<CustomerPhoneSearchItem> Customers { get; set; } =
-        Array.Empty<CustomerPhoneSearchItem>();
+    public CustomerPhoneSearchItem? Customer { get; set; }
 
     /// <summary>
     /// 與電話相關的維修紀錄統計資訊。
@@ -55,6 +56,11 @@ public class CustomerPhoneSearchItem
     /// 聯絡電話。
     /// </summary>
     public string? Phone { get; set; }
+
+    /// <summary>
+    /// 客戶電子郵件，提供客服透過信箱聯繫或確認帳號資訊。
+    /// </summary>
+    public string? Email { get; set; }
 
     /// <summary>
     /// 客戶分類，例如一般客戶或企業客戶。
@@ -95,6 +101,18 @@ public class CustomerPhoneSearchItem
     /// 客戶資料最後修改時間。
     /// </summary>
     public DateTime? ModifiedAt { get; set; }
+
+    /// <summary>
+    /// 與客戶相關的估價單清單，依建立時間倒序排列。
+    /// </summary>
+    public IReadOnlyCollection<QuotationSummaryResponse> Quotations { get; set; }
+        = Array.Empty<QuotationSummaryResponse>();
+
+    /// <summary>
+    /// 與客戶相關的維修單清單，依建立時間倒序排列。
+    /// </summary>
+    public IReadOnlyCollection<MaintenanceOrderSummaryResponse> MaintenanceOrders { get; set; }
+        = Array.Empty<MaintenanceOrderSummaryResponse>();
 }
 
 /// <summary>

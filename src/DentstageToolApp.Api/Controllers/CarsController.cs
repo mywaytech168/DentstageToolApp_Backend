@@ -114,6 +114,55 @@ public class CarsController : ControllerBase
     }
 
     /// <summary>
+    /// 透過車牌關鍵字搜尋車輛與相關單據。
+    /// </summary>
+    /// <remarks>
+    /// {"carPlate": "ABC-1234"}
+    /// </remarks>
+    [HttpPost("plate-search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "carPlate": "ABC-1234"
+        }
+        """)]
+    [ProducesResponseType(typeof(CarPlateSearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CarPlateSearchResponse>> SearchCarByPlateAsync([FromBody] CarPlateSearchRequest? request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BuildProblemDetails(HttpStatusCode.BadRequest, "請提供欲查詢的車牌號碼。", "車牌搜尋失敗");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var response = await _carQueryService.SearchByPlateAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (CarQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "車牌搜尋失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "車牌搜尋失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("車牌搜尋流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "車牌搜尋已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "車牌搜尋流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "車牌搜尋失敗");
+        }
+    }
+
+    /// <summary>
     /// 新增車輛資料，建立車牌、品牌 UID、型號 UID 與備註等欄位。
     /// </summary>
     /// <remarks>
@@ -191,12 +240,17 @@ public class CarsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
-          "carPlateNumber": "AAA-5678",
-          "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
-          "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
-          "color": "黑",
-          "remark": "客戶更換為黑色烤漆"
+            "carUid": "Ca_8BCD5832-C175-40AA-9219-283FD55D0F01",
+            "brandUid": "B_C7CAB8C7-9F5A-11F0-A812-000C2990DEAF",
+            "carPlateNumber": "ABC-1234",
+            "brand": "Toyota",
+            "modelUid": "M_E706D4EE-9F5A-11F0-A812-000C2990DEAF",
+            "model": "Wish",
+            "color": "黑",
+            "remark": "33-5109",
+            "mileage": null,
+            "createdAt": "2019-07-02T17:26:10",
+            "updatedAt": "2022-12-30T19:45:39"
         }
         """)]
     [ProducesResponseType(typeof(EditCarResponse), StatusCodes.Status200OK)]
