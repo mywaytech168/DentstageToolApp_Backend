@@ -57,8 +57,8 @@ public class MaintenanceOrdersController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "fixType": "dent",
-          "status": "220",
+          "fixType": "凹痕",
+          "status": "210",
           "startDate": "2024-10-01T00:00:00",
           "endDate": "2024-10-31T23:59:59",
           "page": 1,
