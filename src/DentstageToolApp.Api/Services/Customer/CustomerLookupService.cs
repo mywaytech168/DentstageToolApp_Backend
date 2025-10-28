@@ -159,6 +159,62 @@ public class CustomerLookupService : ICustomerLookupService
         CustomerPhoneSearchRequest request,
         CancellationToken cancellationToken)
     {
+        // 先取得完整的候選結果，再轉換為精簡版本，避免重複查詢資料庫。
+        var context = await SearchCustomerDetailContextAsync(request, cancellationToken);
+
+        var simpleCustomers = context.Customers
+            .Select(ConvertToSimpleItem)
+            .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
+            .ToList();
+
+        return new CustomerPhoneSearchResponse
+        {
+            QueryPhone = context.QueryPhone,
+            QueryDigits = context.QueryDigits,
+            Customers = simpleCustomers,
+            MaintenanceSummary = context.MaintenanceSummary,
+            Message = context.Message
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task<CustomerPhoneSearchDetailResponse> SearchCustomerWithDetailsAsync(
+        CustomerPhoneSearchRequest request,
+        CancellationToken cancellationToken)
+    {
+        // 共用候選查詢邏輯，確保精簡版與詳細版結果一致。
+        var context = await SearchCustomerDetailContextAsync(request, cancellationToken);
+
+        var customer = context.Customers.FirstOrDefault();
+
+        if (customer is null)
+        {
+            _logger.LogInformation("電話搜尋完成（含歷史），未找到符合條件的客戶。");
+        }
+        else if (context.Customers.Count > 1)
+        {
+            _logger.LogInformation(
+                "電話搜尋完成（含歷史），存在多筆客戶資料，預設取最新一筆回傳。累計筆數：{CustomerCount}。",
+                context.Customers.Count);
+        }
+
+        return new CustomerPhoneSearchDetailResponse
+        {
+            QueryPhone = context.QueryPhone,
+            QueryDigits = context.QueryDigits,
+            Customer = customer,
+            MaintenanceSummary = context.MaintenanceSummary,
+            Message = context.Message
+        };
+    }
+
+    /// <summary>
+    /// 取得電話搜尋的候選清單，提供詳細與精簡兩種查詢共用。
+    /// </summary>
+    private async Task<CustomerPhoneSearchDetailContext> SearchCustomerDetailContextAsync(
+        CustomerPhoneSearchRequest request,
+        CancellationToken cancellationToken)
+    {
         if (request is null)
         {
             throw new CustomerLookupException(HttpStatusCode.BadRequest, "請提供查詢條件。");
@@ -175,7 +231,7 @@ public class CustomerLookupService : ICustomerLookupService
         var digitsPattern = string.IsNullOrEmpty(phoneDigits) ? null : $"%{phoneDigits}%";
         var rawPattern = $"%{normalizedPhone}%";
 
-        _logger.LogInformation("執行電話搜尋，關鍵字：{Phone}，純數字：{Digits}。", normalizedPhone, phoneDigits);
+        _logger.LogInformation("執行電話搜尋（含歷史），關鍵字：{Phone}，純數字：{Digits}。", normalizedPhone, phoneDigits);
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -225,30 +281,27 @@ public class CustomerLookupService : ICustomerLookupService
 
         // ---------- 組裝回應 ----------
         var customerItems = customerEntities
-            .Select(customer => MapToCustomerItem(customer, quotationMap, orderMap))
+            .Select(customer => MapToCustomerDetailItem(customer, quotationMap, orderMap))
             .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
             .ToList();
 
         var summary = BuildMaintenanceSummary(relatedOrders);
 
-        // 由於前端僅需顯示單筆客戶，因此挑選排序後的第一筆作為回傳結果。
-        var selectedCustomer = customerItems.FirstOrDefault();
-
-        var response = new CustomerPhoneSearchResponse
-        {
-            QueryPhone = normalizedPhone,
-            QueryDigits = phoneDigits,
-            Customer = selectedCustomer,
-            MaintenanceSummary = summary,
-            Message = BuildMessage(customerItems.Count, summary.TotalOrders)
-        };
+        var message = BuildMessage(customerItems.Count, summary.TotalOrders);
 
         _logger.LogInformation(
-            "電話搜尋完成，找到 {CustomerCount} 位客戶與 {OrderCount} 筆維修單。",
+            "電話搜尋完成（含歷史），找到 {CustomerCount} 位客戶與 {OrderCount} 筆維修單。",
             customerItems.Count,
             summary.TotalOrders);
 
-        return response;
+        return new CustomerPhoneSearchDetailContext
+        {
+            QueryPhone = normalizedPhone,
+            QueryDigits = phoneDigits,
+            Customers = customerItems,
+            MaintenanceSummary = summary,
+            Message = message
+        };
     }
 
     // ---------- 方法區 ----------
@@ -504,7 +557,7 @@ public class CustomerLookupService : ICustomerLookupService
         return map;
     }
 
-    private static CustomerPhoneSearchItem MapToCustomerItem(
+    private static CustomerPhoneSearchDetailItem MapToCustomerDetailItem(
         DentstageToolApp.Infrastructure.Entities.Customer customer,
         IReadOnlyDictionary<string, List<QuotationSummaryResponse>> quotationMap,
         IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> orderMap)
@@ -521,7 +574,7 @@ public class CustomerLookupService : ICustomerLookupService
             ? (IReadOnlyCollection<MaintenanceOrderSummaryResponse>)orderList
             : Array.Empty<MaintenanceOrderSummaryResponse>();
 
-        return new CustomerPhoneSearchItem
+        return new CustomerPhoneSearchDetailItem
         {
             CustomerUid = customer.CustomerUid,
             CustomerName = customer.Name,
@@ -537,6 +590,28 @@ public class CustomerLookupService : ICustomerLookupService
             ModifiedAt = customer.ModificationTimestamp,
             Quotations = quotations,
             MaintenanceOrders = orders
+        };
+    }
+
+    /// <summary>
+    /// 將包含歷史資料的客戶項目轉換成精簡版本，提供無歷史資料需求的端點使用。
+    /// </summary>
+    private static CustomerPhoneSearchItem ConvertToSimpleItem(CustomerPhoneSearchDetailItem detailItem)
+    {
+        return new CustomerPhoneSearchItem
+        {
+            CustomerUid = detailItem.CustomerUid,
+            CustomerName = detailItem.CustomerName,
+            Phone = detailItem.Phone,
+            Email = detailItem.Email,
+            Category = detailItem.Category,
+            Gender = detailItem.Gender,
+            County = detailItem.County,
+            Township = detailItem.Township,
+            Source = detailItem.Source,
+            Remark = detailItem.Remark,
+            CreatedAt = detailItem.CreatedAt,
+            ModifiedAt = detailItem.ModifiedAt
         };
     }
 
@@ -698,6 +773,39 @@ public class CustomerLookupService : ICustomerLookupService
         }
 
         return value.Trim();
+    }
+
+    /// <summary>
+    /// 電話搜尋候選資料的共用承載物件，提供服務層重複利用。
+    /// </summary>
+    private sealed class CustomerPhoneSearchDetailContext
+    {
+        /// <summary>
+        /// 標準化後的查詢電話號碼。
+        /// </summary>
+        public string QueryPhone { get; init; } = string.Empty;
+
+        /// <summary>
+        /// 僅保留數字的電話比對字串。
+        /// </summary>
+        public string QueryDigits { get; init; } = string.Empty;
+
+        /// <summary>
+        /// 找到的客戶候選清單，依建立時間倒序排列。
+        /// </summary>
+        public IReadOnlyList<CustomerPhoneSearchDetailItem> Customers { get; init; }
+            = Array.Empty<CustomerPhoneSearchDetailItem>();
+
+        /// <summary>
+        /// 與電話相關的維修統計資訊。
+        /// </summary>
+        public CustomerMaintenanceSummary MaintenanceSummary { get; init; }
+            = new CustomerMaintenanceSummary();
+
+        /// <summary>
+        /// 操作提示訊息，說明查詢成果。
+        /// </summary>
+        public string Message { get; init; } = string.Empty;
     }
 
     // ---------- 生命週期 ----------
