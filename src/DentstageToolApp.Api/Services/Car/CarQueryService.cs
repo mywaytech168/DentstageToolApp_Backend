@@ -228,11 +228,14 @@ public class CarQueryService : ICarQueryService
                 .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
                 .ToList();
 
+            // 搜尋結果只需呈現單筆車輛，因此取排序後的第一筆車輛資料。
+            var selectedCar = carItems.FirstOrDefault();
+
             var response = new CarPlateSearchResponse
             {
                 QueryPlate = normalizedPlate,
                 QueryPlateKey = plateKey,
-                Cars = carItems,
+                Car = selectedCar,
                 Message = BuildCarSearchMessage(carItems.Count, quotationSummaries.Count, orderSummaries.Count)
             };
 

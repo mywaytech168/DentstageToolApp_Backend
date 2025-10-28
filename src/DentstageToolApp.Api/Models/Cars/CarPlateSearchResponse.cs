@@ -21,10 +21,9 @@ public class CarPlateSearchResponse
     public string QueryPlateKey { get; set; } = string.Empty;
 
     /// <summary>
-    /// 查詢到的車輛清單。
+    /// 查詢到的車輛資料，前端僅需單筆資訊，因此只保留最符合的車輛。
     /// </summary>
-    public IReadOnlyCollection<CarPlateSearchItem> Cars { get; set; }
-        = Array.Empty<CarPlateSearchItem>();
+    public CarPlateSearchItem? Car { get; set; }
 
     /// <summary>
     /// 供前端提示的訊息，例如是否找到車輛或相關單據。
