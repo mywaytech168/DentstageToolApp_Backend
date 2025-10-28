@@ -1,15 +1,16 @@
+using DentstageToolApp.Api.Models.VehicleModels;
+using DentstageToolApp.Api.Services.Model;
+using DentstageToolApp.Api.Swagger;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
-using DentstageToolApp.Api.Models.VehicleModels;
-using DentstageToolApp.Api.Services.Model;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace DentstageToolApp.Api.Controllers;
 
@@ -75,7 +76,15 @@ public class ModelsController : ControllerBase
     /// <summary>
     /// 編輯車型資料。
     /// </summary>
+    /// 
     [HttpPost("edit")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "modelUid": "M_E70AC979-9F5A-11F0-A812-000C2990DEAF",
+          "modelName": "500C"
+        }
+        """)]
     [ProducesResponseType(typeof(EditModelResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
