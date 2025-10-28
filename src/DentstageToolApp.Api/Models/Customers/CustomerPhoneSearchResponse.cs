@@ -21,10 +21,9 @@ public class CustomerPhoneSearchResponse
     public string QueryDigits { get; set; } = string.Empty;
 
     /// <summary>
-    /// 查詢到的客戶清單。
+    /// 查詢到的客戶資料，由於電話查詢僅需單筆結果，因此只保留最符合的客戶。
     /// </summary>
-    public IReadOnlyCollection<CustomerPhoneSearchItem> Customers { get; set; } =
-        Array.Empty<CustomerPhoneSearchItem>();
+    public CustomerPhoneSearchItem? Customer { get; set; }
 
     /// <summary>
     /// 與電話相關的維修紀錄統計資訊。

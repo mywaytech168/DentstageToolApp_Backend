@@ -231,11 +231,14 @@ public class CustomerLookupService : ICustomerLookupService
 
         var summary = BuildMaintenanceSummary(relatedOrders);
 
+        // 由於前端僅需顯示單筆客戶，因此挑選排序後的第一筆作為回傳結果。
+        var selectedCustomer = customerItems.FirstOrDefault();
+
         var response = new CustomerPhoneSearchResponse
         {
             QueryPhone = normalizedPhone,
             QueryDigits = phoneDigits,
-            Customers = customerItems,
+            Customer = selectedCustomer,
             MaintenanceSummary = summary,
             Message = BuildMessage(customerItems.Count, summary.TotalOrders)
         };
