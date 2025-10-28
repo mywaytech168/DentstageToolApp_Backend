@@ -53,6 +53,18 @@ public class MaintenanceOrdersController : ControllerBase
     /// 透過 POST 傳遞查詢條件取得維修單列表。
     /// </summary>
     [HttpPost]
+    // 透過 SwaggerMockRequestExample 提供查詢範本，協助前端掌握可用的篩選欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "fixType": "dent",
+          "status": "220",
+          "startDate": "2024-10-01T00:00:00",
+          "endDate": "2024-10-31T23:59:59",
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderListResponse), StatusCodes.Status200OK)]
     public async Task<ActionResult<MaintenanceOrderListResponse>> SearchOrdersAsync([FromBody] MaintenanceOrderListQuery request, CancellationToken cancellationToken)
     {
@@ -69,6 +81,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 取得單一維修單的詳細資料。
     /// </summary>
     [HttpPost("detail")]
+    // 使用 Swagger 範例示範如何傳入維修單編號查詢詳細內容。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -100,6 +119,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 將維修單狀態回溯並同步恢復估價單狀態。
     /// </summary>
     [HttpPost("revert")]
+    // 透過 Swagger 範例提示誤按回溯操作只需傳入維修單編號。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -132,6 +158,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 確認維修開始，將維修單狀態改為維修中。
     /// </summary>
     [HttpPost("confirm")]
+    // Swagger 範例提供確認維修狀態時的必要欄位，避免前端遺漏資料。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -270,6 +303,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 續修維修單，複製估價單與相關圖片並將原維修單標記為取消。
     /// </summary>
     [HttpPost("continue")]
+    // 範例展示續修操作只需提供原維修單編號，Swagger 可直接複製使用。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderContinuationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -302,6 +342,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 將維修單狀態更新為完成 (290)。
     /// </summary>
     [HttpPost("complete")]
+    // 提供維修完成操作的 Swagger 範例，明確傳達僅需維修單編號。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -334,6 +381,13 @@ public class MaintenanceOrdersController : ControllerBase
     /// 將維修單狀態更新為終止 (295)。
     /// </summary>
     [HttpPost("terminate")]
+    // 於 Swagger 呈現終止維修的請求格式，協助串接人員理解欄位需求。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001"
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
