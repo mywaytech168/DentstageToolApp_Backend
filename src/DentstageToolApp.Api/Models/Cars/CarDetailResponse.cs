@@ -13,6 +13,11 @@ public class CarDetailResponse
     public string CarUid { get; set; } = string.Empty;
 
     /// <summary>
+    /// 車輛品牌識別碼。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
     /// 車牌號碼。
     /// </summary>
     public string? CarPlateNumber { get; set; }
@@ -21,6 +26,11 @@ public class CarDetailResponse
     /// 車輛品牌名稱。
     /// </summary>
     public string? Brand { get; set; }
+
+    /// <summary>
+    /// 車輛型號識別碼。
+    /// </summary>
+    public string? ModelUid { get; set; }
 
     /// <summary>
     /// 車輛型號名稱。
