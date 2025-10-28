@@ -526,6 +526,7 @@ public class CustomerLookupService : ICustomerLookupService
             CustomerUid = customer.CustomerUid,
             CustomerName = customer.Name,
             Phone = customer.Phone,
+            Email = customer.Email,
             Category = customer.CustomerType,
             Gender = customer.Gender,
             County = customer.County,
