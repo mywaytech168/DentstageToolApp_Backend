@@ -6,9 +6,10 @@ using DentstageToolApp.Api.Models.Quotations;
 namespace DentstageToolApp.Api.Models.Customers;
 
 /// <summary>
-/// 電話搜尋 API 的回傳模型，包含客戶清單與維修統計資訊。
+/// 電話搜尋 API 的基底回傳模型，提供查詢條件與摘要資料。
 /// </summary>
-public class CustomerPhoneSearchResponse
+/// <typeparam name="TItem">客戶清單的資料型別。</typeparam>
+public class CustomerPhoneSearchResponseBase<TItem>
 {
     /// <summary>
     /// 前端輸入的查詢電話，經過去除前後空白後的結果，方便確認查詢條件。
@@ -23,8 +24,8 @@ public class CustomerPhoneSearchResponse
     /// <summary>
     /// 查詢到的客戶資料清單，依建立時間倒序排列，方便前端依需求挑選對應客戶。
     /// </summary>
-    public IReadOnlyCollection<CustomerPhoneSearchItem> Customers { get; set; }
-        = Array.Empty<CustomerPhoneSearchItem>();
+    public IReadOnlyCollection<TItem> Customers { get; set; }
+        = Array.Empty<TItem>();
 
     /// <summary>
     /// 與電話相關的維修紀錄統計資訊。
@@ -36,6 +37,20 @@ public class CustomerPhoneSearchResponse
     /// 供前端呈現的人性化訊息，例如是否查到客戶或維修紀錄。
     /// </summary>
     public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// 電話搜尋 API 的標準回傳模型，提供基本客戶資訊。
+/// </summary>
+public class CustomerPhoneSearchResponse : CustomerPhoneSearchResponseBase<CustomerPhoneSearchItem>
+{
+}
+
+/// <summary>
+/// 電話搜尋 API 的詳細回傳模型，補充估價單與維修單清單。
+/// </summary>
+public class CustomerPhoneSearchDetailResponse : CustomerPhoneSearchResponseBase<CustomerPhoneSearchDetailItem>
+{
 }
 
 /// <summary>
@@ -102,7 +117,13 @@ public class CustomerPhoneSearchItem
     /// 客戶資料最後修改時間。
     /// </summary>
     public DateTime? ModifiedAt { get; set; }
+}
 
+/// <summary>
+/// 電話搜尋回傳的單筆客戶詳細資訊，包含估價單與維修單清單。
+/// </summary>
+public class CustomerPhoneSearchDetailItem : CustomerPhoneSearchItem
+{
     /// <summary>
     /// 與客戶相關的估價單清單，依建立時間倒序排列。
     /// </summary>

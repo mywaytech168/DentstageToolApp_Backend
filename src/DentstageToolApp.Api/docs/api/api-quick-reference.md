@@ -84,7 +84,8 @@ Authorization: Bearer {舊的AccessToken}
 | GET | `/api/customers?page=1&pageSize=20` | 以分頁取得客戶列表。 | Query 對應 `PaginationRequest`，回傳 `PaginationMetadata`。 |
 | POST | `/api/customers` | 新增客戶資料。 | Body 採 JSON，對應 `CreateCustomerRequest`。 |
 | POST | `/api/customers/edit` | 編輯客戶資料。 | Body 採 JSON，對應 `EditCustomerRequest`。 |
-| POST | `/api/customers/phone-search` | 依電話搜尋客戶與維修統計。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`。 |
+| POST | `/api/customers/phone-search` | 依電話搜尋客戶與維修統計。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`，僅回傳客戶基本資料與統計。 |
+| POST | `/api/customers/customer-phone-search` | 依電話搜尋客戶並取得完整歷史紀錄。 | Body 採 JSON，對應 `CustomerPhoneSearchRequest`，回傳估價單與維修單清單。 |
 
 ## 品牌模組（`api/brands`）
 
@@ -128,6 +129,16 @@ Content-Type: application/json
 }
 ```
 - `phone`：必填且長度上限 50。 【F:src/DentstageToolApp.Api/Customers/CustomerPhoneSearchRequest.cs†L5-L15】
+
+```http
+POST /api/customers/customer-phone-search HTTP/1.1
+Content-Type: application/json
+
+{
+  "phone": "0988123456"
+}
+```
+- 與精簡版相同的請求結構，回傳 `quotations` 與 `maintenanceOrders`。 【F:src/DentstageToolApp.Api/Models/Customers/CustomerPhoneSearchResponse.cs†L55-L86】
 
 ---
 
