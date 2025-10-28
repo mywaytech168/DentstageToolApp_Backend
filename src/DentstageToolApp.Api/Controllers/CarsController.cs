@@ -240,12 +240,17 @@ public class CarsController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D",
-          "carPlateNumber": "AAA-5678",
-          "brandUid": "B_C7CAB67F-9F5A-11F0-A812-000C2990DEAF",
-          "modelUid": "M_E706D04B-9F5A-11F0-A812-000C2990DEAF",
-          "color": "黑",
-          "remark": "客戶更換為黑色烤漆"
+            "carUid": "Ca_8BCD5832-C175-40AA-9219-283FD55D0F01",
+            "brandUid": "B_C7CAB8C7-9F5A-11F0-A812-000C2990DEAF",
+            "carPlateNumber": "ABC-1234",
+            "brand": "Toyota",
+            "modelUid": "M_E706D4EE-9F5A-11F0-A812-000C2990DEAF",
+            "model": "Wish",
+            "color": "黑",
+            "remark": "33-5109",
+            "mileage": null,
+            "createdAt": "2019-07-02T17:26:10",
+            "updatedAt": "2022-12-30T19:45:39"
         }
         """)]
     [ProducesResponseType(typeof(EditCarResponse), StatusCodes.Status200OK)]

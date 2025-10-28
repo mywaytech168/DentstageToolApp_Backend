@@ -125,7 +125,7 @@ public class CarQueryService : ICarQueryService
 
             // 透過品牌與型號對照表補上 UID，確保明細頁可顯示完整識別資訊。
             var brandModelUidMap = await ResolveBrandModelUidsAsync(new[] { entity }, cancellationToken);
-            var normalizedUid = NormalizeOptionalText(entity.CarUid) ?? string.Empty;
+            normalizedUid = NormalizeOptionalText(entity.CarUid) ?? string.Empty;
             brandModelUidMap.TryGetValue(normalizedUid, out var brandModelUids);
 
             var (brandName, modelName) = ResolveCarBrandAndModel(entity);
