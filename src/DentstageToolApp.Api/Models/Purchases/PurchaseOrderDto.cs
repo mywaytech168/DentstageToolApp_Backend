@@ -19,7 +19,12 @@ public class PurchaseOrderDto
     public string PurchaseOrderNo { get; set; } = string.Empty;
 
     /// <summary>
-    /// 採購單所屬店鋪名稱。
+    /// 採購單所屬門市識別碼。
+    /// </summary>
+    public string? StoreUid { get; set; }
+
+    /// <summary>
+    /// 採購單所屬門市名稱，供前端顯示使用。
     /// </summary>
     public string? StoreName { get; set; }
 

@@ -40,7 +40,7 @@ namespace DentstageToolApp.Infrastructure.Migrations
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     PurchaseOrderNo = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: false)
                         .Annotation("MySql:CharSet", "utf8mb4"),
-                    StoreName = table.Column<string>(type: "varchar(200)", maxLength: 200, nullable: true)
+                    StoreUID = table.Column<string>(type: "varchar(100)", maxLength: 100, nullable: true)
                         .Annotation("MySql:CharSet", "utf8mb4"),
                     PurchaseDate = table.Column<DateOnly>(type: "date", nullable: true),
                     TotalAmount = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
@@ -54,6 +54,12 @@ namespace DentstageToolApp.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_PurchaseOrders", x => x.PurchaseOrderUID);
+                    table.ForeignKey(
+                        name: "FK_PurchaseOrders_stores_StoreUID",
+                        column: x => x.StoreUID,
+                        principalTable: "stores",
+                        principalColumn: "StoreUID",
+                        onDelete: ReferentialAction.SetNull);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
 
@@ -96,6 +102,11 @@ namespace DentstageToolApp.Infrastructure.Migrations
                         onDelete: ReferentialAction.Cascade);
                 })
                 .Annotation("MySql:CharSet", "utf8mb4");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PurchaseOrders_StoreUID",
+                table: "PurchaseOrders",
+                column: "StoreUID");
 
             migrationBuilder.CreateIndex(
                 name: "IX_PurchaseItems_CategoryUID",

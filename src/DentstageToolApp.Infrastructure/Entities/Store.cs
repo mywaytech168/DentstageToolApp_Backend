@@ -26,4 +26,9 @@ public class Store
     /// 導覽屬性：隸屬此門市的估價單集合。
     /// </summary>
     public ICollection<Quatation> Quatations { get; set; } = new List<Quatation>();
+
+    /// <summary>
+    /// 導覽屬性：由此門市建立的採購單集合。
+    /// </summary>
+    public ICollection<PurchaseOrder> PurchaseOrders { get; set; } = new List<PurchaseOrder>();
 }

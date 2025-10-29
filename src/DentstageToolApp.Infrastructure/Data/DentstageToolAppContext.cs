@@ -457,6 +457,10 @@ public class DentstageToolAppContext : DbContext
             .WithOne(e => e.StoreNavigation)
             .HasForeignKey(e => e.StoreUid)
             .OnDelete(DeleteBehavior.SetNull);
+        entity.HasMany(e => e.PurchaseOrders)
+            .WithOne(e => e.Store)
+            .HasForeignKey(e => e.StoreUid)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     /// <summary>
@@ -1107,8 +1111,13 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.PurchaseOrderNo)
             .IsRequired()
             .HasMaxLength(100);
-        entity.Property(e => e.StoreName)
-            .HasMaxLength(200);
+        entity.Property(e => e.StoreUid)
+            .HasMaxLength(100)
+            .HasColumnName("StoreUID");
+        entity.HasOne(e => e.Store)
+            .WithMany(e => e.PurchaseOrders)
+            .HasForeignKey(e => e.StoreUid)
+            .OnDelete(DeleteBehavior.SetNull);
         entity.Property(e => e.PurchaseDate)
             .HasColumnType("date");
         entity.Property(e => e.TotalAmount)

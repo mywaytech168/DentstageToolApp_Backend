@@ -9,10 +9,11 @@ namespace DentstageToolApp.Api.Models.Purchases;
 public class CreatePurchaseOrderRequest
 {
     /// <summary>
-    /// 建立採購單所屬的店鋪名稱，方便之後於列表中進行模糊搜尋。
+    /// 建立採購單時所選擇的門市識別碼，將與門市主檔關聯。
     /// </summary>
-    [StringLength(200, ErrorMessage = "店鋪名稱長度不可超過 200 個字元。")]
-    public string? StoreName { get; set; }
+    [Required(ErrorMessage = "請提供門市識別碼。")]
+    [StringLength(100, ErrorMessage = "門市識別碼長度不可超過 100 個字元。")]
+    public string? StoreUid { get; set; }
 
     /// <summary>
     /// 採購品項清單。

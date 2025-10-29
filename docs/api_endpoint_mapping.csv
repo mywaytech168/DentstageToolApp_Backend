@@ -42,8 +42,8 @@
 維修完成,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
 後台維運,取得採購單列表,POST,/api/purchase-orders,"Body 需傳入 page、pageSize、storeKeyword、startDate、endDate；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
 後台維運,取得採購單,POST,/api/purchase-orders/detail,"Body 需傳入 purchaseOrderUid；無外部文件（無 OperationId）"
-後台維運,新增採購單,POST,/api/purchase-orders/create,"無外部文件（無 OperationId）"
-後台維運,更新採購單,POST,/api/purchase-orders/edit,"無外部文件（無 OperationId）"
+後台維運,新增採購單,POST,/api/purchase-orders/create,"Body 需帶入 storeUid 與 items；無外部文件（無 OperationId）"
+後台維運,更新採購單,POST,/api/purchase-orders/edit,"Body 需帶入 purchaseOrderUid、items，可選填 storeUid；無外部文件（無 OperationId）"
 後台維運,刪除採購單,DELETE,/api/purchase-orders,"Body 需傳入 purchaseOrderUid；無外部文件（無 OperationId）"
 後台維運,取得採購品項類別列表,POST,/api/purchase-categories/search,"Body 需傳入 page、pageSize；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
 後台維運,新增採購品項類別,POST,/api/purchase-categories,"無外部文件（無 OperationId）"

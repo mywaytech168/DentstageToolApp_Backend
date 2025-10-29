@@ -127,13 +127,13 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 新增採購單，改掛載於 /create 子路徑，系統會自動以建立時間的日期填入採購日期。
+    /// 新增採購單，改掛載於 /create 子路徑，系統會自動以建立時間的日期填入採購日期，Body 必須帶入 storeUid 指定門市。
     /// </summary>
     [HttpPost("create")]
     [SwaggerMockRequestExample(
         """
         {
-          "storeName": "台北民權店",
+          "storeUid": "ST_0123456789",
           "items": [
             {
               "itemName": "烤漆材料",
@@ -184,14 +184,14 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 更新採購單，請於 Request Body 內帶入欲更新的 purchaseOrderUid。
+    /// 更新採購單，請於 Request Body 內帶入欲更新的 purchaseOrderUid，若要調整門市需提供新的 storeUid。
     /// </summary>
     [HttpPost("edit")]
     [SwaggerMockRequestExample(
         """
         {
           "purchaseOrderUid": "PU_9D5F5241-6680-4EEB-A3D3-ACCCFD0B8C74",
-          "storeName": "台北民權店",
+          "storeUid": "ST_0123456789",
           "purchaseDate": "2024-07-12",
           "items": [
             {
