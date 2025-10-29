@@ -83,17 +83,30 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 取得單筆採購單明細。
+    /// 取得單筆採購單明細，改由 POST 於 Body 內提供採購單 UID，避免於網址上暴露識別資訊。
     /// </summary>
-    [HttpGet("{purchaseOrderUid}")]
+    [HttpPost("detail")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "purchaseOrderUid": "PU_9D5F5241-6680-4EEB-A3D3-ACCCFD0B8C74"
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<PurchaseOrderDetailResponse>> GetPurchaseOrderAsync(string purchaseOrderUid, CancellationToken cancellationToken)
+    public async Task<ActionResult<PurchaseOrderDetailResponse>> GetPurchaseOrderAsync([FromBody] PurchaseOrderDetailRequest request, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            // 若 Body 未帶入必要欄位，立即回傳 400 讓前端修正請求格式。
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
-            var response = await _purchaseService.GetPurchaseOrderAsync(purchaseOrderUid, cancellationToken);
+            // 將請求中的 UID 轉交服務層查詢，統一管理資料存取流程。
+            var response = await _purchaseService.GetPurchaseOrderAsync(request.PurchaseOrderUid!, cancellationToken);
             return Ok(response);
         }
         catch (PurchaseServiceException ex)
