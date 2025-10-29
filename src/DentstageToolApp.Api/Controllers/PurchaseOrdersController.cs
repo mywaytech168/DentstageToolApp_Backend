@@ -37,9 +37,9 @@ public class PurchaseOrdersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購單列表，改由 POST 傳遞查詢條件於 Body 內，支援店鋪關鍵字與日期區間搜尋。
+    /// 取得採購單列表，改以 POST 直接命中控制器根路徑並於 Body 傳遞查詢條件，支援店鋪關鍵字與日期區間搜尋。
     /// </summary>
-    [HttpPost("search")]
+    [HttpPost]
     [SwaggerMockRequestExample(
         """
         {
@@ -127,9 +127,9 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 新增採購單，系統會自動以建立時間的日期填入採購日期。
+    /// 新增採購單，改掛載於 /create 子路徑，系統會自動以建立時間的日期填入採購日期。
     /// </summary>
-    [HttpPost]
+    [HttpPost("create")]
     [SwaggerMockRequestExample(
         """
         {
