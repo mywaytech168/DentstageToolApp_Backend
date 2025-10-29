@@ -36,13 +36,25 @@ public class PurchaseCategoriesController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購品項類別列表。
+    /// 取得採購品項類別列表，改為透過 POST Body 傳遞分頁條件。
     /// </summary>
-    [HttpGet]
+    [HttpPost("search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseCategoryListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PurchaseCategoryListResponse>> GetCategoriesAsync([FromQuery] PurchaseCategoryListQuery query, CancellationToken cancellationToken)
+    public async Task<ActionResult<PurchaseCategoryListResponse>> GetCategoriesAsync([FromBody] PurchaseCategoryListQuery query, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
             // 服務層會依據查詢條件處理分頁，回傳統一格式。
