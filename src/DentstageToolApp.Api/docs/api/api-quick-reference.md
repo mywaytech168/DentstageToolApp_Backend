@@ -154,11 +154,14 @@ Content-Type: application/json
 | POST | `/api/quotations/edit` | 編輯估價單。 | JSON 對應 `UpdateQuotationRequest`。 |
 | POST | `/api/quotations/evaluate` | 將狀態更新為估價完成。 | JSON 對應 `QuotationEvaluateRequest`。 |
 | POST | `/api/quotations/cancel` | 取消估價或預約。 | JSON 對應 `QuotationCancelRequest`。 |
+| POST | `/api/quotations/delete` | 刪除估價單。 | JSON 對應 `DeleteQuotationRequest`。 |
 | POST | `/api/quotations/reserve` | 轉為預約並設定日期。 | JSON 對應 `QuotationReservationRequest`。 |
 | POST | `/api/quotations/reserve/update` | 更新既有預約日期。 | JSON 同 `QuotationReservationRequest`。 |
 | POST | `/api/quotations/reserve/cancel` | 取消預約並清除日期。 | JSON 同 `QuotationCancelRequest`。 |
 | POST | `/api/quotations/revert` | 將估價單狀態回溯。 | JSON 對應 `QuotationRevertStatusRequest`。 |
 | POST | `/api/quotations/maintenance` | 估價單轉維修並產生維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
+
+> 刪除估價單僅允許狀態碼 110（估價中 / 編輯中）操作，若已產生維修工單需先處理工單後再刪除。 【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1788-L1810】
 
 > 估價單詳情提供 `amounts` 物件，包含估價金額、折扣與應付金額欄位，維修單詳情亦沿用相同結構。 【F:src/DentstageToolApp.Api/Quotations/QuotationDetailResponse.cs†L9-L96】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L720-L748】
 
