@@ -12,6 +12,7 @@ public class UpdatePurchaseOrderRequest
     /// <summary>
     /// 採購單識別碼。
     /// </summary>
+    [Required(ErrorMessage = "請提供採購單識別碼。")]
     public string? PurchaseOrderUid { get; set; }
 
     /// <summary>

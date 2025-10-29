@@ -110,12 +110,13 @@ public class PurchaseCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// 更新採購品項類別。
+    /// 更新採購品項類別，請於 Request Body 內帶入欲更新的 categoryUid。
     /// </summary>
-    [HttpPut("{categoryUid}")]
+    [HttpPost("edit")]
     [SwaggerMockRequestExample(
         """
         {
+          "categoryUid": "PC_6A4D9E5F-3B24-4F9D-A19F-2F8A993CB11F",
           "categoryName": "烤漆耗材-年度版本"
         }
         """)]
@@ -123,14 +124,12 @@ public class PurchaseCategoriesController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<PurchaseCategoryDto>> UpdateCategoryAsync(string categoryUid, [FromBody] UpdatePurchaseCategoryRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<PurchaseCategoryDto>> UpdateCategoryAsync([FromBody] UpdatePurchaseCategoryRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
-
-        request.CategoryUid = categoryUid;
 
         try
         {

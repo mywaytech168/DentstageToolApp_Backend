@@ -155,12 +155,13 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 更新採購單。
+    /// 更新採購單，請於 Request Body 內帶入欲更新的 purchaseOrderUid。
     /// </summary>
-    [HttpPut("{purchaseOrderUid}")]
+    [HttpPost("edit")]
     [SwaggerMockRequestExample(
         """
         {
+          "purchaseOrderUid": "PU_9D5F5241-6680-4EEB-A3D3-ACCCFD0B8C74",
           "purchaseDate": "2024-07-12",
           "items": [
             {
@@ -183,14 +184,12 @@ public class PurchaseOrdersController : ControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<PurchaseOrderDetailResponse>> UpdatePurchaseOrderAsync(string purchaseOrderUid, [FromBody] UpdatePurchaseOrderRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<PurchaseOrderDetailResponse>> UpdatePurchaseOrderAsync([FromBody] UpdatePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
             return ValidationProblem(ModelState);
         }
-
-        request.PurchaseOrderUid = purchaseOrderUid;
 
         try
         {

@@ -10,6 +10,7 @@ public class UpdatePurchaseCategoryRequest
     /// <summary>
     /// 類別識別碼。
     /// </summary>
+    [Required(ErrorMessage = "請提供類別識別碼。")]
     public string? CategoryUid { get; set; }
 
     /// <summary>
