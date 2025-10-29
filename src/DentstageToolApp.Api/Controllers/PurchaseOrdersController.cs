@@ -37,13 +37,12 @@ public class PurchaseOrdersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購單列表，改以 POST 直接命中控制器根路徑並於 Body 傳遞查詢條件，支援門市 Token（StoreUID）鎖定、店鋪關鍵字與日期區間搜尋。
+    /// 取得採購單列表，改以 POST 直接命中控制器根路徑並於 Body 傳遞查詢條件，支援店鋪關鍵字與日期區間搜尋。
     /// </summary>
     [HttpPost]
     [SwaggerMockRequestExample(
         """
         {
-          "storeUid": "St_0123456789",
           "storeKeyword": "民權",
           "startDate": "2024-07-01",
           "endDate": "2024-07-31",
@@ -128,13 +127,12 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 新增採購單，改掛載於 /create 子路徑，系統會自動以建立時間的日期填入採購日期，Body 必須帶入 storeUid 指定門市。
+    /// 新增採購單，改掛載於 /create 子路徑，系統會自動以建立時間的日期填入採購日期，門市識別碼改由登入者權杖提供。
     /// </summary>
     [HttpPost("create")]
     [SwaggerMockRequestExample(
         """
         {
-          "storeUid": "ST_0123456789",
           "items": [
             {
               "itemName": "烤漆材料",
@@ -164,7 +162,15 @@ public class PurchaseOrdersController : ControllerBase
         try
         {
             var operatorName = GetCurrentOperatorName();
-            var response = await _purchaseService.CreatePurchaseOrderAsync(request, operatorName, cancellationToken);
+            var storeUid = GetCurrentStoreUid();
+            if (string.IsNullOrWhiteSpace(storeUid))
+            {
+                // 若權杖未提供門市識別碼，視為目前登入者尚未綁定門市，直接回傳錯誤。
+                return BuildProblemDetails(HttpStatusCode.Forbidden, "目前登入者未綁定門市資訊，無法建立採購單。", "新增採購單失敗");
+            }
+
+            var ensuredStoreUid = storeUid!;
+            var response = await _purchaseService.CreatePurchaseOrderAsync(request, operatorName, ensuredStoreUid, cancellationToken);
             return StatusCode(StatusCodes.Status201Created, response);
         }
         catch (PurchaseServiceException ex)
@@ -331,6 +337,25 @@ public class PurchaseOrdersController : ControllerBase
 
         userUid = User.FindFirstValue(ClaimTypes.NameIdentifier);
         return string.IsNullOrWhiteSpace(userUid) ? "UnknownUser" : userUid;
+    }
+
+    /// <summary>
+    /// 取得目前登入者對應的門市識別碼（StoreUID），供建立採購單時自動帶入門市資訊。
+    /// </summary>
+    private string? GetCurrentStoreUid()
+    {
+        // 依序檢查常見 Claim Key 寫法，確保不同登入來源都能正確取得門市識別碼。
+        var claimKeys = new[] { "storeUid", "StoreUid", "storeUID", "StoreUID", "storeId", "StoreId" };
+        foreach (var key in claimKeys)
+        {
+            var value = User.FindFirstValue(key);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     // ---------- 生命週期 ----------

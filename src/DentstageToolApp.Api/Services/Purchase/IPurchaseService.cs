@@ -22,7 +22,7 @@ public interface IPurchaseService
     /// <summary>
     /// 建立採購單。
     /// </summary>
-    Task<PurchaseOrderDetailResponse> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, string operatorName, CancellationToken cancellationToken);
+    Task<PurchaseOrderDetailResponse> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, string operatorName, string storeUid, CancellationToken cancellationToken);
 
     /// <summary>
     /// 更新採購單。
