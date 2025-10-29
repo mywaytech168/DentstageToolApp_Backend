@@ -1,0 +1,8 @@
+CREATE TABLE PurchaseCategories (
+    CategoryUID            VARCHAR(100) PRIMARY KEY,
+    CategoryName           VARCHAR(100) NOT NULL,
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50)
+);

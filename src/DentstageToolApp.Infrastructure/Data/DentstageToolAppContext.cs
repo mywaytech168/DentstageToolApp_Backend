@@ -181,6 +181,21 @@ public class DentstageToolAppContext : DbContext
     public virtual DbSet<BlackList> BlackLists => Set<BlackList>();
 
     /// <summary>
+    /// 採購品項類別資料集。
+    /// </summary>
+    public virtual DbSet<PurchaseCategory> PurchaseCategories => Set<PurchaseCategory>();
+
+    /// <summary>
+    /// 採購單資料集。
+    /// </summary>
+    public virtual DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
+
+    /// <summary>
+    /// 採購品項資料集。
+    /// </summary>
+    public virtual DbSet<PurchaseItem> PurchaseItems => Set<PurchaseItem>();
+
+    /// <summary>
     /// 使用者帳號資料集。
     /// </summary>
     public virtual DbSet<UserAccount> UserAccounts => Set<UserAccount>();
@@ -216,6 +231,9 @@ public class DentstageToolAppContext : DbContext
         ConfigureCarBeauty(modelBuilder);
         ConfigurePhotoData(modelBuilder);
         ConfigureBlackList(modelBuilder);
+        ConfigurePurchaseCategory(modelBuilder);
+        ConfigurePurchaseOrder(modelBuilder);
+        ConfigurePurchaseItem(modelBuilder);
         ConfigureUserAccount(modelBuilder);
         ConfigureDeviceRegistration(modelBuilder);
         ConfigureRefreshToken(modelBuilder);
@@ -1051,6 +1069,97 @@ public class DentstageToolAppContext : DbContext
             .WithMany(p => p.BlackLists)
             .HasForeignKey(d => d.CustomerUid)
             .HasConstraintName("FK_BlackLists_Customers");
+    }
+
+    /// <summary>
+    /// 設定採購品項類別資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigurePurchaseCategory(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PurchaseCategory>();
+        entity.ToTable("PurchaseCategories");
+        entity.HasKey(e => e.CategoryUid);
+        entity.Property(e => e.CategoryUid)
+            .HasMaxLength(100)
+            .HasColumnName("CategoryUID");
+        entity.Property(e => e.CategoryName)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.Property(e => e.CreationTimestamp)
+            .HasColumnType("datetime");
+        entity.Property(e => e.ModificationTimestamp)
+            .HasColumnType("datetime");
+    }
+
+    /// <summary>
+    /// 設定採購單資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigurePurchaseOrder(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PurchaseOrder>();
+        entity.ToTable("PurchaseOrders");
+        entity.HasKey(e => e.PurchaseOrderUid);
+        entity.Property(e => e.PurchaseOrderUid)
+            .HasMaxLength(100)
+            .HasColumnName("PurchaseOrderUID");
+        entity.Property(e => e.PurchaseOrderNo)
+            .IsRequired()
+            .HasMaxLength(100);
+        entity.Property(e => e.PurchaseDate)
+            .HasColumnType("date");
+        entity.Property(e => e.TotalAmount)
+            .HasColumnType("decimal(18,2)");
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.Property(e => e.CreationTimestamp)
+            .HasColumnType("datetime");
+        entity.Property(e => e.ModificationTimestamp)
+            .HasColumnType("datetime");
+    }
+
+    /// <summary>
+    /// 設定採購品項資料表欄位與關聯。
+    /// </summary>
+    private static void ConfigurePurchaseItem(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<PurchaseItem>();
+        entity.ToTable("PurchaseItems");
+        entity.HasKey(e => e.PurchaseItemUid);
+        entity.Property(e => e.PurchaseItemUid)
+            .HasMaxLength(100)
+            .HasColumnName("PurchaseItemUID");
+        entity.Property(e => e.PurchaseOrderUid)
+            .IsRequired()
+            .HasMaxLength(100)
+            .HasColumnName("PurchaseOrderUID");
+        entity.Property(e => e.ItemName)
+            .IsRequired()
+            .HasMaxLength(200);
+        entity.Property(e => e.CategoryUid)
+            .HasMaxLength(100)
+            .HasColumnName("CategoryUID");
+        entity.Property(e => e.UnitPrice)
+            .HasColumnType("decimal(18,2)");
+        entity.Property(e => e.TotalAmount)
+            .HasColumnType("decimal(18,2)");
+        entity.Property(e => e.CreatedBy).HasMaxLength(50);
+        entity.Property(e => e.ModifiedBy).HasMaxLength(50);
+        entity.Property(e => e.CreationTimestamp)
+            .HasColumnType("datetime");
+        entity.Property(e => e.ModificationTimestamp)
+            .HasColumnType("datetime");
+
+        entity.HasOne(e => e.PurchaseOrder)
+            .WithMany(order => order.PurchaseItems)
+            .HasForeignKey(e => e.PurchaseOrderUid)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(e => e.Category)
+            .WithMany(category => category.PurchaseItems)
+            .HasForeignKey(e => e.CategoryUid)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     /// <summary>
