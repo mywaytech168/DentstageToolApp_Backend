@@ -19,7 +19,7 @@ public class PurchaseOrderDto
     public string PurchaseOrderNo { get; set; } = string.Empty;
 
     /// <summary>
-    /// 採購單所屬門市識別碼。
+    /// 採購單所屬門市識別碼（StoreUID），為門市自帶的 Token。
     /// </summary>
     public string? StoreUid { get; set; }
 

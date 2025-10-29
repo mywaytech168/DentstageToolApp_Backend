@@ -39,6 +39,7 @@ public class PurchaseService : IPurchaseService
         var normalizedQuery = query ?? new PurchaseOrderListQuery();
         var (page, pageSize) = normalizedQuery.Normalize();
         var skip = (page - 1) * pageSize;
+        var storeUidFilter = NormalizeOptionalText(normalizedQuery.StoreUid);
         var storeKeyword = NormalizeOptionalText(normalizedQuery.StoreKeyword);
         var startDate = normalizedQuery.StartDate;
         var endDate = normalizedQuery.EndDate;
@@ -50,6 +51,12 @@ public class PurchaseService : IPurchaseService
 
         // ---------- 資料查詢區 ----------
         var queryable = _dbContext.PurchaseOrders.AsNoTracking();
+
+        if (storeUidFilter is not null)
+        {
+            // 若有指定門市識別碼（門市 Token），直接鎖定該門市的採購紀錄。
+            queryable = queryable.Where(order => order.StoreUid == storeUidFilter);
+        }
 
         if (storeKeyword is not null)
         {

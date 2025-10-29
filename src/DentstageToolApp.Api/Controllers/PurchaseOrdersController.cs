@@ -37,12 +37,13 @@ public class PurchaseOrdersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購單列表，改以 POST 直接命中控制器根路徑並於 Body 傳遞查詢條件，支援店鋪關鍵字與日期區間搜尋。
+    /// 取得採購單列表，改以 POST 直接命中控制器根路徑並於 Body 傳遞查詢條件，支援門市 Token（StoreUID）鎖定、店鋪關鍵字與日期區間搜尋。
     /// </summary>
     [HttpPost]
     [SwaggerMockRequestExample(
         """
         {
+          "storeUid": "St_0123456789",
           "storeKeyword": "民權",
           "startDate": "2024-07-01",
           "endDate": "2024-07-31",

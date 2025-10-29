@@ -9,7 +9,7 @@ namespace DentstageToolApp.Api.Models.Purchases;
 public class CreatePurchaseOrderRequest
 {
     /// <summary>
-    /// 建立採購單時所選擇的門市識別碼，將與門市主檔關聯。
+    /// 建立採購單時所選擇的門市識別碼（StoreUID），即門市本身的 Token，將與門市主檔關聯。
     /// </summary>
     [Required(ErrorMessage = "請提供門市識別碼。")]
     [StringLength(100, ErrorMessage = "門市識別碼長度不可超過 100 個字元。")]

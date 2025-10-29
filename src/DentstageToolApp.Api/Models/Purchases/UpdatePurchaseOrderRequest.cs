@@ -21,7 +21,7 @@ public class UpdatePurchaseOrderRequest
     public DateOnly? PurchaseDate { get; set; }
 
     /// <summary>
-    /// 採購單所屬門市識別碼，若傳入空白將會清除門市關聯。
+    /// 採購單所屬門市識別碼（StoreUID），亦即門市 Token；若傳入空白將會清除門市關聯。
     /// </summary>
     [StringLength(100, ErrorMessage = "門市識別碼長度不可超過 100 個字元。")]
     public string? StoreUid { get; set; }
