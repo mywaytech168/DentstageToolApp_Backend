@@ -141,16 +141,6 @@ public class CarManagementService : ICarManagementService
         // ---------- 參數整理區 ----------
         // 先整理識別碼避免查詢時因前後空白導致找不到資料。
         var carUid = NormalizeRequiredText(request.CarUid, "車輛識別碼");
-        var licensePlate = NormalizeRequiredText(request.CarPlateNumber, "車牌號碼");
-        var normalizedPlate = NormalizePlate(licensePlate);
-
-        if (string.IsNullOrWhiteSpace(normalizedPlate))
-        {
-            // 若清除後無有效字元，代表輸入內容不合法。
-            throw new CarManagementException(HttpStatusCode.BadRequest, "車牌號碼格式不正確，請確認僅輸入英數字。");
-        }
-
-        var storedPlate = licensePlate.ToUpperInvariant();
         var operatorLabel = NormalizeOperator(operatorName);
 
         // 先找出欲更新的車輛，若不存在直接回報錯誤避免後續更新 null 物件。
@@ -160,6 +150,31 @@ public class CarManagementService : ICarManagementService
         if (carEntity is null)
         {
             throw new CarManagementException(HttpStatusCode.NotFound, "找不到對應的車輛資料，請確認識別碼是否正確。");
+        }
+
+        // 針對車牌欄位紀錄是否帶入值；若為 null 或空白則視為不更新，沿用資料庫原值。
+        var hasPlateInput = request.CarPlateNumber is not null;
+        var shouldUpdatePlate = !string.IsNullOrWhiteSpace(request.CarPlateNumber);
+        var storedPlate = carEntity.CarNo ?? string.Empty;
+        var normalizedPlate = carEntity.CarNoQuery ?? NormalizePlate(storedPlate);
+
+        if (shouldUpdatePlate)
+        {
+            // Trim 後再進行正規化，確保輸入字元皆為英數字。
+            var licensePlate = request.CarPlateNumber!.Trim();
+            normalizedPlate = NormalizePlate(licensePlate);
+
+            if (string.IsNullOrWhiteSpace(normalizedPlate))
+            {
+                // 若清除後無有效字元，代表輸入內容不合法。
+                throw new CarManagementException(HttpStatusCode.BadRequest, "車牌號碼格式不正確，請確認僅輸入英數字。");
+            }
+
+            storedPlate = licensePlate.ToUpperInvariant();
+        }
+        else if (hasPlateInput)
+        {
+            // 前端明確傳入欄位但為空字串，依需求視為「不異動」，因此保留原本車牌資訊。
         }
 
         // 透過旗標紀錄前端是否有帶入各欄位，缺少欄位時避免覆寫原始資料。
@@ -221,28 +236,43 @@ public class CarManagementService : ICarManagementService
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- 資料檢核區 ----------
-        // 檢查是否有其他車輛使用相同車牌，避免資料重複。
-        var duplicate = await _dbContext.Cars
-            .AsNoTracking()
-            .AnyAsync(car =>
-                    car.CarUid != carUid
-                    && (
-                        car.CarNo == storedPlate
-                        || car.CarNo == normalizedPlate
-                        || car.CarNoQuery == normalizedPlate
-                        || car.CarNoQuery == storedPlate
-                    ),
-                cancellationToken);
-
-        if (duplicate)
+        if (shouldUpdatePlate)
         {
-            throw new CarManagementException(HttpStatusCode.Conflict, "車牌號碼已存在於其他車輛，請重新確認。");
+            // 僅在輸入了新車牌時才檢查是否與其他車輛重複，避免無意覆寫原資料。
+            var duplicate = await _dbContext.Cars
+                .AsNoTracking()
+                .AnyAsync(car =>
+                        car.CarUid != carUid
+                        && (
+                            car.CarNo == storedPlate
+                            || car.CarNo == normalizedPlate
+                            || car.CarNoQuery == normalizedPlate
+                            || car.CarNoQuery == storedPlate
+                        ),
+                    cancellationToken);
+
+            if (duplicate)
+            {
+                throw new CarManagementException(HttpStatusCode.Conflict, "車牌號碼已存在於其他車輛，請重新確認。");
+            }
         }
 
         // ---------- 實體更新區 ----------
         var now = DateTime.UtcNow;
-        carEntity.CarNo = storedPlate;
-        carEntity.CarNoQuery = normalizedPlate;
+
+        if (shouldUpdatePlate)
+        {
+            // 僅在實際更新車牌時才覆寫，避免將原值改成空白。
+            if (!string.Equals(carEntity.CarNo, storedPlate, StringComparison.Ordinal))
+            {
+                carEntity.CarNo = storedPlate;
+            }
+
+            if (!string.Equals(carEntity.CarNoQuery, normalizedPlate, StringComparison.Ordinal))
+            {
+                carEntity.CarNoQuery = normalizedPlate;
+            }
+        }
         if (!string.Equals(carEntity.Brand, brand, StringComparison.Ordinal))
         {
             carEntity.Brand = brand;
