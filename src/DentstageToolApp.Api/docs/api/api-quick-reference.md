@@ -71,8 +71,9 @@ Authorization: Bearer {舊的AccessToken}
 - `mileage`：最新里程數（公里），若現場量測可一併帶入。 【F:src/DentstageToolApp.Api/Models/Cars/CreateCarRequest.cs†L41-L45】
 
 **編輯車輛需加帶欄位**
-- `carUid`：欲更新的車輛識別碼。 【F:src/DentstageToolApp.Api/Cars/EditCarRequest.cs†L10-L15】
-- 其餘欄位與新增格式相同，可選擇保留或清空。 【F:src/DentstageToolApp.Api/Cars/EditCarRequest.cs†L17-L46】
+- `carUid`：欲更新的車輛識別碼。 【F:src/DentstageToolApp.Api/Models/Cars/EditCarRequest.cs†L10-L15】
+- `carPlateNumber`：選填，若未傳入或為空白則沿用原車牌號碼。 【F:src/DentstageToolApp.Api/Models/Cars/EditCarRequest.cs†L17-L32】
+- 其餘欄位與新增格式相同，可選擇保留或清空。 【F:src/DentstageToolApp.Api/Models/Cars/EditCarRequest.cs†L17-L46】
 - 若需更新里程數請帶入 `mileage`，後端會同步覆寫車輛與估價單的里程欄位。 【F:src/DentstageToolApp.Api/Services/Car/CarManagementService.cs†L180-L221】
 
 ---
