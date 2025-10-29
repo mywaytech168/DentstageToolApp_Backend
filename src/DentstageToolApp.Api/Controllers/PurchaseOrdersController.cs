@@ -37,13 +37,28 @@ public class PurchaseOrdersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購單列表，支援店鋪關鍵字與日期區間搜尋。
+    /// 取得採購單列表，改由 POST 傳遞查詢條件於 Body 內，支援店鋪關鍵字與日期區間搜尋。
     /// </summary>
-    [HttpGet]
+    [HttpPost("search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "storeKeyword": "民權",
+          "startDate": "2024-07-01",
+          "endDate": "2024-07-31",
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseOrderListResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<PurchaseOrderListResponse>> GetPurchaseOrdersAsync([FromQuery] PurchaseOrderListQuery query, CancellationToken cancellationToken)
+    public async Task<ActionResult<PurchaseOrderListResponse>> GetPurchaseOrdersAsync([FromBody] PurchaseOrderListQuery query, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
             // 將查詢參數傳入服務層，由服務層統一處理分頁邏輯。
