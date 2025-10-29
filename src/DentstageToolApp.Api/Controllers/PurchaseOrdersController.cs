@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Purchases;
 using DentstageToolApp.Api.Services.Purchase;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -100,6 +101,26 @@ public class PurchaseOrdersController : ControllerBase
     /// 新增採購單。
     /// </summary>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "purchaseDate": "2024-07-10",
+          "items": [
+            {
+              "itemName": "烤漆材料",
+              "categoryUid": "PC_4B6F1F85-6C8A-4A0D-9123-5FD85E0D4C5F",
+              "unitPrice": 1200,
+              "quantity": 3
+            },
+            {
+              "itemName": "黏土耗材",
+              "categoryUid": null,
+              "unitPrice": 350,
+              "quantity": 5
+            }
+          ]
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -137,6 +158,27 @@ public class PurchaseOrdersController : ControllerBase
     /// 更新採購單。
     /// </summary>
     [HttpPut("{purchaseOrderUid}")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "purchaseDate": "2024-07-12",
+          "items": [
+            {
+              "purchaseItemUid": "PI_CBEA8E21-8FF7-4FC1-A4B0-54C5AC5F1ED0",
+              "itemName": "烤漆材料",
+              "categoryUid": "PC_4B6F1F85-6C8A-4A0D-9123-5FD85E0D4C5F",
+              "unitPrice": 1250,
+              "quantity": 4
+            },
+            {
+              "itemName": "拋光劑",
+              "categoryUid": "PC_93AF2D1C-2E97-4BF3-8B44-7C698D5100B7",
+              "unitPrice": 450,
+              "quantity": 2
+            }
+          ]
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

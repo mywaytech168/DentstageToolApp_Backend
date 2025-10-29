@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.Purchases;
 using DentstageToolApp.Api.Services.Purchase;
+using DentstageToolApp.Api.Swagger;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -69,6 +70,12 @@ public class PurchaseCategoriesController : ControllerBase
     /// 建立採購品項類別。
     /// </summary>
     [HttpPost]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "categoryName": "烤漆耗材"
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseCategoryDto), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -106,6 +113,12 @@ public class PurchaseCategoriesController : ControllerBase
     /// 更新採購品項類別。
     /// </summary>
     [HttpPut("{categoryUid}")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "categoryName": "烤漆耗材-年度版本"
+        }
+        """)]
     [ProducesResponseType(typeof(PurchaseCategoryDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
