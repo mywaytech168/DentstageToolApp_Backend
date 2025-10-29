@@ -101,10 +101,10 @@ public class PurchaseService : IPurchaseService
     }
 
     /// <inheritdoc />
-    public async Task<PurchaseOrderDetailResponse> GetPurchaseOrderAsync(string purchaseOrderUid, CancellationToken cancellationToken)
+    public async Task<PurchaseOrderDetailResponse> GetPurchaseOrderAsync(string purchaseOrderNo, CancellationToken cancellationToken)
     {
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(purchaseOrderUid, "採購單識別碼");
+        var normalizedNo = NormalizeRequiredText(purchaseOrderNo, "採購單單號");
 
         // ---------- 資料查詢區 ----------
         var entity = await _dbContext.PurchaseOrders
@@ -112,7 +112,7 @@ public class PurchaseService : IPurchaseService
             .Include(order => order.Store)
             .Include(order => order.PurchaseItems)
                 .ThenInclude(item => item.Category)
-            .FirstOrDefaultAsync(order => order.PurchaseOrderUid == normalizedUid, cancellationToken);
+            .FirstOrDefaultAsync(order => order.PurchaseOrderNo == normalizedNo, cancellationToken);
 
         if (entity is null)
         {

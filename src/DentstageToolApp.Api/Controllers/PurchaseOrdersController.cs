@@ -83,13 +83,13 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 取得單筆採購單明細，改由 POST 於 Body 內提供採購單 UID，避免於網址上暴露識別資訊。
+    /// 取得單筆採購單明細，改由 POST 於 Body 內提供採購單單號，避免於網址上暴露識別資訊。
     /// </summary>
     [HttpPost("detail")]
     [SwaggerMockRequestExample(
         """
         {
-          "purchaseOrderUid": "PU_9D5F5241-6680-4EEB-A3D3-ACCCFD0B8C74"
+          "purchaseOrderNo": "PO_2025070001"
         }
         """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status200OK)]
@@ -105,8 +105,8 @@ public class PurchaseOrdersController : ControllerBase
 
         try
         {
-            // 將請求中的 UID 轉交服務層查詢，統一管理資料存取流程。
-            var response = await _purchaseService.GetPurchaseOrderAsync(request.PurchaseOrderUid!, cancellationToken);
+            // 將請求中的單號轉交服務層查詢，統一管理資料存取流程。
+            var response = await _purchaseService.GetPurchaseOrderAsync(request.PurchaseOrderNo!, cancellationToken);
             return Ok(response);
         }
         catch (PurchaseServiceException ex)

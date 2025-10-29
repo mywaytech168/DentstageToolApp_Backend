@@ -15,9 +15,9 @@ public interface IPurchaseService
     Task<PurchaseOrderListResponse> GetPurchaseOrdersAsync(PurchaseOrderListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
-    /// 取得單筆採購單。
+    /// 取得單筆採購單，透過採購單單號進行查詢。
     /// </summary>
-    Task<PurchaseOrderDetailResponse> GetPurchaseOrderAsync(string purchaseOrderUid, CancellationToken cancellationToken);
+    Task<PurchaseOrderDetailResponse> GetPurchaseOrderAsync(string purchaseOrderNo, CancellationToken cancellationToken);
 
     /// <summary>
     /// 建立採購單。
