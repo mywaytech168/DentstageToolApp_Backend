@@ -39,7 +39,6 @@ public class PurchaseService : IPurchaseService
         var normalizedQuery = query ?? new PurchaseOrderListQuery();
         var (page, pageSize) = normalizedQuery.Normalize();
         var skip = (page - 1) * pageSize;
-        var storeUidFilter = NormalizeOptionalText(normalizedQuery.StoreUid);
         var storeKeyword = NormalizeOptionalText(normalizedQuery.StoreKeyword);
         var startDate = normalizedQuery.StartDate;
         var endDate = normalizedQuery.EndDate;
@@ -51,12 +50,6 @@ public class PurchaseService : IPurchaseService
 
         // ---------- 資料查詢區 ----------
         var queryable = _dbContext.PurchaseOrders.AsNoTracking();
-
-        if (storeUidFilter is not null)
-        {
-            // 若有指定門市識別碼（門市 Token），直接鎖定該門市的採購紀錄。
-            queryable = queryable.Where(order => order.StoreUid == storeUidFilter);
-        }
 
         if (storeKeyword is not null)
         {
@@ -139,7 +132,7 @@ public class PurchaseService : IPurchaseService
     }
 
     /// <inheritdoc />
-    public async Task<PurchaseOrderDetailResponse> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, string operatorName, CancellationToken cancellationToken)
+    public async Task<PurchaseOrderDetailResponse> CreatePurchaseOrderAsync(CreatePurchaseOrderRequest request, string operatorName, string storeUid, CancellationToken cancellationToken)
     {
         if (request is null)
         {
@@ -147,7 +140,7 @@ public class PurchaseService : IPurchaseService
         }
 
         // ---------- 參數整理區 ----------
-        var storeUid = NormalizeRequiredText(request.StoreUid, "門市識別碼");
+        var normalizedStoreUid = NormalizeRequiredText(storeUid, "門市識別碼");
         var operatorLabel = NormalizeOperator(operatorName);
         var items = NormalizeCreateItems(request.Items);
 
@@ -155,7 +148,7 @@ public class PurchaseService : IPurchaseService
         // 先檢查門市是否存在，避免寫入無效的關聯。
         var store = await _dbContext.Stores
             .AsNoTracking()
-            .FirstOrDefaultAsync(entity => entity.StoreUid == storeUid, cancellationToken);
+            .FirstOrDefaultAsync(entity => entity.StoreUid == normalizedStoreUid, cancellationToken);
         if (store is null)
         {
             throw new PurchaseServiceException(HttpStatusCode.BadRequest, "找不到指定的門市資料。");
@@ -171,7 +164,7 @@ public class PurchaseService : IPurchaseService
             PurchaseOrderUid = BuildPurchaseOrderUid(),
             PurchaseOrderNo = BuildPurchaseOrderNo(),
             PurchaseDate = purchaseDate,
-            StoreUid = storeUid,
+            StoreUid = normalizedStoreUid,
             CreatedBy = operatorLabel,
             CreationTimestamp = now
         };
