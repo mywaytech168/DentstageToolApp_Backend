@@ -1773,6 +1773,98 @@ public class QuotationService : IQuotationService
         return BuildMaintenanceResponse(quotation, order, now);
     }
 
+    /// <inheritdoc />
+    public async Task<DeleteQuotationResponse> DeleteQuotationAsync(DeleteQuotationRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供刪除估價單的參數。");
+        }
+
+        // ---------- 參數整理區 ----------
+        var quotationNo = request.EnsureAndGetQuotationNo();
+        var operatorLabel = NormalizeOperator(operatorName);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "找不到要刪除的估價單，請確認編號是否正確。");
+        }
+
+        // ---------- 狀態檢核區 ----------
+        // 刪除功能僅允許 110「估價中 / 編輯中」的狀態，避免非編輯流程誤刪資料。
+        var normalizedStatus = string.IsNullOrWhiteSpace(quotation.Status)
+            ? string.Empty
+            : quotation.Status.Trim();
+        var statusLabel = string.IsNullOrWhiteSpace(normalizedStatus) ? "未設定" : normalizedStatus;
+
+        _logger.LogDebug(
+            "準備刪除估價單 {QuotationNo}，目前狀態：{Status}。",
+            quotation.QuotationNo,
+            statusLabel);
+
+        if (!string.Equals(normalizedStatus, DefaultQuotationStatus, StringComparison.Ordinal))
+        {
+            // 僅能刪除編輯中狀態，其他狀態需透過對應流程處理，避免造成資料遺失。
+            _logger.LogWarning(
+                "估價單 {QuotationNo} 狀態為 {Status}，僅允許編輯中(110)刪除。",
+                quotation.QuotationNo,
+                statusLabel);
+
+            throw new QuotationManagementException(
+                HttpStatusCode.Conflict,
+                "僅能刪除編輯中的估價單，請確認狀態或聯絡管理員協助處理。");
+        }
+
+        // ---------- 依存關聯檢核區 ----------
+        var hasOrders = await _context.Orders
+            .AsNoTracking()
+            .AnyAsync(order => order.QuatationUid == quotation.QuotationUid, cancellationToken);
+
+        if (hasOrders)
+        {
+            throw new QuotationManagementException(HttpStatusCode.Conflict, "該估價單已建立維修工單，請先處理相關工單後再刪除。");
+        }
+
+        // ---------- 關聯資料處理區 ----------
+        var carBeauty = await _context.CarBeautys
+            .FirstOrDefaultAsync(entity => entity.QuotationUid == quotation.QuotationUid, cancellationToken);
+
+        if (carBeauty is not null)
+        {
+            _context.CarBeautys.Remove(carBeauty);
+        }
+
+        var relatedPhotos = await _context.PhotoData
+            .Where(photo => photo.QuotationUid == quotation.QuotationUid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var photo in relatedPhotos)
+        {
+            // 清除照片的估價單綁定，避免刪除後仍佔用照片資源。
+            photo.QuotationUid = null;
+        }
+
+        // ---------- 實體刪除區 ----------
+        _context.Quatations.Remove(quotation);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "操作人員 {Operator} 刪除估價單 {QuotationNo} ({QuotationUid}) 成功。",
+            operatorLabel,
+            quotation.QuotationNo,
+            quotation.QuotationUid);
+
+        return new DeleteQuotationResponse
+        {
+            QuotationUid = quotation.QuotationUid,
+            QuotationNo = quotation.QuotationNo ?? quotationNo,
+            Message = "估價單已刪除。"
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>

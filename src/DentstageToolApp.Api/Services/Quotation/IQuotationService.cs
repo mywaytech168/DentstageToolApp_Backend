@@ -79,6 +79,14 @@ public interface IQuotationService
     Task<QuotationMaintenanceConversionResponse> ConvertToMaintenanceAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 刪除估價單資料，針對尚未建立工單的估價單進行清除。
+    /// </summary>
+    /// <param name="request">刪除參數，至少需要估價單編號。</param>
+    /// <param name="operatorName">操作人員名稱，用於紀錄。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    Task<DeleteQuotationResponse> DeleteQuotationAsync(DeleteQuotationRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 產生隨機的估價單建立測試資料，協助前端快速帶入範例內容。
     /// </summary>
     /// <param name="cancellationToken">取消權杖。</param>
