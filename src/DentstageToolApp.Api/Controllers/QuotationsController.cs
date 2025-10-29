@@ -457,6 +457,47 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 刪除估價單，僅允許「估價中 / 編輯中」狀態，並檢查是否已建立工單。
+    /// </summary>
+    [HttpPost("delete")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001"
+        }
+        """)]
+    [ProducesResponseType(typeof(DeleteQuotationResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<DeleteQuotationResponse>> DeleteQuotationAsync([FromBody] DeleteQuotationRequest request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.DeleteQuotationAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "刪除估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "刪除估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("刪除估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，估價單未刪除。", "刪除估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "刪除估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "刪除估價單失敗");
+        }
+    }
+
+    /// <summary>
     /// 將估價單轉為預約，寫入預約日期後回傳狀態資訊。
     /// </summary>
     [HttpPost("reserve")]

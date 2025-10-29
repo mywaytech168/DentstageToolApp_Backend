@@ -17,6 +17,7 @@
 估價中(編輯中),編輯車輛資料,POST,/api/cars/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CARS_EDIT
 估價中(編輯中),編輯客戶資料,POST,/api/customers/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CUSTOMERS_EDIT
 估價中(編輯中),編輯估價單,POST,/api/quotations/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_EDIT
+估價中(編輯中),刪除估價單,POST,/api/quotations/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_DELETE
 估價中(編輯中),估價完成,POST,/api/quotations/evaluate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_EVALUATE
 估價中(編輯中),誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_REVERT
 估價完成,自動過期,OTHER,"（系統自動排程，無需呼叫 API）","無外部文件（無 OperationId）"
