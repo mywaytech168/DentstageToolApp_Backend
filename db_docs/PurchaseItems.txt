@@ -1,0 +1,15 @@
+CREATE TABLE PurchaseItems (
+    PurchaseItemUID        VARCHAR(100) PRIMARY KEY,
+    PurchaseOrderUID       VARCHAR(100) NOT NULL,
+    ItemName               VARCHAR(200) NOT NULL,
+    CategoryUID            VARCHAR(100),
+    UnitPrice              DECIMAL(18,2) NOT NULL,
+    Quantity               INT NOT NULL,
+    TotalAmount            DECIMAL(18,2) NOT NULL,
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50),
+    CONSTRAINT FK_PurchaseItems_PurchaseOrders_PurchaseOrderUID FOREIGN KEY (PurchaseOrderUID) REFERENCES PurchaseOrders (PurchaseOrderUID) ON DELETE CASCADE,
+    CONSTRAINT FK_PurchaseItems_PurchaseCategories_CategoryUID FOREIGN KEY (CategoryUID) REFERENCES PurchaseCategories (CategoryUID) ON DELETE SET NULL
+);

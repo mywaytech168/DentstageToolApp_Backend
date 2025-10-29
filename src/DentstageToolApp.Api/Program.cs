@@ -16,6 +16,7 @@ using DentstageToolApp.Api.Services.Car;
 using DentstageToolApp.Api.Services.CarPlate;
 using DentstageToolApp.Api.Services.Model;
 using DentstageToolApp.Api.Services.Quotation;
+using DentstageToolApp.Api.Services.Purchase;
 using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Api.Services.MaintenanceOrder;
 using DentstageToolApp.Api.Services.Technician;
@@ -312,6 +313,7 @@ builder.Services.AddScoped<IStoreQueryService, StoreQueryService>();
 builder.Services.AddScoped<IStoreDeviceRegistrationService, StoreDeviceRegistrationService>();
 builder.Services.AddScoped<ITechnicianManagementService, TechnicianManagementService>();
 builder.Services.AddScoped<ITechnicianQueryService, TechnicianQueryService>();
+builder.Services.AddScoped<IPurchaseService, PurchaseService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddScoped<IDatabaseSchemaInitializer, DatabaseSchemaInitializer>();
 builder.Services.AddHttpClient<IRemoteSyncApiClient, RemoteSyncApiClient>(client =>
