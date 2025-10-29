@@ -59,7 +59,7 @@ public class PurchaseService : IPurchaseService
                 .Replace("%", "\\%")
                 .Replace("_", "\\_");
             var likePattern = $"%{escapedKeyword}%";
-            queryable = queryable.Where(order => order.StoreName != null && EF.Functions.Like(order.StoreName!, likePattern, "\\"));
+            queryable = queryable.Where(order => order.Store != null && order.Store.StoreName != null && EF.Functions.Like(order.Store.StoreName!, likePattern, "\\"));
         }
 
         if (startDate.HasValue)
@@ -77,6 +77,7 @@ public class PurchaseService : IPurchaseService
         var totalCount = await queryable.CountAsync(cancellationToken);
 
         var entities = await queryable
+            .Include(order => order.Store)
             .Include(order => order.PurchaseItems)
                 .ThenInclude(item => item.Category)
             .OrderByDescending(order => order.PurchaseDate)
@@ -108,6 +109,7 @@ public class PurchaseService : IPurchaseService
         // ---------- 資料查詢區 ----------
         var entity = await _dbContext.PurchaseOrders
             .AsNoTracking()
+            .Include(order => order.Store)
             .Include(order => order.PurchaseItems)
                 .ThenInclude(item => item.Category)
             .FirstOrDefaultAsync(order => order.PurchaseOrderUid == normalizedUid, cancellationToken);
@@ -121,7 +123,8 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
-            StoreName = entity.StoreName,
+            StoreUid = entity.StoreUid,
+            StoreName = entity.Store?.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
@@ -137,11 +140,20 @@ public class PurchaseService : IPurchaseService
         }
 
         // ---------- 參數整理區 ----------
-        var storeName = NormalizeOptionalText(request.StoreName);
+        var storeUid = NormalizeRequiredText(request.StoreUid, "門市識別碼");
         var operatorLabel = NormalizeOperator(operatorName);
         var items = NormalizeCreateItems(request.Items);
 
         // ---------- 參考資料查詢區 ----------
+        // 先檢查門市是否存在，避免寫入無效的關聯。
+        var store = await _dbContext.Stores
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entity => entity.StoreUid == storeUid, cancellationToken);
+        if (store is null)
+        {
+            throw new PurchaseServiceException(HttpStatusCode.BadRequest, "找不到指定的門市資料。");
+        }
+
         var categoryMap = await ResolveCategoriesAsync(items.Select(item => item.CategoryUid), cancellationToken);
 
         // ---------- 實體建立區 ----------
@@ -152,7 +164,7 @@ public class PurchaseService : IPurchaseService
             PurchaseOrderUid = BuildPurchaseOrderUid(),
             PurchaseOrderNo = BuildPurchaseOrderNo(),
             PurchaseDate = purchaseDate,
-            StoreName = storeName,
+            StoreUid = storeUid,
             CreatedBy = operatorLabel,
             CreationTimestamp = now
         };
@@ -195,7 +207,8 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = orderEntity.PurchaseOrderUid,
             PurchaseOrderNo = orderEntity.PurchaseOrderNo,
-            StoreName = orderEntity.StoreName,
+            StoreUid = orderEntity.StoreUid,
+            StoreName = store.StoreName,
             PurchaseDate = orderEntity.PurchaseDate,
             TotalAmount = orderEntity.TotalAmount,
             Items = MapOrderItems(orderEntity.PurchaseItems)
@@ -229,9 +242,27 @@ public class PurchaseService : IPurchaseService
             entity.PurchaseDate = request.PurchaseDate.Value;
         }
 
-        if (request.StoreName is not null)
+        if (request.StoreUid is not null)
         {
-            entity.StoreName = NormalizeOptionalText(request.StoreName);
+            var normalizedStoreUid = NormalizeOptionalText(request.StoreUid);
+            if (normalizedStoreUid is null)
+            {
+                entity.StoreUid = null;
+                entity.Store = null;
+            }
+            else
+            {
+                // 若帶入新的門市識別碼，需確認門市資料有效。
+                var store = await _dbContext.Stores
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.StoreUid == normalizedStoreUid, cancellationToken);
+                if (store is null)
+                {
+                    throw new PurchaseServiceException(HttpStatusCode.BadRequest, "找不到指定的門市資料。");
+                }
+
+                entity.StoreUid = store.StoreUid;
+            }
         }
 
         // ---------- 參考資料查詢區 ----------
@@ -310,11 +341,16 @@ public class PurchaseService : IPurchaseService
             .Include(item => item.Category)
             .LoadAsync(cancellationToken);
 
+        await _dbContext.Entry(entity)
+            .Reference(order => order.Store)
+            .LoadAsync(cancellationToken);
+
         return new PurchaseOrderDetailResponse
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
-            StoreName = entity.StoreName,
+            StoreUid = entity.StoreUid,
+            StoreName = entity.Store?.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
@@ -514,7 +550,8 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
-            StoreName = entity.StoreName,
+            StoreUid = entity.StoreUid,
+            StoreName = entity.Store?.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
