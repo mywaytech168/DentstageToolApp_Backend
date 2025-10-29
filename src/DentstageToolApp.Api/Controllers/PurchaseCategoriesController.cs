@@ -38,7 +38,7 @@ public class PurchaseCategoriesController : ControllerBase
     /// <summary>
     /// 取得採購品項類別列表，改為透過 POST Body 傳遞分頁條件。
     /// </summary>
-    [HttpPost("search")]
+    [HttpPost]
     [SwaggerMockRequestExample(
         """
         {
@@ -81,7 +81,7 @@ public class PurchaseCategoriesController : ControllerBase
     /// <summary>
     /// 建立採購品項類別。
     /// </summary>
-    [HttpPost]
+    [HttpPost("create")]
     [SwaggerMockRequestExample(
         """
         {

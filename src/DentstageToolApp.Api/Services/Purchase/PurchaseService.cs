@@ -362,24 +362,17 @@ public class PurchaseService : IPurchaseService
     public async Task DeletePurchaseOrderAsync(DeletePurchaseOrderRequest request, string operatorName, CancellationToken cancellationToken)
     {
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(request?.PurchaseOrderUid, "採購單識別碼");
         var normalizedNo = NormalizeRequiredText(request?.PurchaseOrderNo, "採購單單號");
         var operatorLabel = NormalizeOperator(operatorName);
 
         // ---------- 資料查詢區 ----------
         var entity = await _dbContext.PurchaseOrders
             .Include(order => order.PurchaseItems)
-            .FirstOrDefaultAsync(order => order.PurchaseOrderUid == normalizedUid, cancellationToken);
+            .FirstOrDefaultAsync(order => order.PurchaseOrderNo == normalizedNo, cancellationToken);
 
         if (entity is null)
         {
             throw new PurchaseServiceException(HttpStatusCode.NotFound, "找不到對應的採購單資料。");
-        }
-
-        if (!string.Equals(entity.PurchaseOrderNo, normalizedNo, StringComparison.OrdinalIgnoreCase))
-        {
-            // 若單號不符，直接拒絕刪除以防止錯誤操作。
-            throw new PurchaseServiceException(HttpStatusCode.Conflict, "提供的採購單單號與系統紀錄不一致，請重新確認資料。");
         }
 
         _dbContext.PurchaseOrders.Remove(entity);
