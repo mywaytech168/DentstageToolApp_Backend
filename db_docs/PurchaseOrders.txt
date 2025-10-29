@@ -1,0 +1,11 @@
+CREATE TABLE PurchaseOrders (
+    PurchaseOrderUID       VARCHAR(100) PRIMARY KEY,
+    PurchaseOrderNo        VARCHAR(100) NOT NULL,
+    StoreUID               VARCHAR(100) NULL REFERENCES stores(StoreUID),
+    PurchaseDate           DATE,
+    TotalAmount            DECIMAL(18,2) NOT NULL,
+    CreationTimestamp      DATETIME,
+    CreatedBy              VARCHAR(50),
+    ModificationTimestamp  DATETIME,
+    ModifiedBy             VARCHAR(50)
+);
