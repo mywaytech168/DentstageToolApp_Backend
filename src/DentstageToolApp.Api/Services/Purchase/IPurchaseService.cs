@@ -32,7 +32,7 @@ public interface IPurchaseService
     /// <summary>
     /// 刪除採購單。
     /// </summary>
-    Task DeletePurchaseOrderAsync(string purchaseOrderUid, string operatorName, CancellationToken cancellationToken);
+    Task DeletePurchaseOrderAsync(DeletePurchaseOrderRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
     /// 取得採購品項類別列表。
@@ -52,5 +52,5 @@ public interface IPurchaseService
     /// <summary>
     /// 刪除採購品項類別。
     /// </summary>
-    Task DeleteCategoryAsync(string categoryUid, string operatorName, CancellationToken cancellationToken);
+    Task DeleteCategoryAsync(DeletePurchaseCategoryRequest request, string operatorName, CancellationToken cancellationToken);
 }

@@ -155,19 +155,30 @@ public class PurchaseCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// 刪除採購品項類別。
+    /// 刪除採購品項類別，UID 需由 Request Body 帶入。
     /// </summary>
-    [HttpDelete("{categoryUid}")]
+    [HttpDelete]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "categoryUid": "PC_6A4D9E5F-3B24-4F9D-A19F-2F8A993CB11F"
+        }
+        """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> DeleteCategoryAsync(string categoryUid, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeleteCategoryAsync([FromBody] DeletePurchaseCategoryRequest request, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
             var operatorName = GetCurrentOperatorName();
-            await _purchaseService.DeleteCategoryAsync(categoryUid, operatorName, cancellationToken);
+            await _purchaseService.DeleteCategoryAsync(request, operatorName, cancellationToken);
             return NoContent();
         }
         catch (PurchaseServiceException ex)
