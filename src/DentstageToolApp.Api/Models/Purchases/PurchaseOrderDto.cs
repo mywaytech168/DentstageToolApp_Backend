@@ -19,6 +19,11 @@ public class PurchaseOrderDto
     public string PurchaseOrderNo { get; set; } = string.Empty;
 
     /// <summary>
+    /// 採購單所屬店鋪名稱。
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
     /// 採購日期。
     /// </summary>
     public DateOnly? PurchaseDate { get; set; }

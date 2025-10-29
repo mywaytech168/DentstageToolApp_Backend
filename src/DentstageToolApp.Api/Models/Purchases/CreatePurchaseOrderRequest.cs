@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
@@ -10,10 +9,10 @@ namespace DentstageToolApp.Api.Models.Purchases;
 public class CreatePurchaseOrderRequest
 {
     /// <summary>
-    /// 採購日期。
+    /// 建立採購單所屬的店鋪名稱，方便之後於列表中進行模糊搜尋。
     /// </summary>
-    [Required(ErrorMessage = "請填寫採購日期。")]
-    public DateOnly? PurchaseDate { get; set; }
+    [StringLength(200, ErrorMessage = "店鋪名稱長度不可超過 200 個字元。")]
+    public string? StoreName { get; set; }
 
     /// <summary>
     /// 採購品項清單。

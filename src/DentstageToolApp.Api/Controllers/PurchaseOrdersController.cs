@@ -37,7 +37,7 @@ public class PurchaseOrdersController : ControllerBase
     // ---------- API 呼叫區 ----------
 
     /// <summary>
-    /// 取得採購單列表。
+    /// 取得採購單列表，支援店鋪關鍵字與日期區間搜尋。
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(PurchaseOrderListResponse), StatusCodes.Status200OK)]
@@ -99,13 +99,13 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 新增採購單。
+    /// 新增採購單，系統會自動以建立時間的日期填入採購日期。
     /// </summary>
     [HttpPost]
     [SwaggerMockRequestExample(
         """
         {
-          "purchaseDate": "2024-07-10",
+          "storeName": "台北民權店",
           "items": [
             {
               "itemName": "烤漆材料",
@@ -163,6 +163,7 @@ public class PurchaseOrdersController : ControllerBase
         """
         {
           "purchaseOrderUid": "PU_9D5F5241-6680-4EEB-A3D3-ACCCFD0B8C74",
+          "storeName": "台北民權店",
           "purchaseDate": "2024-07-12",
           "items": [
             {

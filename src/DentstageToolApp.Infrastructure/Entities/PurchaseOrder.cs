@@ -39,6 +39,11 @@ public class PurchaseOrder
     public string PurchaseOrderNo { get; set; } = string.Empty;
 
     /// <summary>
+    /// 採購單所屬店鋪名稱，供前端顯示與列表模糊搜尋使用。
+    /// </summary>
+    public string? StoreName { get; set; }
+
+    /// <summary>
     /// 採購日期。
     /// </summary>
     public DateOnly? PurchaseDate { get; set; }
