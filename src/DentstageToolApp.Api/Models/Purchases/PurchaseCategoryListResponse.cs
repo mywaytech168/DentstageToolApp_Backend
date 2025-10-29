@@ -14,8 +14,8 @@ public class PurchaseCategoryListResponse
     public PaginationMetadata Pagination { get; set; } = new PaginationMetadata();
 
     /// <summary>
-    /// 採購品項類別清單。
+    /// 採購品項類別清單，統一以 Items 命名便於前端解析。
     /// </summary>
-    public IReadOnlyCollection<PurchaseCategoryDto> Categories { get; set; }
+    public IReadOnlyCollection<PurchaseCategoryDto> Items { get; set; }
         = new List<PurchaseCategoryDto>();
 }
