@@ -61,7 +61,7 @@ public class PurchaseService : IPurchaseService
                 PageSize = pageSize,
                 TotalCount = totalCount
             },
-            Orders = entities.Select(MapOrderEntity).ToList()
+            Items = entities.Select(MapOrderEntity).ToList()
         };
 
         return response;
@@ -329,7 +329,7 @@ public class PurchaseService : IPurchaseService
                 PageSize = pageSize,
                 TotalCount = totalCount
             },
-            Categories = categories
+            Items = categories
                 .Select(category => new PurchaseCategoryDto
                 {
                     CategoryUid = category.CategoryUid,
