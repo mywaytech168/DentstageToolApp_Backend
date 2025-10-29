@@ -162,27 +162,61 @@ public class CarManagementService : ICarManagementService
             throw new CarManagementException(HttpStatusCode.NotFound, "找不到對應的車輛資料，請確認識別碼是否正確。");
         }
 
-        var resolvedBrand = await ResolveBrandAsync(request.BrandUid, cancellationToken);
-        var resolvedModel = await ResolveModelAsync(request.ModelUid, resolvedBrand?.BrandUid, cancellationToken);
+        // 透過旗標紀錄前端是否有帶入各欄位，缺少欄位時避免覆寫原始資料。
+        var hasBrandInput = request.BrandUid is not null;
+        var hasModelInput = request.ModelUid is not null;
+        var hasColorInput = request.Color is not null;
+        var hasRemarkInput = request.Remark is not null;
 
-        // 若模型帶有品牌資訊，但外部未傳入品牌，則以模型所屬品牌為主。
-        if (!string.IsNullOrWhiteSpace(resolvedModel?.BrandUid) && resolvedBrand is null)
+        // 僅在有帶入識別碼或需要透過模型回推品牌時，才進行資料庫查詢。
+        var resolvedBrand = hasBrandInput
+            ? await ResolveBrandAsync(request.BrandUid, cancellationToken)
+            : null;
+        var resolvedModel = hasModelInput
+            ? await ResolveModelAsync(request.ModelUid, resolvedBrand?.BrandUid, cancellationToken)
+            : null;
+
+        // 若模型帶有品牌資訊但未傳入品牌識別碼，利用模型資訊回推品牌名稱。
+        if (!hasBrandInput && !string.IsNullOrWhiteSpace(resolvedModel?.BrandUid))
         {
             resolvedBrand = await ResolveBrandAsync(resolvedModel!.BrandUid, cancellationToken);
         }
 
-        // 當品牌有指定且模型也有帶入時，需驗證兩者是否一致。
-        if (resolvedBrand is not null && resolvedModel is not null && !string.Equals(resolvedBrand.BrandUid, resolvedModel.BrandUid, StringComparison.Ordinal))
+        // 當品牌與模型皆有輸入時，確認兩者是否屬於同一品牌，避免寫入錯誤配對。
+        if (hasBrandInput && hasModelInput && resolvedBrand is not null && resolvedModel is not null && !string.Equals(resolvedBrand.BrandUid, resolvedModel.BrandUid, StringComparison.Ordinal))
         {
             throw new CarManagementException(HttpStatusCode.BadRequest, "車型與品牌不相符，請重新選擇後再儲存。");
         }
 
-        var brand = NormalizeOptionalText(resolvedBrand?.BrandName);
-        var model = NormalizeOptionalText(resolvedModel?.ModelName);
-        var color = NormalizeOptionalText(request.Color);
-        var remark = NormalizeOptionalText(request.Remark);
-        // 編輯流程同樣保留里程數原始數值，避免不必要的型別轉換造成落差。
-        var mileage = request.Mileage;
+        // 預設沿用原資料，若前端有帶入值才更新成新內容。
+        var brand = carEntity.Brand;
+        var model = carEntity.Model;
+        var color = carEntity.Color;
+        var remark = carEntity.CarRemark;
+
+        if (hasBrandInput || (!hasBrandInput && resolvedBrand is not null))
+        {
+            // NormalizeOptionalText 可同時支援清空（回傳 null）與更新文字內容。
+            brand = NormalizeOptionalText(resolvedBrand?.BrandName);
+        }
+
+        if (hasModelInput)
+        {
+            model = NormalizeOptionalText(resolvedModel?.ModelName);
+        }
+
+        if (hasColorInput)
+        {
+            color = NormalizeOptionalText(request.Color);
+        }
+
+        if (hasRemarkInput)
+        {
+            remark = NormalizeOptionalText(request.Remark);
+        }
+
+        // 編輯流程同樣保留里程數原始數值，若未帶入視為不更新。
+        var mileage = request.Mileage.HasValue ? request.Mileage : carEntity.Milage;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -209,16 +243,37 @@ public class CarManagementService : ICarManagementService
         var now = DateTime.UtcNow;
         carEntity.CarNo = storedPlate;
         carEntity.CarNoQuery = normalizedPlate;
-        carEntity.Brand = brand;
-        carEntity.Model = model;
-        carEntity.Color = color;
-        carEntity.CarRemark = remark;
-        // 里程數允許為空值，若前端提供資料則直接覆寫以維持最新車況。
-        if (mileage.HasValue)
+        if (!string.Equals(carEntity.Brand, brand, StringComparison.Ordinal))
+        {
+            carEntity.Brand = brand;
+        }
+
+        if (!string.Equals(carEntity.Model, model, StringComparison.Ordinal))
+        {
+            carEntity.Model = model;
+        }
+
+        if (!string.Equals(carEntity.Color, color, StringComparison.Ordinal))
+        {
+            carEntity.Color = color;
+        }
+
+        if (!string.Equals(carEntity.CarRemark, remark, StringComparison.Ordinal))
+        {
+            carEntity.CarRemark = remark;
+        }
+
+        // 里程數允許為空值，僅在實際帶入資料時才進行覆寫。
+        if (request.Mileage.HasValue && carEntity.Milage != mileage)
         {
             carEntity.Milage = mileage;
         }
-        carEntity.BrandModel = BuildBrandModel(brand, model);
+
+        var brandModel = BuildBrandModel(brand, model);
+        if (!string.Equals(carEntity.BrandModel, brandModel, StringComparison.Ordinal))
+        {
+            carEntity.BrandModel = brandModel;
+        }
         carEntity.ModificationTimestamp = now;
         carEntity.ModifiedBy = operatorLabel;
 
