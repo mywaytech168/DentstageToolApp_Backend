@@ -1,6 +1,7 @@
 CREATE TABLE PurchaseOrders (
     PurchaseOrderUID       VARCHAR(100) PRIMARY KEY,
     PurchaseOrderNo        VARCHAR(100) NOT NULL,
+    StoreName              VARCHAR(200),
     PurchaseDate           DATE,
     TotalAmount            DECIMAL(18,2) NOT NULL,
     CreationTimestamp      DATETIME,

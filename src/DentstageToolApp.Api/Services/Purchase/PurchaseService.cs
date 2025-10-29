@@ -39,9 +39,41 @@ public class PurchaseService : IPurchaseService
         var normalizedQuery = query ?? new PurchaseOrderListQuery();
         var (page, pageSize) = normalizedQuery.Normalize();
         var skip = (page - 1) * pageSize;
+        var storeKeyword = NormalizeOptionalText(normalizedQuery.StoreKeyword);
+        var startDate = normalizedQuery.StartDate;
+        var endDate = normalizedQuery.EndDate;
+
+        if (startDate.HasValue && endDate.HasValue && startDate > endDate)
+        {
+            throw new PurchaseServiceException(HttpStatusCode.BadRequest, "起始日期不可晚於結束日期。");
+        }
 
         // ---------- 資料查詢區 ----------
         var queryable = _dbContext.PurchaseOrders.AsNoTracking();
+
+        if (storeKeyword is not null)
+        {
+            // 店鋪關鍵字採用資料庫 LIKE 查詢以支援模糊比對。
+            var escapedKeyword = storeKeyword
+                .Replace("\\", "\\\\")
+                .Replace("%", "\\%")
+                .Replace("_", "\\_");
+            var likePattern = $"%{escapedKeyword}%";
+            queryable = queryable.Where(order => order.StoreName != null && EF.Functions.Like(order.StoreName!, likePattern, "\\"));
+        }
+
+        if (startDate.HasValue)
+        {
+            var start = startDate.Value;
+            queryable = queryable.Where(order => order.PurchaseDate.HasValue && order.PurchaseDate.Value >= start);
+        }
+
+        if (endDate.HasValue)
+        {
+            var end = endDate.Value;
+            queryable = queryable.Where(order => order.PurchaseDate.HasValue && order.PurchaseDate.Value <= end);
+        }
+
         var totalCount = await queryable.CountAsync(cancellationToken);
 
         var entities = await queryable
@@ -89,6 +121,7 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
+            StoreName = entity.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
@@ -104,7 +137,7 @@ public class PurchaseService : IPurchaseService
         }
 
         // ---------- 參數整理區 ----------
-        var purchaseDate = NormalizeRequiredDate(request.PurchaseDate, "採購日期");
+        var storeName = NormalizeOptionalText(request.StoreName);
         var operatorLabel = NormalizeOperator(operatorName);
         var items = NormalizeCreateItems(request.Items);
 
@@ -113,11 +146,13 @@ public class PurchaseService : IPurchaseService
 
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
+        var purchaseDate = DateOnly.FromDateTime(now);
         var orderEntity = new PurchaseOrder
         {
             PurchaseOrderUid = BuildPurchaseOrderUid(),
             PurchaseOrderNo = BuildPurchaseOrderNo(),
             PurchaseDate = purchaseDate,
+            StoreName = storeName,
             CreatedBy = operatorLabel,
             CreationTimestamp = now
         };
@@ -160,6 +195,7 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = orderEntity.PurchaseOrderUid,
             PurchaseOrderNo = orderEntity.PurchaseOrderNo,
+            StoreName = orderEntity.StoreName,
             PurchaseDate = orderEntity.PurchaseDate,
             TotalAmount = orderEntity.TotalAmount,
             Items = MapOrderItems(orderEntity.PurchaseItems)
@@ -191,6 +227,11 @@ public class PurchaseService : IPurchaseService
         if (request.PurchaseDate.HasValue)
         {
             entity.PurchaseDate = request.PurchaseDate.Value;
+        }
+
+        if (request.StoreName is not null)
+        {
+            entity.StoreName = NormalizeOptionalText(request.StoreName);
         }
 
         // ---------- 參考資料查詢區 ----------
@@ -273,6 +314,7 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
+            StoreName = entity.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
@@ -472,6 +514,7 @@ public class PurchaseService : IPurchaseService
         {
             PurchaseOrderUid = entity.PurchaseOrderUid,
             PurchaseOrderNo = entity.PurchaseOrderNo,
+            StoreName = entity.StoreName,
             PurchaseDate = entity.PurchaseDate,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
@@ -502,16 +545,6 @@ public class PurchaseService : IPurchaseService
         }
 
         return value.Trim();
-    }
-
-    private static DateOnly NormalizeRequiredDate(DateOnly? value, string fieldName)
-    {
-        if (!value.HasValue)
-        {
-            throw new PurchaseServiceException(HttpStatusCode.BadRequest, $"請提供{fieldName}。");
-        }
-
-        return value.Value;
     }
 
     private static string NormalizeOperator(string? operatorName)

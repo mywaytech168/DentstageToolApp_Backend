@@ -40,7 +40,7 @@
 維修中,終止維修,POST,/api/maintenance-orders/terminate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_TERMINATE
 維修中,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
 維修完成,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
-後台維運,取得採購單列表,GET,/api/purchase-orders,"支援 page、pageSize 查詢參數；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
+後台維運,取得採購單列表,GET,/api/purchase-orders,"支援 page、pageSize、storeKeyword、startDate、endDate 查詢參數；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
 後台維運,取得採購單,GET,/api/purchase-orders/{purchaseOrderUid},"無外部文件（無 OperationId）"
 後台維運,新增採購單,POST,/api/purchase-orders,"無外部文件（無 OperationId）"
 後台維運,更新採購單,POST,/api/purchase-orders/edit,"無外部文件（無 OperationId）"
