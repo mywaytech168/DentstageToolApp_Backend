@@ -159,10 +159,11 @@ public class PurchaseService : IPurchaseService
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
         var purchaseDate = DateOnly.FromDateTime(now);
+        var purchaseOrderNo = await GeneratePurchaseOrderNoAsync(now, cancellationToken);
         var orderEntity = new PurchaseOrder
         {
             PurchaseOrderUid = BuildPurchaseOrderUid(),
-            PurchaseOrderNo = BuildPurchaseOrderNo(),
+            PurchaseOrderNo = purchaseOrderNo,
             PurchaseDate = purchaseDate,
             StoreUid = normalizedStoreUid,
             CreatedBy = operatorLabel,
@@ -615,9 +616,40 @@ public class PurchaseService : IPurchaseService
         return $"PO_{Guid.NewGuid().ToString().ToUpperInvariant()}";
     }
 
-    private static string BuildPurchaseOrderNo()
+    private async Task<string> GeneratePurchaseOrderNoAsync(DateTime now, CancellationToken cancellationToken)
     {
-        return $"PU_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+        // ---------- 採購單號生成邏輯 ----------
+        // 以「PO_ + 年月 + 四位流水序號」的格式建立採購單號，例如：PO_2025100001。
+        var prefix = $"PO_{now:yyyyMM}";
+
+        // ---------- 取得當月最後一筆序號 ----------
+        // 為了確保序號遞增，從資料庫查詢同年月前綴的最後一筆採購單號。
+        var latestOrderNo = await _dbContext.PurchaseOrders
+            .AsNoTracking()
+            .Where(order => order.PurchaseOrderNo.StartsWith(prefix))
+            .OrderByDescending(order => order.PurchaseOrderNo)
+            .Select(order => order.PurchaseOrderNo)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var nextSequence = 1;
+
+        if (!string.IsNullOrWhiteSpace(latestOrderNo))
+        {
+            // 解析出流水號的數字部分，若轉換成功則加一繼續使用。
+            var sequenceText = latestOrderNo[prefix.Length..];
+            if (int.TryParse(sequenceText, out var parsedSequence))
+            {
+                nextSequence = parsedSequence + 1;
+            }
+        }
+
+        if (nextSequence > 9999)
+        {
+            // 每月僅允許四位序號，若超出範圍代表用量異常，直接回報錯誤提醒管理者處理。
+            throw new PurchaseServiceException(HttpStatusCode.InternalServerError, "當月採購單號已達上限，請聯繫系統管理員協助處理。");
+        }
+
+        return $"{prefix}{nextSequence:0000}";
     }
 
     private static string BuildPurchaseItemUid()
