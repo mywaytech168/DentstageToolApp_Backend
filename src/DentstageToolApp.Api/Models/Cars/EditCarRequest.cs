@@ -15,9 +15,8 @@ public class EditCarRequest
     public string? CarUid { get; set; }
 
     /// <summary>
-    /// 車牌號碼，更新時仍須符合格式檢核。
+    /// 車牌號碼，改為選填，留空代表沿用原資料。
     /// </summary>
-    [Required(ErrorMessage = "請輸入車牌號碼。")]
     [StringLength(50, ErrorMessage = "車牌號碼長度不得超過 50 個字元。")]
     public string? CarPlateNumber { get; set; }
 
