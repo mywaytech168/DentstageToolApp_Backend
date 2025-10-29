@@ -216,18 +216,29 @@ public class PurchaseOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 刪除採購單。
+    /// 刪除採購單，需在 Request Body 內提供 purchaseOrderUid。
     /// </summary>
-    [HttpDelete("{purchaseOrderUid}")]
+    [HttpDelete]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "purchaseOrderUid": "PU_25C6F955-6CD6-4B5B-9EF4-5EAC0F0A1CC1"
+        }
+        """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> DeletePurchaseOrderAsync(string purchaseOrderUid, CancellationToken cancellationToken)
+    public async Task<IActionResult> DeletePurchaseOrderAsync([FromBody] DeletePurchaseOrderRequest request, CancellationToken cancellationToken)
     {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
         try
         {
             var operatorName = GetCurrentOperatorName();
-            await _purchaseService.DeletePurchaseOrderAsync(purchaseOrderUid, operatorName, cancellationToken);
+            await _purchaseService.DeletePurchaseOrderAsync(request, operatorName, cancellationToken);
             return NoContent();
         }
         catch (PurchaseServiceException ex)

@@ -175,7 +175,7 @@ public class PurchaseService : IPurchaseService
         }
 
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(request.PurchaseOrderUid, "採購單識別碼");
+        var normalizedUid = NormalizeRequiredText(request?.PurchaseOrderUid, "採購單識別碼");
         var operatorLabel = NormalizeOperator(operatorName);
 
         // ---------- 資料查詢區 ----------
@@ -280,10 +280,10 @@ public class PurchaseService : IPurchaseService
     }
 
     /// <inheritdoc />
-    public async Task DeletePurchaseOrderAsync(string purchaseOrderUid, string operatorName, CancellationToken cancellationToken)
+    public async Task DeletePurchaseOrderAsync(DeletePurchaseOrderRequest request, string operatorName, CancellationToken cancellationToken)
     {
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(purchaseOrderUid, "採購單識別碼");
+        var normalizedUid = NormalizeRequiredText(request?.PurchaseOrderUid, "採購單識別碼");
         var operatorLabel = NormalizeOperator(operatorName);
 
         // ---------- 資料查詢區 ----------
@@ -392,7 +392,7 @@ public class PurchaseService : IPurchaseService
         }
 
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(request.CategoryUid, "類別識別碼");
+        var normalizedUid = NormalizeRequiredText(request?.CategoryUid, "類別識別碼");
         var categoryName = NormalizeRequiredText(request.CategoryName, "類別名稱");
         var operatorLabel = NormalizeOperator(operatorName);
 
@@ -432,10 +432,10 @@ public class PurchaseService : IPurchaseService
     }
 
     /// <inheritdoc />
-    public async Task DeleteCategoryAsync(string categoryUid, string operatorName, CancellationToken cancellationToken)
+    public async Task DeleteCategoryAsync(DeletePurchaseCategoryRequest request, string operatorName, CancellationToken cancellationToken)
     {
         // ---------- 參數整理區 ----------
-        var normalizedUid = NormalizeRequiredText(categoryUid, "類別識別碼");
+        var normalizedUid = NormalizeRequiredText(request?.CategoryUid, "類別識別碼");
         var operatorLabel = NormalizeOperator(operatorName);
 
         // ---------- 資料查詢區 ----------
