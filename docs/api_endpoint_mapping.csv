@@ -1,4 +1,4 @@
-﻿流程階段,功能,HTTP Method,API-EN,額外文檔
+流程階段,功能,HTTP Method,API-EN,額外文檔
 通用,登入,POST,/api/auth/login,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_AUTH_LOGIN
 通用,顯示使用者帳號,GET,/api/auth/info,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_AUTH_INFO
 通用,上傳圖片,POST,/api/photos,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PHOTOS
@@ -17,14 +17,14 @@
 估價中(編輯中),編輯車輛資料,POST,/api/cars/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CARS_EDIT
 估價中(編輯中),編輯客戶資料,POST,/api/customers/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CUSTOMERS_EDIT
 估價中(編輯中),編輯估價單,POST,/api/quotations/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_EDIT
-估價中(編輯中),刪除估價單,POST,/api/quotations/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_DELETE
+估價中(編輯中),刪除估價單,DELETE,/api/quotations/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_QUOTATIONS_DELETE
 估價中(編輯中),估價完成,POST,/api/quotations/evaluate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_EVALUATE
 估價中(編輯中),誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_REVERT
-估價完成,自動過期,OTHER,"（系統自動排程，無需呼叫 API）","無外部文件（無 OperationId）"
+估價完成,自動過期,OTHER,（系統自動排程，無需呼叫 API）,無外部文件（無 OperationId）
 估價完成,取消,POST,/api/quotations/cancel,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_CANCEL
 估價完成,轉預約,POST,/api/quotations/reserve,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_RESERVE
 估價完成,誤按回溯,POST,/api/quotations/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_REVERT
-已預約,自動過期,OTHER,"（系統自動排程，無需呼叫 API）","無外部文件（無 OperationId）"
+已預約,自動過期,OTHER,（系統自動排程，無需呼叫 API）,無外部文件（無 OperationId）
 已預約,取消預約,POST,/api/quotations/reserve/cancel,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_RESERVE_CANCEL
 已預約,更改預約,POST,/api/quotations/reserve/update,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_RESERVE_UPDATE
 已預約,轉維修,POST,/api/quotations/maintenance,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_MAINTENANCE
@@ -40,12 +40,29 @@
 維修中,終止維修,POST,/api/maintenance-orders/terminate,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_TERMINATE
 維修中,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
 維修完成,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
-後台維運,取得採購單列表,POST,/api/purchase-orders,"Body 需傳入 page、pageSize，可選填 storeKeyword、startDate、endDate；支援以店鋪名稱模糊查詢；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
-後台維運,取得採購單,POST,/api/purchase-orders/detail,"Body 需傳入 purchaseOrderNo；無外部文件（無 OperationId）"
-後台維運,新增採購單,POST,/api/purchase-orders/create,"Body 需帶入 items；門市識別碼由登入者權杖自動注入；無外部文件（無 OperationId）"
-後台維運,更新採購單,POST,/api/purchase-orders/edit,"Body 需帶入 purchaseOrderUid、items，可選填 storeUid；無外部文件（無 OperationId）"
-後台維運,刪除採購單,DELETE,/api/purchase-orders,"Body 需傳入 purchaseOrderUid 與 purchaseOrderNo 進行雙重驗證；無外部文件（無 OperationId）"
-後台維運,取得採購品項類別列表,POST,/api/purchase-categories/search,"Body 需傳入 page、pageSize；回傳 items 與 pagination 結構；無外部文件（無 OperationId）"
-後台維運,新增採購品項類別,POST,/api/purchase-categories,"無外部文件（無 OperationId）"
-後台維運,更新採購品項類別,POST,/api/purchase-categories/edit,"無外部文件（無 OperationId）"
-後台維運,刪除採購品項類別,DELETE,/api/purchase-categories,"Body 需傳入 categoryUid；無外部文件（無 OperationId）"
+採購單,取得採購單列表,POST,/api/purchase-orders,Body 需傳入 page、pageSize，可選填 storeKeyword、startDate、endDate；支援以店鋪名稱模糊查詢；回傳 items 與 pagination 結構；API 文件：https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_ORDERS
+採購單,取得採購單,POST,/api/purchase-orders/detail,Body 需傳入 purchaseOrderNo；API 文件：https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_ORDERS_DETAIL
+採購單,新增採購單,POST,/api/purchase-orders/create,Body 需帶入 items；門市識別碼由登入者權杖自動注入；API 文件：https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_ORDERS_CREATE
+採購單,更新採購單,POST,/api/purchase-orders/edit,Body 需帶入 purchaseOrderUid、items，可選填 storeUid；API 文件：https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_ORDERS_EDIT
+採購單,刪除採購單,DELETE,/api/purchase-orders,Body 需傳入 purchaseOrderUid 與 purchaseOrderNo 進行雙重驗證；API 文件：https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_PURCHASE_ORDERS
+資料維護-品牌型號,取得品牌型號列表,GET,/api/brands,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_BRANDS
+資料維護-品牌型號,新增品牌,POST,/api/brands,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_BRANDS
+資料維護-品牌型號,修改品牌,POST,/api/brands/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_BRANDS_EDIT
+資料維護-品牌型號,刪除品牌,DELETE,/api/brands/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_BRANDS_DELETE
+資料維護-品牌型號,新增型號,POST,/api/models,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MODELS
+資料維護-品牌型號,修改型號,POST,/api/models/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MODELS_EDIT
+資料維護-品牌型號,刪除型號,DELETE,/api/models/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_MODELS_DELETE
+資料維護-員工技師名單,取得分店技師列表,GET,/api/stores,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_STORES
+資料維護-員工技師名單,新增分店,POST,/api/stores,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_STORES
+資料維護-員工技師名單,修改分店,POST,/api/stores/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_STORES_EDIT
+資料維護-員工技師名單,刪除分店,DELETE,/api/stores/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_STORES_DELETE
+資料維護-員工技師名單,新增分店成員(技師),POST,/api/technicians,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_TECHNICIANS
+資料維護-員工技師名單,修改分店成員(技師),POST,/api/technicians/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_TECHNICIANS_EDIT
+資料維護-員工技師名單,刪除分店成員(技師),DELETE,/api/technicians/delete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_TECHNICIANS_DELETE
+資料維護-採購單品項類別,取得採購單品項類別列表,GET,/api/purchase-categories,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_PURCHASE_CATEGORIES
+資料維護-採購單品項類別,新增類別,POST,/api/purchase-categories,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_CATEGORIES
+資料維護-採購單品項類別,修改類別,POST,/api/purchase-categories/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_PURCHASE_CATEGORIES_EDIT
+資料維護-採購單品項類別,刪除類別,DELETE,/api/purchase-categories,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=DELETE_API_PURCHASE_CATEGORIES
+系統層,檢查版本號並派送新APK,GET,/api/AppReleases/latest,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=GET_API_APPRELEASES_LATEST
+客戶搜尋,透過電話搜尋客戶資料,POST,/api/customers/customer-phone-search,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CUSTOMERS_CUSTOMER_PHONE_SEARCH
+車牌搜尋,透過車牌搜尋車輛資料,POST,/api/cars/car-plate-search,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_CARS_CAR_PLATE_SEARCH
