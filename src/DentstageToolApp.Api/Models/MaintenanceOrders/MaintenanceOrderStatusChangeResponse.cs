@@ -31,4 +31,9 @@ public class MaintenanceOrderStatusChangeResponse
     /// 額外提示訊息。
     /// </summary>
     public string? Message { get; set; }
+
+    /// <summary>
+    /// 維修完成後提供給前端顯示或下載的 QRCode 網址，預設為假資料以利前端先行串接。
+    /// </summary>
+    public string? QrcodeUrl { get; set; }
 }
