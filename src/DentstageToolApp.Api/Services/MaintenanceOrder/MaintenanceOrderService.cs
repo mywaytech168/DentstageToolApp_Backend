@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
-using DentstageToolApp.Api.Models.Quotations;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Text.Json;
 using DentstageToolApp.Api.Models.MaintenanceOrders;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Api.Models.Quotations;
@@ -31,6 +32,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private readonly ILogger<MaintenanceOrderService> _logger;
     private readonly IQuotationService _quotationService;
     private readonly PhotoStorageOptions _photoStorageOptions;
+    private readonly MaintenanceOrderOptions _maintenanceOrderOptions;
 
     /// <summary>
     /// 建構子，注入資料庫內容物件與記錄器。
@@ -39,12 +41,14 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         DentstageToolAppContext dbContext,
         ILogger<MaintenanceOrderService> logger,
         IQuotationService quotationService,
-        IOptions<PhotoStorageOptions> photoStorageOptions)
+        IOptions<PhotoStorageOptions> photoStorageOptions,
+        IOptions<MaintenanceOrderOptions> maintenanceOrderOptions)
     {
         _dbContext = dbContext;
         _logger = logger;
         _quotationService = quotationService;
         _photoStorageOptions = photoStorageOptions?.Value ?? new PhotoStorageOptions();
+        _maintenanceOrderOptions = maintenanceOrderOptions?.Value ?? new MaintenanceOrderOptions();
     }
 
     // ---------- API 呼叫區 ----------
@@ -157,8 +161,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         // ---------- 同步估價單詳情 ----------
         // 先嘗試取得估價單詳情，成功時可沿用估價單的完整巢狀結構，失敗時則回退至維修單原始欄位。
         var quotationDetail = await TryGetQuotationDetailAsync(orderEntity, cancellationToken);
+        var actualAmount = await CalculateActualAmountAsync(orderEntity, quotationDetail, cancellationToken);
+        var netAmount = CalculateNetAmount(actualAmount, orderEntity.Rebate);
 
-        return MapToDetail(orderEntity, quotationDetail);
+        return MapToDetail(orderEntity, quotationDetail, actualAmount, netAmount);
     }
 
     /// <summary>
@@ -443,6 +449,13 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.CreatorTechnicianUid = quotation.CreatorTechnicianUid;
         order.Amount = amount;
 
+        var updatedActual = await CalculateActualAmountAsync(order, null, cancellationToken);
+        var updatedNet = CalculateNetAmount(updatedActual, order.Rebate);
+        if (updatedActual.HasValue)
+        {
+            order.Amount = updatedNet ?? updatedActual;
+        }
+
         // ---------- 維修單取消狀態同步 ----------
         var unrepairableReason = NormalizeOptionalText(quotation.RejectReason);
         var hasUnrepairableReason = !string.IsNullOrWhiteSpace(unrepairableReason);
@@ -686,6 +699,75 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         };
     }
 
+    /// <inheritdoc />
+    public async Task<MaintenanceOrderRebateResponse> ApplyRebateAsync(MaintenanceOrderRebateRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.BadRequest, "請提供退傭資料。");
+        }
+
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var password = NormalizeRequiredText(request.Password, "退傭密碼");
+        var operatorLabel = NormalizeOperator(operatorName);
+
+        if (!ValidateRebatePassword(password))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Forbidden, "退傭密碼驗證失敗，請重新輸入。");
+        }
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var order = await _dbContext.Orders
+            .Include(entity => entity.Quatation)
+            .FirstOrDefaultAsync(entity => entity.OrderNo == orderNo, cancellationToken);
+
+        if (order is null)
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.NotFound, "查無需退傭的維修單。");
+        }
+
+        var normalizedStatus = NormalizeOptionalText(order.Status);
+        if (!string.Equals(normalizedStatus, "290", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.Conflict, "僅能在維修完成後進行退傭。請確認維修單狀態是否為 290。");
+        }
+
+        var now = GetTaipeiNow();
+        order.Rebate = request.RebateAmount;
+        var actualAmount = await CalculateActualAmountAsync(order, null, cancellationToken);
+        var netAmount = CalculateNetAmount(actualAmount, order.Rebate);
+
+        if (actualAmount.HasValue)
+        {
+            order.Amount = netAmount ?? actualAmount;
+        }
+
+        order.ModificationTimestamp = now;
+        order.ModifiedBy = operatorLabel;
+        order.CurrentStatusDate = now;
+        order.CurrentStatusUser = operatorLabel;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "操作人員 {Operator} 對維修單 {OrderNo} 設定退傭金額 {Rebate}，實際金額 {Actual}、淨額 {Net}。",
+            operatorLabel,
+            orderNo,
+            request.RebateAmount,
+            actualAmount,
+            netAmount);
+
+        return new MaintenanceOrderRebateResponse
+        {
+            OrderNo = orderNo,
+            ActualAmount = actualAmount,
+            NetAmount = netAmount,
+            RebateAmount = request.RebateAmount,
+            ProcessedAt = now
+        };
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -733,7 +815,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// <summary>
     /// 將維修單實體與估價詳情整併成統一輸出格式。
     /// </summary>
-    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail)
+    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail, decimal? actualAmount, decimal? netAmount)
     {
         var quotation = order.Quatation;
         var storeInfo = BuildStoreInfo(order, quotationDetail?.Store);
@@ -742,7 +824,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var photos = ClonePhotoSummaries(quotationDetail?.Photos);
         var carBody = CloneCarBodyConfirmation(quotationDetail?.CarBodyConfirmation);
         var maintenance = BuildMaintenanceDetail(order, quotationDetail?.Maintenance);
-        var amountInfo = BuildAmountInfo(order);
+        var amountInfo = BuildAmountInfo(order, actualAmount, netAmount);
         var statusHistory = BuildStatusHistory(order);
 
         return new MaintenanceOrderDetailResponse
@@ -764,6 +846,256 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             StatusHistory = statusHistory,
             CurrentStatusUser = statusHistory.CurrentStatusUser
         };
+    }
+
+    /// <summary>
+    /// 針對維修單計算實際收費金額，優先取用估價詳情資料，若缺少則回查照片主檔。
+    /// </summary>
+    private async Task<decimal?> CalculateActualAmountAsync(Order order, QuotationDetailResponse? quotationDetail, CancellationToken cancellationToken)
+    {
+        var detailActual = SumActualAmount(quotationDetail?.Photos);
+        if (detailActual.HasValue)
+        {
+            return detailActual;
+        }
+
+        var orderUid = NormalizeOptionalText(order.OrderUid);
+        if (orderUid is null)
+        {
+            return null;
+        }
+
+        var photoRecords = await _dbContext.PhotoData
+            .AsNoTracking()
+            .Where(photo => photo.RelatedUid == orderUid)
+            .Select(photo => new
+            {
+                photo.Cost,
+                photo.FinishCost,
+                photo.MaintenanceProgress
+            })
+            .ToListAsync(cancellationToken);
+
+        if (photoRecords.Count == 0)
+        {
+            return null;
+        }
+
+        var total = 0m;
+        var hasValue = false;
+        foreach (var record in photoRecords)
+        {
+            var normalizedProgress = NormalizeProgress(record.MaintenanceProgress);
+            var actual = ResolveActualAmount(record.Cost, normalizedProgress, record.FinishCost);
+            if (actual.HasValue)
+            {
+                total += actual.Value;
+                hasValue = true;
+            }
+        }
+
+        return hasValue ? decimal.Round(total, 2, MidpointRounding.AwayFromZero) : null;
+    }
+
+    /// <summary>
+    /// 將維修詳情中的實際金額累計，若缺少資料則回傳 null。
+    /// </summary>
+    private static decimal? SumActualAmount(QuotationPhotoSummaryCollection? photos)
+    {
+        if (photos is null)
+        {
+            return null;
+        }
+
+        var total = 0m;
+        var hasValue = false;
+
+        foreach (var summary in photos.EnumerateAll())
+        {
+            if (summary is null)
+            {
+                continue;
+            }
+
+            var normalizedProgress = NormalizeProgress(summary.ProgressPercentage);
+            var actual = ResolveActualAmount(summary.EstimatedAmount, normalizedProgress, summary.ActualAmount);
+            if (actual.HasValue)
+            {
+                total += actual.Value;
+                hasValue = true;
+            }
+        }
+
+        return hasValue ? decimal.Round(total, 2, MidpointRounding.AwayFromZero) : null;
+    }
+
+    /// <summary>
+    /// 將實際金額扣除退傭，避免出現負值。
+    /// </summary>
+    private static decimal? CalculateNetAmount(decimal? actualAmount, decimal? rebate)
+    {
+        if (!actualAmount.HasValue)
+        {
+            return null;
+        }
+
+        var rebateValue = rebate ?? 0m;
+        var net = actualAmount.Value - rebateValue;
+        if (net < 0m)
+        {
+            net = 0m;
+        }
+
+        return decimal.Round(net, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// 正規化維修進度數值，限制在 0~100 並四捨五入至小數兩位。
+    /// </summary>
+    private static decimal? NormalizeProgress(decimal? progress)
+    {
+        if (!progress.HasValue)
+        {
+            return null;
+        }
+
+        var clamped = Math.Clamp(progress.Value, 0m, 100m);
+        return decimal.Round(clamped, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// 依據預估金額與進度計算實收金額，若已有完工金額則優先使用。
+    /// </summary>
+    private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? finishCost)
+    {
+        if (finishCost.HasValue)
+        {
+            return decimal.Round(finishCost.Value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
+        {
+            return null;
+        }
+
+        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
+        return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// 驗證退傭密碼是否符合設定值，支援純文字與雜湊比對。
+    /// </summary>
+    private bool ValidateRebatePassword(string password)
+    {
+        var options = _maintenanceOrderOptions ?? new MaintenanceOrderOptions();
+
+        if (!string.IsNullOrWhiteSpace(options.RebatePasswordHash))
+        {
+            var algorithm = ResolveHashAlgorithm(options.HashAlgorithm);
+            var computedHex = ComputePasswordHash(password, options.RebatePasswordSalt, algorithm);
+            var expectedBytes = HexToBytes(options.RebatePasswordHash);
+            var computedBytes = HexToBytes(computedHex);
+
+            if (expectedBytes.Length == 0 || expectedBytes.Length != computedBytes.Length)
+            {
+                ApplyConstantTimePadding(options.ConstantTimePaddingMilliseconds);
+                return false;
+            }
+
+            ApplyConstantTimePadding(options.ConstantTimePaddingMilliseconds);
+            return CryptographicOperations.FixedTimeEquals(expectedBytes, computedBytes);
+        }
+
+        if (string.IsNullOrWhiteSpace(options.RebatePassword))
+        {
+            throw new MaintenanceOrderManagementException(HttpStatusCode.PreconditionFailed, "尚未設定退傭密碼，請聯絡系統管理員。");
+        }
+
+        var expectedPlain = Encoding.UTF8.GetBytes(options.RebatePassword);
+        var actualPlain = Encoding.UTF8.GetBytes(password);
+        ApplyConstantTimePadding(options.ConstantTimePaddingMilliseconds);
+
+        if (expectedPlain.Length != actualPlain.Length)
+        {
+            return false;
+        }
+
+        return CryptographicOperations.FixedTimeEquals(expectedPlain, actualPlain);
+    }
+
+    /// <summary>
+    /// 將雜湊演算法名稱轉換為 <see cref="HashAlgorithmName"/>，預設為 SHA256。
+    /// </summary>
+    private static HashAlgorithmName ResolveHashAlgorithm(string? algorithmName)
+    {
+        if (string.IsNullOrWhiteSpace(algorithmName))
+        {
+            return HashAlgorithmName.SHA256;
+        }
+
+        return algorithmName.Trim().ToUpperInvariant() switch
+        {
+            "SHA512" => HashAlgorithmName.SHA512,
+            "SHA1" => HashAlgorithmName.SHA1,
+            _ => HashAlgorithmName.SHA256
+        };
+    }
+
+    /// <summary>
+    /// 將密碼與鹽值進行雜湊運算並輸出十六進位字串。
+    /// </summary>
+    private static string ComputePasswordHash(string password, string? salt, HashAlgorithmName algorithm)
+    {
+        var passwordBytes = Encoding.UTF8.GetBytes(password ?? string.Empty);
+        var saltBytes = string.IsNullOrWhiteSpace(salt)
+            ? Array.Empty<byte>()
+            : Encoding.UTF8.GetBytes(salt!);
+
+        var data = new byte[saltBytes.Length + passwordBytes.Length];
+        Buffer.BlockCopy(saltBytes, 0, data, 0, saltBytes.Length);
+        Buffer.BlockCopy(passwordBytes, 0, data, saltBytes.Length, passwordBytes.Length);
+
+        byte[] hash = algorithm.Name switch
+        {
+            nameof(HashAlgorithmName.SHA1) => SHA1.HashData(data),
+            nameof(HashAlgorithmName.SHA512) => SHA512.HashData(data),
+            _ => SHA256.HashData(data)
+        };
+
+        return Convert.ToHexString(hash);
+    }
+
+    /// <summary>
+    /// 將十六進位字串轉換為位元組陣列，異常時回傳空陣列。
+    /// </summary>
+    private static byte[] HexToBytes(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex))
+        {
+            return Array.Empty<byte>();
+        }
+
+        try
+        {
+            return Convert.FromHexString(hex.Trim());
+        }
+        catch (FormatException)
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
+    /// <summary>
+    /// 以 Thread.Sleep 方式建立固定延遲，減少計時側信道風險。
+    /// </summary>
+    private static void ApplyConstantTimePadding(int milliseconds)
+    {
+        if (milliseconds <= 0)
+        {
+            return;
+        }
+
+        Thread.Sleep(milliseconds);
     }
 
     /// <summary>
@@ -955,7 +1287,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 Description = summary.Description,
                 EstimatedAmount = summary.EstimatedAmount,
                 FixType = summary.FixType,
-                FixTypeName = summary.FixTypeName
+                FixTypeName = summary.FixTypeName,
+                ProgressPercentage = summary.ProgressPercentage,
+                ActualAmount = summary.ActualAmount,
+                AfterPhotos = summary.AfterPhotos?.ToList() ?? new List<string>()
             });
         }
 
@@ -1210,14 +1545,17 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// <summary>
     /// 建立維修單金額資訊，保留估價、折扣與應付欄位，並沿用估價單的資料結構。
     /// </summary>
-    private static QuotationAmountInfo BuildAmountInfo(Order order)
+    private static QuotationAmountInfo BuildAmountInfo(Order order, decimal? actualAmount, decimal? netAmount)
     {
         return new QuotationAmountInfo
         {
             Valuation = order.Valuation,
             Discount = order.Discount,
             DiscountPercent = order.DiscountPercent,
-            Amount = order.Amount
+            Amount = order.Amount,
+            ActualAmount = actualAmount,
+            Rebate = order.Rebate,
+            NetAmount = netAmount ?? order.Amount
         };
     }
 
@@ -1694,7 +2032,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 PhotoShapeShow = photo.PhotoShapeShow,
                 Cost = photo.Cost,
                 FlagFinish = photo.FlagFinish,
-                FinishCost = photo.FinishCost
+                FinishCost = photo.FinishCost,
+                MaintenanceProgress = photo.MaintenanceProgress,
+                Stage = photo.Stage
             };
 
             await _dbContext.PhotoData.AddAsync(clone, cancellationToken);

@@ -48,4 +48,9 @@ public interface IMaintenanceOrderService
     /// 將維修單標記為終止 (295)。
     /// </summary>
     Task<MaintenanceOrderStatusChangeResponse> TerminateOrderAsync(MaintenanceOrderTerminateRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 退傭處理，驗證密碼後更新退傭金額並回傳最新實收資訊。
+    /// </summary>
+    Task<MaintenanceOrderRebateResponse> ApplyRebateAsync(MaintenanceOrderRebateRequest request, string operatorName, CancellationToken cancellationToken);
 }

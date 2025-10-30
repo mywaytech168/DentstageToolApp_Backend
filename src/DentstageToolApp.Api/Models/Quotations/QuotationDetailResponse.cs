@@ -96,6 +96,21 @@ public class QuotationAmountInfo
     /// 最終應付金額。
     /// </summary>
     public decimal? Amount { get; set; }
+
+    /// <summary>
+    /// 實際收費金額，會依維修進度自動計算。
+    /// </summary>
+    public decimal? ActualAmount { get; set; }
+
+    /// <summary>
+    /// 退傭金額，供後台統一顯示與計算淨額。
+    /// </summary>
+    public decimal? Rebate { get; set; }
+
+    /// <summary>
+    /// 扣除退傭後的淨收金額。
+    /// </summary>
+    public decimal? NetAmount { get; set; }
 }
 
 /// <summary>
@@ -303,6 +318,21 @@ public class QuotationDamageSummary
         get => null;
         set => FixType = value;
     }
+
+    /// <summary>
+    /// 維修進度百分比（0~100），提供詳情畫面顯示進度。
+    /// </summary>
+    public decimal? ProgressPercentage { get; set; }
+
+    /// <summary>
+    /// 實際收費金額，依據進度與預估金額計算。
+    /// </summary>
+    public decimal? ActualAmount { get; set; }
+
+    /// <summary>
+    /// 維修後照片識別碼集合，支援前端顯示完工照片。
+    /// </summary>
+    public List<string> AfterPhotos { get; set; } = new();
 
     /// <summary>
     /// 將輸入的照片識別碼進行正規化，避免空白或空字串造成判斷落差。
