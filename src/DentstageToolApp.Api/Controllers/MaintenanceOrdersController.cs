@@ -223,7 +223,12 @@ public class MaintenanceOrdersController : ControllerBase
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
-                "estimatedAmount": 4500
+                "estimatedAmount": 4500,
+                "progressPercentage": 100,
+                "actualAmount": 4500,
+                "afterPhotos": [
+                  "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
+                ]
               }
             ],
             "beauty": [],
@@ -234,7 +239,13 @@ public class MaintenanceOrdersController : ControllerBase
                 "position": "保桿內塑料件",
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
-                "estimatedAmount": 1200
+                "estimatedAmount": 1200,
+                "progressPercentage": 50,
+                "actualAmount": 600,
+                "afterPhotos": [
+                  "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2",
+                  "Ph_C8E81DF4-0EA7-4B38-A7DD-6B2A64EAF403"
+                ]
               }
             ]
           },
@@ -420,6 +431,15 @@ public class MaintenanceOrdersController : ControllerBase
     /// 針對已完成的維修單進行退傭，需通過密碼驗證。
     /// </summary>
     [HttpPost("rebate")]
+    // 於 Swagger 提供退傭請求範例，明確列出密碼與退傭金額欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001",
+          "password": "123456",
+          "rebateAmount": 100
+        }
+        """)]
     [ProducesResponseType(typeof(MaintenanceOrderRebateResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
