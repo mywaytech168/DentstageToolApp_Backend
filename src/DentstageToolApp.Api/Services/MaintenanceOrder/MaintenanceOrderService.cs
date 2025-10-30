@@ -917,7 +917,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 continue;
             }
 
-            var normalizedProgress = NormalizeProgress(summary.ProgressPercentage);
+            var normalizedProgress = NormalizeProgress(summary.MaintenanceProgress);
             var actual = ResolveActualAmount(summary.EstimatedAmount, normalizedProgress, summary.ActualAmount);
             if (actual.HasValue)
             {
@@ -1288,7 +1288,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 EstimatedAmount = summary.EstimatedAmount,
                 FixType = summary.FixType,
                 FixTypeName = summary.FixTypeName,
-                ProgressPercentage = summary.ProgressPercentage,
+                MaintenanceProgress = summary.MaintenanceProgress,
                 ActualAmount = summary.ActualAmount,
                 AfterPhotoUid = summary.AfterPhotoUid
             });

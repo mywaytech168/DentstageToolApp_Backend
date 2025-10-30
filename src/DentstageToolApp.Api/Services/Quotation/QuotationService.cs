@@ -3258,7 +3258,7 @@ public class QuotationService : IQuotationService
             var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
             var description = NormalizeOptionalText(damage.DisplayDescription);
             var amount = damage.DisplayEstimatedAmount;
-            var progress = NormalizeProgress(damage.DisplayProgressPercentage);
+            var progress = NormalizeProgress(damage.DisplayMaintenanceProgress);
             var actualAmount = ResolveActualAmount(amount, progress, damage.DisplayActualAmount);
             var fixTypeKey = NormalizeOptionalText(damage.DisplayFixType);
             var fixTypeName = NormalizeOptionalText(damage.FixTypeName);
@@ -3720,7 +3720,7 @@ public class QuotationService : IQuotationService
                 DisplayEstimatedAmount = photo?.Cost,
                 DisplayFixType = fixTypeDisplay,
                 FixTypeName = fixTypeDisplay,
-                DisplayProgressPercentage = photo?.MaintenanceProgress,
+                DisplayMaintenanceProgress = photo?.MaintenanceProgress,
                 DisplayActualAmount = photo?.FinishCost
             };
 
@@ -3780,9 +3780,9 @@ public class QuotationService : IQuotationService
                     damage.DisplayEstimatedAmount = photo.Cost;
                 }
 
-                if (!damage.DisplayProgressPercentage.HasValue && photo.MaintenanceProgress.HasValue)
+                if (!damage.DisplayMaintenanceProgress.HasValue && photo.MaintenanceProgress.HasValue)
                 {
-                    damage.DisplayProgressPercentage = photo.MaintenanceProgress;
+                    damage.DisplayMaintenanceProgress = photo.MaintenanceProgress;
                 }
 
                 if (!damage.DisplayActualAmount.HasValue && photo.FinishCost.HasValue)
@@ -3965,7 +3965,7 @@ public class QuotationService : IQuotationService
                 ? damage.FixTypeName
                 : QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
             var primaryPhotoUid = NormalizeOptionalText(ExtractPrimaryPhotoUid(damage));
-            var normalizedProgress = NormalizeProgress(damage.ProgressPercentage);
+            var normalizedProgress = NormalizeProgress(damage.MaintenanceProgress);
             var actualAmount = ResolveActualAmount(damage.EstimatedAmount, normalizedProgress, damage.ActualAmount);
             var afterPhotoUid = NormalizeOptionalText(damage.AfterPhotoUid);
             summaries.Add(new QuotationDamageSummary
@@ -3977,7 +3977,7 @@ public class QuotationService : IQuotationService
                 EstimatedAmount = damage.EstimatedAmount,
                 FixType = NormalizeOptionalText(damage.FixType) ?? fixTypeKey,
                 FixTypeName = fixTypeName,
-                ProgressPercentage = normalizedProgress,
+                MaintenanceProgress = normalizedProgress,
                 ActualAmount = actualAmount,
                 AfterPhotoUid = afterPhotoUid
             });

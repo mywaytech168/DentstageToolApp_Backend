@@ -324,16 +324,27 @@ public class QuotationDamageItem
     /// 維修進度百分比（0~100），用於計算實際收費。
     /// </summary>
     [JsonIgnore]
-    public decimal? ProgressPercentage { get; set; }
+    public decimal? MaintenanceProgress { get; set; }
 
     /// <summary>
-    /// 新欄位：前端使用 progressPercentage 提交維修進度，回傳同一欄位方便顯示。
+    /// 新欄位：MaintenanceProgress 供前端提交與顯示維修進度，與資料庫欄位對應。
+    /// </summary>
+    [JsonPropertyName("MaintenanceProgress")]
+    public decimal? DisplayMaintenanceProgress
+    {
+        get => MaintenanceProgress;
+        set => MaintenanceProgress = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：progressPercentage，保留 setter 以相容舊版資料傳入。
     /// </summary>
     [JsonPropertyName("progressPercentage")]
-    public decimal? DisplayProgressPercentage
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? LegacyProgressPercentage
     {
-        get => ProgressPercentage;
-        set => ProgressPercentage = value;
+        get => null;
+        set => MaintenanceProgress = value;
     }
 
     /// <summary>
@@ -533,10 +544,10 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
-        writer.WritePropertyName("progressPercentage");
-        if (target.DisplayProgressPercentage.HasValue)
+        writer.WritePropertyName("MaintenanceProgress");
+        if (target.DisplayMaintenanceProgress.HasValue)
         {
-            writer.WriteNumberValue(target.DisplayProgressPercentage.Value);
+            writer.WriteNumberValue(target.DisplayMaintenanceProgress.Value);
         }
         else
         {
@@ -605,7 +616,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額"),
             DisplayFixType = ReadString(element, "fixType", "維修類型"),
             FixTypeName = ReadString(element, "fixTypeName"),
-            DisplayProgressPercentage = ReadDecimal(element, "progressPercentage"),
+            DisplayMaintenanceProgress = ReadDecimal(element, "MaintenanceProgress") ?? ReadDecimal(element, "progressPercentage"),
             DisplayActualAmount = ReadDecimal(element, "actualAmount"),
             DisplayAfterPhotoUid = ReadString(element, "afterPhotoUid"),
             LegacyAfterPhotos = ReadPhotoArray(element, "afterPhotos")

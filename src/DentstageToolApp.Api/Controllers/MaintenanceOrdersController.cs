@@ -224,7 +224,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
-                "progressPercentage": 100,
+                "MaintenanceProgress": 100,
                 "actualAmount": 4500,
                 "afterPhotoUid": "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
               }
@@ -238,7 +238,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
                 "estimatedAmount": 1200,
-                "progressPercentage": 50,
+                "MaintenanceProgress": 50,
                 "actualAmount": 600,
                 "afterPhotoUid": "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2"
               }

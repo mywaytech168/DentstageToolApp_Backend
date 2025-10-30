@@ -323,7 +323,29 @@ public class QuotationDamageSummary
     /// <summary>
     /// 維修進度百分比（0~100），提供詳情畫面顯示進度。
     /// </summary>
-    public decimal? ProgressPercentage { get; set; }
+    [JsonIgnore]
+    public decimal? MaintenanceProgress { get; set; }
+
+    /// <summary>
+    /// 新欄位：MaintenanceProgress，提供前端顯示與提交維修進度。
+    /// </summary>
+    [JsonPropertyName("MaintenanceProgress")]
+    public decimal? DisplayMaintenanceProgress
+    {
+        get => MaintenanceProgress;
+        set => MaintenanceProgress = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：progressPercentage，保留 setter 以相容舊版資料。
+    /// </summary>
+    [JsonPropertyName("progressPercentage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? LegacyProgressPercentage
+    {
+        get => null;
+        set => MaintenanceProgress = value;
+    }
 
     /// <summary>
     /// 實際收費金額，依據進度與預估金額計算。
