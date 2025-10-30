@@ -3215,12 +3215,9 @@ public class QuotationService : IQuotationService
 
                 TryAdd(uniqueUids, damage.Photo);
 
-                if (damage.AfterPhotos is { Count: > 0 })
+                if (!string.IsNullOrWhiteSpace(damage.AfterPhotoUid))
                 {
-                    foreach (var afterPhoto in damage.AfterPhotos)
-                    {
-                        TryAdd(uniqueUids, afterPhoto);
-                    }
+                    TryAdd(uniqueUids, damage.AfterPhotoUid);
                 }
             }
         }
@@ -3297,19 +3294,10 @@ public class QuotationService : IQuotationService
 
             // 使用 HashSet 移除重複的完工照片 UID，避免同一張照片被寫入多次。
             var afterPhotoUids = new List<string>();
-            if (damage.AfterPhotos is { Count: > 0 })
+            var normalizedAfterPhotoUid = NormalizeOptionalText(damage.AfterPhotoUid);
+            if (normalizedAfterPhotoUid is not null)
             {
-                var uniqueAfterPhotos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var afterPhoto in damage.AfterPhotos)
-                {
-                    var normalizedAfterPhoto = NormalizeOptionalText(afterPhoto);
-                    if (normalizedAfterPhoto is null || !uniqueAfterPhotos.Add(normalizedAfterPhoto))
-                    {
-                        continue;
-                    }
-
-                    afterPhotoUids.Add(normalizedAfterPhoto);
-                }
+                afterPhotoUids.Add(normalizedAfterPhotoUid);
             }
 
             // 主要照片（維修前）需記錄第一張完工照片 UID，方便舊系統建立前後對應關係。
@@ -3835,16 +3823,10 @@ public class QuotationService : IQuotationService
             yield return primary;
         }
 
-        if (damage.AfterPhotos is { Count: > 0 })
+        var normalizedAfter = NormalizeOptionalText(damage.AfterPhotoUid);
+        if (normalizedAfter is not null)
         {
-            foreach (var after in damage.AfterPhotos)
-            {
-                var normalized = NormalizeOptionalText(after);
-                if (normalized is not null)
-                {
-                    yield return normalized;
-                }
-            }
+            yield return normalizedAfter;
         }
     }
 
@@ -3985,14 +3967,7 @@ public class QuotationService : IQuotationService
             var primaryPhotoUid = NormalizeOptionalText(ExtractPrimaryPhotoUid(damage));
             var normalizedProgress = NormalizeProgress(damage.ProgressPercentage);
             var actualAmount = ResolveActualAmount(damage.EstimatedAmount, normalizedProgress, damage.ActualAmount);
-            var afterPhotos = damage.AfterPhotos is { Count: > 0 }
-                ? damage.AfterPhotos
-                    .Select(NormalizeOptionalText)
-                    .Where(uid => uid is not null)
-                    .Select(uid => uid!)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                : new List<string>();
+            var afterPhotoUid = NormalizeOptionalText(damage.AfterPhotoUid);
             summaries.Add(new QuotationDamageSummary
             {
                 Photo = primaryPhotoUid,
@@ -4004,7 +3979,7 @@ public class QuotationService : IQuotationService
                 FixTypeName = fixTypeName,
                 ProgressPercentage = normalizedProgress,
                 ActualAmount = actualAmount,
-                AfterPhotos = afterPhotos
+                AfterPhotoUid = afterPhotoUid
             });
         }
 

@@ -103,7 +103,7 @@ public class QuotationDamageItem
 {
     private string? _photo;
     private string? _fixType;
-    private readonly List<string> _afterPhotos = new();
+    private string? _afterPhotoUid;
 
     /// <summary>
     /// 主要圖片的 PhotoUID，作為傷痕與照片的唯一對應。所有輸入都會先行去除空白。
@@ -353,27 +353,38 @@ public class QuotationDamageItem
     }
 
     /// <summary>
-    /// 維修後照片清單，儲存與此傷痕對應的完工照片 UID。
+    /// 維修後照片識別碼，指向對應的完工照片 UID。
+    /// </summary>
+    [JsonIgnore]
+    public string? AfterPhotoUid
+    {
+        get => _afterPhotoUid;
+        set => _afterPhotoUid = NormalizePhotoValue(value);
+    }
+
+    /// <summary>
+    /// 對外序列化使用的 afterPhotoUid 欄位，確保欄位名稱維持一致。
+    /// </summary>
+    [JsonPropertyName("afterPhotoUid")]
+    public string? DisplayAfterPhotoUid
+    {
+        get => AfterPhotoUid;
+        set => AfterPhotoUid = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位：afterPhotos 陣列，保留 setter 將第一筆資料轉換成 afterPhotoUid。
     /// </summary>
     [JsonPropertyName("afterPhotos")]
-    public List<string> AfterPhotos
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? LegacyAfterPhotos
     {
-        get => _afterPhotos;
+        get => null;
         set
         {
-            _afterPhotos.Clear();
-            if (value is null)
+            if (value is { Count: > 0 })
             {
-                return;
-            }
-
-            foreach (var photo in value)
-            {
-                var normalized = NormalizePhotoValue(photo);
-                if (normalized is not null)
-                {
-                    _afterPhotos.Add(normalized);
-                }
+                AfterPhotoUid = value[0];
             }
         }
     }
@@ -542,20 +553,16 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
-        writer.WritePropertyName("afterPhotos");
-        writer.WriteStartArray();
-        if (target.AfterPhotos is { Count: > 0 })
+        writer.WritePropertyName("afterPhotoUid");
+        var normalizedAfterUid = NormalizePhoto(target.DisplayAfterPhotoUid);
+        if (!string.IsNullOrWhiteSpace(normalizedAfterUid))
         {
-            foreach (var afterPhoto in target.AfterPhotos)
-            {
-                var normalizedAfter = NormalizePhoto(afterPhoto);
-                if (!string.IsNullOrWhiteSpace(normalizedAfter))
-                {
-                    writer.WriteStringValue(normalizedAfter);
-                }
-            }
+            writer.WriteStringValue(normalizedAfterUid);
         }
-        writer.WriteEndArray();
+        else
+        {
+            writer.WriteNullValue();
+        }
 
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.DisplayFixType);
@@ -600,7 +607,8 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             FixTypeName = ReadString(element, "fixTypeName"),
             DisplayProgressPercentage = ReadDecimal(element, "progressPercentage"),
             DisplayActualAmount = ReadDecimal(element, "actualAmount"),
-            AfterPhotos = ReadPhotoArray(element, "afterPhotos")
+            DisplayAfterPhotoUid = ReadString(element, "afterPhotoUid"),
+            LegacyAfterPhotos = ReadPhotoArray(element, "afterPhotos")
         };
 
         QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(fallback);
