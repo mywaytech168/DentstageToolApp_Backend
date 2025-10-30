@@ -68,9 +68,9 @@ public class PhotoDatum
     public decimal? MaintenanceProgress { get; set; }
 
     /// <summary>
-    /// 照片所屬階段，例如 before、after，用於標示維修前後。
+    /// 對應的維修後照片唯一識別碼，若無對應照片則為空值。
     /// </summary>
-    public string? Stage { get; set; }
+    public string? AfterPhotoUid { get; set; }
 
     /// <summary>
     /// 照片所屬維修類型，使用固定鍵值（dent、beauty、paint、other）儲存分類資訊。
