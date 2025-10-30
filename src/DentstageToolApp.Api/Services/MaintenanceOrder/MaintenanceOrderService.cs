@@ -1290,7 +1290,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 FixTypeName = summary.FixTypeName,
                 ProgressPercentage = summary.ProgressPercentage,
                 ActualAmount = summary.ActualAmount,
-                AfterPhotos = summary.AfterPhotos?.ToList() ?? new List<string>()
+                AfterPhotoUid = summary.AfterPhotoUid
             });
         }
 

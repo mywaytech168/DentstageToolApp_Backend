@@ -189,6 +189,7 @@ public class QuotationDamageSummary
     private string? _photo;
     private string? _fixType;
     private string? _fixTypeDisplay;
+    private string? _afterPhotoUid;
 
     /// <summary>
     /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
@@ -330,9 +331,41 @@ public class QuotationDamageSummary
     public decimal? ActualAmount { get; set; }
 
     /// <summary>
-    /// 維修後照片識別碼集合，支援前端顯示完工照片。
+    /// 維修後照片識別碼，指向對應的完工照片。
     /// </summary>
-    public List<string> AfterPhotos { get; set; } = new();
+    [JsonIgnore]
+    public string? AfterPhotoUid
+    {
+        get => _afterPhotoUid;
+        set => _afterPhotoUid = NormalizePhoto(value);
+    }
+
+    /// <summary>
+    /// 將 afterPhotoUid 以固定欄位名稱輸出，維持前後端欄位一致。
+    /// </summary>
+    [JsonPropertyName("afterPhotoUid")]
+    public string? DisplayAfterPhotoUid
+    {
+        get => AfterPhotoUid;
+        set => AfterPhotoUid = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位：afterPhotos 陣列，保留 setter 將第一筆資料轉換為 afterPhotoUid。
+    /// </summary>
+    [JsonPropertyName("afterPhotos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? LegacyAfterPhotos
+    {
+        get => null;
+        set
+        {
+            if (value is { Count: > 0 })
+            {
+                AfterPhotoUid = value[0];
+            }
+        }
+    }
 
     /// <summary>
     /// 將輸入的照片識別碼進行正規化，避免空白或空字串造成判斷落差。

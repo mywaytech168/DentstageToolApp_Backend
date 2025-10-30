@@ -226,9 +226,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "estimatedAmount": 4500,
                 "progressPercentage": 100,
                 "actualAmount": 4500,
-                "afterPhotos": [
-                  "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
-                ]
+                "afterPhotoUid": "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
               }
             ],
             "beauty": [],
@@ -242,10 +240,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "estimatedAmount": 1200,
                 "progressPercentage": 50,
                 "actualAmount": 600,
-                "afterPhotos": [
-                  "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2",
-                  "Ph_C8E81DF4-0EA7-4B38-A7DD-6B2A64EAF403"
-                ]
+                "afterPhotoUid": "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2"
               }
             ]
           },
