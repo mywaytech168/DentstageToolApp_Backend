@@ -63,6 +63,16 @@ public class PhotoDatum
     public decimal? FinishCost { get; set; }
 
     /// <summary>
+    /// 維修進度百分比（0~100），用於計算實際收費金額。
+    /// </summary>
+    public decimal? MaintenanceProgress { get; set; }
+
+    /// <summary>
+    /// 對應的維修後照片唯一識別碼，若無對應照片則為空值。
+    /// </summary>
+    public string? AfterPhotoUid { get; set; }
+
+    /// <summary>
     /// 照片所屬維修類型，使用固定鍵值（dent、beauty、paint、other）儲存分類資訊。
     /// </summary>
     public string? FixType { get; set; }

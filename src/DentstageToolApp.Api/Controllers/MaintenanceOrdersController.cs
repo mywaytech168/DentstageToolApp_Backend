@@ -223,7 +223,9 @@ public class MaintenanceOrdersController : ControllerBase
                 "position": "前保桿",
                 "dentStatus": "大面積",
                 "description": "需板金搭配烤漆",
-                "estimatedAmount": 4500
+                "estimatedAmount": 4500,
+                "MaintenanceProgress": 80,
+                "afterPhotoUid": "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
               }
             ],
             "beauty": [],
@@ -234,7 +236,9 @@ public class MaintenanceOrdersController : ControllerBase
                 "position": "保桿內塑料件",
                 "dentStatus": "拆件檢測",
                 "description": "需確認內部樑是否受損",
-                "estimatedAmount": 1200
+                "estimatedAmount": 1200,
+                "MaintenanceProgress": 50,
+                "afterPhotoUid": "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2"
               }
             ]
           },
@@ -413,6 +417,49 @@ public class MaintenanceOrdersController : ControllerBase
         {
             _logger.LogError(ex, "終止維修流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "終止維修失敗");
+        }
+    }
+
+    /// <summary>
+    /// 針對已完成的維修單進行退傭，需通過密碼驗證。
+    /// </summary>
+    [HttpPost("rebate")]
+    // 於 Swagger 提供退傭請求範例，明確列出密碼與退傭金額欄位。
+    [SwaggerMockRequestExample(
+        """
+        {
+          "orderNo": "O25100001",
+          "password": "123456",
+          "rebateAmount": 100
+        }
+        """)]
+    [ProducesResponseType(typeof(MaintenanceOrderRebateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MaintenanceOrderRebateResponse>> ApplyRebateAsync([FromBody] MaintenanceOrderRebateRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _maintenanceOrderService.ApplyRebateAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "退傭處理失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "退傭處理失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("退傭流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，退傭未完成。", "退傭處理取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "退傭流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "退傭處理失敗");
         }
     }
 
