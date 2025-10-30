@@ -169,7 +169,7 @@ public class PurchaseCategoriesController : ControllerBase
     /// <summary>
     /// 刪除採購品項類別，UID 需由 Request Body 帶入。
     /// </summary>
-    [HttpDelete]
+    [HttpPost("delete")]
     [SwaggerMockRequestExample(
         """
         {

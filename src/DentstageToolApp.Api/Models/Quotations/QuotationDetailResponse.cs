@@ -96,6 +96,21 @@ public class QuotationAmountInfo
     /// 最終應付金額。
     /// </summary>
     public decimal? Amount { get; set; }
+
+    /// <summary>
+    /// 實際收費金額，會依維修進度自動計算。
+    /// </summary>
+    public decimal? ActualAmount { get; set; }
+
+    /// <summary>
+    /// 退傭金額，供後台統一顯示與計算淨額。
+    /// </summary>
+    public decimal? Rebate { get; set; }
+
+    /// <summary>
+    /// 扣除退傭後的淨收金額。
+    /// </summary>
+    public decimal? NetAmount { get; set; }
 }
 
 /// <summary>
@@ -174,6 +189,7 @@ public class QuotationDamageSummary
     private string? _photo;
     private string? _fixType;
     private string? _fixTypeDisplay;
+    private string? _afterPhotoUid;
 
     /// <summary>
     /// 主要照片的 PhotoUID，以字串型式提供方便直接顯示。
@@ -302,6 +318,75 @@ public class QuotationDamageSummary
     {
         get => null;
         set => FixType = value;
+    }
+
+    /// <summary>
+    /// 維修進度百分比（0~100），提供詳情畫面顯示進度。
+    /// </summary>
+    [JsonIgnore]
+    public decimal? MaintenanceProgress { get; set; }
+
+    /// <summary>
+    /// 新欄位：MaintenanceProgress，提供前端顯示與提交維修進度。
+    /// </summary>
+    [JsonPropertyName("MaintenanceProgress")]
+    public decimal? DisplayMaintenanceProgress
+    {
+        get => MaintenanceProgress;
+        set => MaintenanceProgress = value;
+    }
+
+    /// <summary>
+    /// 舊欄位：progressPercentage，保留 setter 以相容舊版資料。
+    /// </summary>
+    [JsonPropertyName("progressPercentage")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public decimal? LegacyProgressPercentage
+    {
+        get => null;
+        set => MaintenanceProgress = value;
+    }
+
+    /// <summary>
+    /// 實際收費金額，依據進度與預估金額計算。
+    /// </summary>
+    public decimal? ActualAmount { get; set; }
+
+    /// <summary>
+    /// 維修後照片識別碼，指向對應的完工照片。
+    /// </summary>
+    [JsonIgnore]
+    public string? AfterPhotoUid
+    {
+        get => _afterPhotoUid;
+        set => _afterPhotoUid = NormalizePhoto(value);
+    }
+
+    /// <summary>
+    /// 將 afterPhotoUid 以固定欄位名稱輸出，維持前後端欄位一致。
+    /// </summary>
+    [JsonPropertyName("afterPhotoUid")]
+    public string? DisplayAfterPhotoUid
+    {
+        get => AfterPhotoUid;
+        set => AfterPhotoUid = value;
+    }
+
+    /// <summary>
+    /// 舊版欄位：afterPhotos 陣列，保留 setter 將第一筆資料轉換為 afterPhotoUid。
+    /// </summary>
+    [JsonPropertyName("afterPhotos")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? LegacyAfterPhotos
+    {
+        get => null;
+        set
+        {
+            if (value is { Count: > 0 })
+            {
+                AfterPhotoUid = value[0];
+            }
+        }
     }
 
     /// <summary>

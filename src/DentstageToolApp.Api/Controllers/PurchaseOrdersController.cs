@@ -251,11 +251,11 @@ public class PurchaseOrdersController : ControllerBase
     /// <summary>
     /// 刪除採購單，需於 Body 同時提供 purchaseOrderUid 與 purchaseOrderNo 以雙重驗證刪除目標。
     /// </summary>
-    [HttpDelete]
+    [HttpPost("delete")]
     [SwaggerMockRequestExample(
         """
         {
-          "purchaseOrderNo": "PO_2025070001"
+          "purchaseOrderNo": "PO_2025100001"
         }
         """)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
