@@ -28,6 +28,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     private static readonly string[] TaipeiTimeZoneIds = { "Taipei Standard Time", "Asia/Taipei" };
     private const int SerialCandidateFetchCount = 50;
 
+    // ---------- 維修完成相關常數 ----------
+    private const string MaintenanceCompleteFakeQrcodeUrl = "https://example.com/mock-maintenance-qrcode";
+
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<MaintenanceOrderService> _logger;
     private readonly IQuotationService _quotationService;
@@ -617,7 +620,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 OrderNo = order.OrderNo,
                 Status = order.Status,
                 StatusTime = order.Status290Date,
-                Message = "維修單已處於完成狀態。"
+                Message = "維修單已處於完成狀態。",
+                // 回傳預設 QRCode 網址，讓前端可以先串接顯示邏輯。
+                QrcodeUrl = MaintenanceCompleteFakeQrcodeUrl
             };
         }
 
@@ -639,7 +644,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             OrderNo = order.OrderNo,
             Status = order.Status,
             StatusTime = order.Status290Date,
-            Message = "維修單已更新為維修完成。"
+            Message = "維修單已更新為維修完成。",
+            // 回傳預設 QRCode 網址，後續可改為實際產出的連結。
+            QrcodeUrl = MaintenanceCompleteFakeQrcodeUrl
         };
     }
 
