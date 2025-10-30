@@ -1018,6 +1018,12 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FinishCost)
             .HasColumnType("decimal(10,2)")
             .HasColumnName("Finish_Cost");
+        entity.Property(e => e.MaintenanceProgress)
+            .HasColumnType("decimal(5,2)")
+            .HasColumnName("MaintenanceProgress");
+        entity.Property(e => e.Stage)
+            .HasMaxLength(20)
+            .HasColumnName("PhotoStage");
         entity.Property(e => e.FixType)
             .HasMaxLength(100)
             .HasColumnName("Fix_Type");

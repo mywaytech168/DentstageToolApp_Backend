@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using DentstageToolApp.Api.Models.Quotations;
 using DentstageToolApp.Api.Services.Photo;
 using DentstageToolApp.Infrastructure.Data;
@@ -3212,6 +3214,14 @@ public class QuotationService : IQuotationService
                 }
 
                 TryAdd(uniqueUids, damage.Photo);
+
+                if (damage.AfterPhotos is { Count: > 0 })
+                {
+                    foreach (var afterPhoto in damage.AfterPhotos)
+                    {
+                        TryAdd(uniqueUids, afterPhoto);
+                    }
+                }
             }
         }
 
@@ -3236,8 +3246,10 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? Amount, string? FixTypeKey, string? FixTypeName)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? Stage)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
+        const string BeforeStage = "before";
+        const string AfterStage = "after";
 
         foreach (var damage in damages)
         {
@@ -3251,6 +3263,8 @@ public class QuotationService : IQuotationService
             var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
             var description = NormalizeOptionalText(damage.DisplayDescription);
             var amount = damage.DisplayEstimatedAmount;
+            var progress = NormalizeProgress(damage.DisplayProgressPercentage);
+            var actualAmount = ResolveActualAmount(amount, progress, damage.DisplayActualAmount);
             var fixTypeKey = NormalizeOptionalText(damage.DisplayFixType);
             var fixTypeName = NormalizeOptionalText(damage.FixTypeName);
 
@@ -3293,7 +3307,11 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                metadata.Add((photoUid, position, dentStatus, description, amount, fixTypeCategory, fixTypeName));
+                var stage = string.Equals(photoUid, NormalizeOptionalText(damage.Photo), StringComparison.OrdinalIgnoreCase)
+                    ? BeforeStage
+                    : AfterStage;
+
+                metadata.Add((photoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, stage));
             }
         }
 
@@ -3326,7 +3344,7 @@ public class QuotationService : IQuotationService
                 continue;
             }
 
-            var comment = BuildDamageComment(info.Position, info.DentStatus, info.Description, info.Amount);
+            var comment = BuildDamageComment(info.Position, info.DentStatus, info.Description, info.EstimatedAmount);
 
             if (photo.Posion != info.Position)
             {
@@ -3346,9 +3364,27 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
-            if (photo.Cost != info.Amount)
+            if (photo.Cost != info.EstimatedAmount)
             {
-                photo.Cost = info.Amount;
+                photo.Cost = info.EstimatedAmount;
+                updated = true;
+            }
+
+            if (info.Progress.HasValue && photo.MaintenanceProgress != info.Progress)
+            {
+                photo.MaintenanceProgress = info.Progress;
+                updated = true;
+            }
+
+            if (info.ActualAmount.HasValue && photo.FinishCost != info.ActualAmount)
+            {
+                photo.FinishCost = info.ActualAmount;
+                updated = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(info.Stage) && !string.Equals(photo.Stage, info.Stage, StringComparison.OrdinalIgnoreCase))
+            {
+                photo.Stage = info.Stage;
                 updated = true;
             }
 
@@ -3667,7 +3703,9 @@ public class QuotationService : IQuotationService
                 DisplayDescription = photo?.Comment,
                 DisplayEstimatedAmount = photo?.Cost,
                 DisplayFixType = fixTypeDisplay,
-                FixTypeName = fixTypeDisplay
+                FixTypeName = fixTypeDisplay,
+                DisplayProgressPercentage = photo?.MaintenanceProgress,
+                DisplayActualAmount = photo?.FinishCost
             };
 
             QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage, fallbackFixType);
@@ -3726,6 +3764,16 @@ public class QuotationService : IQuotationService
                     damage.DisplayEstimatedAmount = photo.Cost;
                 }
 
+                if (!damage.DisplayProgressPercentage.HasValue && photo.MaintenanceProgress.HasValue)
+                {
+                    damage.DisplayProgressPercentage = photo.MaintenanceProgress;
+                }
+
+                if (!damage.DisplayActualAmount.HasValue && photo.FinishCost.HasValue)
+                {
+                    damage.DisplayActualAmount = photo.FinishCost;
+                }
+
                 if (!string.IsNullOrWhiteSpace(photo.FixType))
                 {
                     var normalizedFixType = QuotationDamageFixTypeHelper.Normalize(photo.FixType)
@@ -3758,6 +3806,51 @@ public class QuotationService : IQuotationService
         {
             yield return primary;
         }
+
+        if (damage.AfterPhotos is { Count: > 0 })
+        {
+            foreach (var after in damage.AfterPhotos)
+            {
+                var normalized = NormalizeOptionalText(after);
+                if (normalized is not null)
+                {
+                    yield return normalized;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 正規化維修進度，將數值限制在 0~100 並四捨五入至小數兩位。
+    /// </summary>
+    private static decimal? NormalizeProgress(decimal? progress)
+    {
+        if (!progress.HasValue)
+        {
+            return null;
+        }
+
+        var clamped = Math.Clamp(progress.Value, 0m, 100m);
+        return decimal.Round(clamped, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// 依據預估金額與進度計算實收金額，若外部已提供值則優先使用。
+    /// </summary>
+    private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? providedActual)
+    {
+        if (providedActual.HasValue)
+        {
+            return decimal.Round(providedActual.Value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
+        {
+            return null;
+        }
+
+        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
+        return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>
@@ -3862,6 +3955,16 @@ public class QuotationService : IQuotationService
                 ? damage.FixTypeName
                 : QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeKey);
             var primaryPhotoUid = NormalizeOptionalText(ExtractPrimaryPhotoUid(damage));
+            var normalizedProgress = NormalizeProgress(damage.ProgressPercentage);
+            var actualAmount = ResolveActualAmount(damage.EstimatedAmount, normalizedProgress, damage.ActualAmount);
+            var afterPhotos = damage.AfterPhotos is { Count: > 0 }
+                ? damage.AfterPhotos
+                    .Select(NormalizeOptionalText)
+                    .Where(uid => uid is not null)
+                    .Select(uid => uid!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : new List<string>();
             summaries.Add(new QuotationDamageSummary
             {
                 Photo = primaryPhotoUid,
@@ -3870,7 +3973,10 @@ public class QuotationService : IQuotationService
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
                 FixType = NormalizeOptionalText(damage.FixType) ?? fixTypeKey,
-                FixTypeName = fixTypeName
+                FixTypeName = fixTypeName,
+                ProgressPercentage = normalizedProgress,
+                ActualAmount = actualAmount,
+                AfterPhotos = afterPhotos
             });
         }
 

@@ -416,6 +416,40 @@ public class MaintenanceOrdersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// 針對已完成的維修單進行退傭，需通過密碼驗證。
+    /// </summary>
+    [HttpPost("rebate")]
+    [ProducesResponseType(typeof(MaintenanceOrderRebateResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<MaintenanceOrderRebateResponse>> ApplyRebateAsync([FromBody] MaintenanceOrderRebateRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            var response = await _maintenanceOrderService.ApplyRebateAsync(request, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (MaintenanceOrderManagementException ex)
+        {
+            _logger.LogWarning(ex, "退傭處理失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "退傭處理失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("退傭流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，退傭未完成。", "退傭處理取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "退傭流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "退傭處理失敗");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>

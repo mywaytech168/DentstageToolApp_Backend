@@ -103,6 +103,7 @@ public class QuotationDamageItem
 {
     private string? _photo;
     private string? _fixType;
+    private readonly List<string> _afterPhotos = new();
 
     /// <summary>
     /// 主要圖片的 PhotoUID，作為傷痕與照片的唯一對應。所有輸入都會先行去除空白。
@@ -320,6 +321,64 @@ public class QuotationDamageItem
     }
 
     /// <summary>
+    /// 維修進度百分比（0~100），用於計算實際收費。
+    /// </summary>
+    [JsonIgnore]
+    public decimal? ProgressPercentage { get; set; }
+
+    /// <summary>
+    /// 新欄位：前端使用 progressPercentage 提交維修進度，回傳同一欄位方便顯示。
+    /// </summary>
+    [JsonPropertyName("progressPercentage")]
+    public decimal? DisplayProgressPercentage
+    {
+        get => ProgressPercentage;
+        set => ProgressPercentage = value;
+    }
+
+    /// <summary>
+    /// 實際收費金額，供維修進度計算後回寫。
+    /// </summary>
+    [JsonIgnore]
+    public decimal? ActualAmount { get; set; }
+
+    /// <summary>
+    /// 新欄位：英文欄位 actualAmount，統一提供前端顯示與提交。
+    /// </summary>
+    [JsonPropertyName("actualAmount")]
+    public decimal? DisplayActualAmount
+    {
+        get => ActualAmount;
+        set => ActualAmount = value;
+    }
+
+    /// <summary>
+    /// 維修後照片清單，儲存與此傷痕對應的完工照片 UID。
+    /// </summary>
+    [JsonPropertyName("afterPhotos")]
+    public List<string> AfterPhotos
+    {
+        get => _afterPhotos;
+        set
+        {
+            _afterPhotos.Clear();
+            if (value is null)
+            {
+                return;
+            }
+
+            foreach (var photo in value)
+            {
+                var normalized = NormalizePhotoValue(photo);
+                if (normalized is not null)
+                {
+                    _afterPhotos.Add(normalized);
+                }
+            }
+        }
+    }
+
+    /// <summary>
     /// 內部使用的維修類型識別值，提供轉換器進行分類並保留既有資料相容性。
     /// </summary>
     [JsonIgnore]
@@ -463,6 +522,41 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
+        writer.WritePropertyName("progressPercentage");
+        if (target.DisplayProgressPercentage.HasValue)
+        {
+            writer.WriteNumberValue(target.DisplayProgressPercentage.Value);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+
+        writer.WritePropertyName("actualAmount");
+        if (target.DisplayActualAmount.HasValue)
+        {
+            writer.WriteNumberValue(target.DisplayActualAmount.Value);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+
+        writer.WritePropertyName("afterPhotos");
+        writer.WriteStartArray();
+        if (target.AfterPhotos is { Count: > 0 })
+        {
+            foreach (var afterPhoto in target.AfterPhotos)
+            {
+                var normalizedAfter = NormalizePhoto(afterPhoto);
+                if (!string.IsNullOrWhiteSpace(normalizedAfter))
+                {
+                    writer.WriteStringValue(normalizedAfter);
+                }
+            }
+        }
+        writer.WriteEndArray();
+
         writer.WritePropertyName("fixType");
         WriteNullableString(writer, target.DisplayFixType);
 
@@ -503,7 +597,10 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             DisplayDescription = ReadString(element, "description", "說明"),
             DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額"),
             DisplayFixType = ReadString(element, "fixType", "維修類型"),
-            FixTypeName = ReadString(element, "fixTypeName")
+            FixTypeName = ReadString(element, "fixTypeName"),
+            DisplayProgressPercentage = ReadDecimal(element, "progressPercentage"),
+            DisplayActualAmount = ReadDecimal(element, "actualAmount"),
+            AfterPhotos = ReadPhotoArray(element, "afterPhotos")
         };
 
         QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(fallback);
@@ -707,6 +804,34 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             JsonValueKind.String when decimal.TryParse(element.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed) => parsed,
             _ => null
         };
+    }
+
+    /// <summary>
+    /// 讀取照片陣列欄位並正規化 PhotoUID 清單。
+    /// </summary>
+    private static List<string> ReadPhotoArray(JsonElement root, string propertyName)
+    {
+        if (!root.TryGetProperty(propertyName, out var element) || element.ValueKind != JsonValueKind.Array)
+        {
+            return new List<string>();
+        }
+
+        var list = new List<string>();
+        foreach (var item in element.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var normalized = NormalizePhoto(item.GetString());
+            if (normalized is not null)
+            {
+                list.Add(normalized);
+            }
+        }
+
+        return list;
     }
 
     /// <summary>
