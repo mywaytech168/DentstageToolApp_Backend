@@ -3246,10 +3246,8 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? Stage)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? AfterPhotoUid)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
-        const string BeforeStage = "before";
-        const string AfterStage = "after";
 
         foreach (var damage in damages)
         {
@@ -3295,23 +3293,42 @@ public class QuotationService : IQuotationService
                 fixTypeName = QuotationDamageFixTypeHelper.ResolveDisplayName(fixTypeCategory);
             }
 
-            foreach (var photoUid in EnumerateDamagePhotoUids(damage))
+            var beforePhotoUid = NormalizeOptionalText(damage.Photo);
+
+            // 使用 HashSet 移除重複的完工照片 UID，避免同一張照片被寫入多次。
+            var afterPhotoUids = new List<string>();
+            if (damage.AfterPhotos is { Count: > 0 })
             {
-                if (photoUid is null)
+                var uniqueAfterPhotos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var afterPhoto in damage.AfterPhotos)
+                {
+                    var normalizedAfterPhoto = NormalizeOptionalText(afterPhoto);
+                    if (normalizedAfterPhoto is null || !uniqueAfterPhotos.Add(normalizedAfterPhoto))
+                    {
+                        continue;
+                    }
+
+                    afterPhotoUids.Add(normalizedAfterPhoto);
+                }
+            }
+
+            // 主要照片（維修前）需記錄第一張完工照片 UID，方便舊系統建立前後對應關係。
+            if (beforePhotoUid is not null
+                && (normalizedSignatureUid is null || !string.Equals(beforePhotoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase)))
+            {
+                var mappedAfterPhotoUid = afterPhotoUids.Count > 0 ? afterPhotoUids[0] : null;
+                metadata.Add((beforePhotoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, mappedAfterPhotoUid));
+            }
+
+            // 完工照片僅需帶入欄位資訊並清空 AfterPhotoUid，確保資料庫不會誤存舊值。
+            foreach (var afterPhotoUid in afterPhotoUids)
+            {
+                if (normalizedSignatureUid is not null && string.Equals(afterPhotoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
 
-                if (normalizedSignatureUid is not null && string.Equals(photoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                var stage = string.Equals(photoUid, NormalizeOptionalText(damage.Photo), StringComparison.OrdinalIgnoreCase)
-                    ? BeforeStage
-                    : AfterStage;
-
-                metadata.Add((photoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, stage));
+                metadata.Add((afterPhotoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, null));
             }
         }
 
@@ -3382,9 +3399,20 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
-            if (!string.IsNullOrWhiteSpace(info.Stage) && !string.Equals(photo.Stage, info.Stage, StringComparison.OrdinalIgnoreCase))
+            var normalizedAfterPhotoUid = NormalizeOptionalText(info.AfterPhotoUid);
+            var storedAfterPhotoUid = NormalizeOptionalText(photo.AfterPhotoUid);
+
+            if (normalizedAfterPhotoUid is null)
             {
-                photo.Stage = info.Stage;
+                if (storedAfterPhotoUid is not null)
+                {
+                    photo.AfterPhotoUid = null;
+                    updated = true;
+                }
+            }
+            else if (!string.Equals(storedAfterPhotoUid, normalizedAfterPhotoUid, StringComparison.OrdinalIgnoreCase))
+            {
+                photo.AfterPhotoUid = normalizedAfterPhotoUid;
                 updated = true;
             }
 

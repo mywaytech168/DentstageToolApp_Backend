@@ -2003,6 +2003,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         var storageRoot = EnsurePhotoStorageRoot();
+        var clones = new List<(PhotoDatum Clone, string? OriginalAfterUid)>();
+
         foreach (var photo in photos)
         {
             var oldPhotoUid = NormalizeOptionalText(photo.PhotoUid);
@@ -2034,11 +2036,32 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 FlagFinish = photo.FlagFinish,
                 FinishCost = photo.FinishCost,
                 MaintenanceProgress = photo.MaintenanceProgress,
-                Stage = photo.Stage
+                AfterPhotoUid = photo.AfterPhotoUid
             };
 
             await _dbContext.PhotoData.AddAsync(clone, cancellationToken);
+            clones.Add((clone, photo.AfterPhotoUid));
             result[oldPhotoUid] = newPhotoUid;
+        }
+
+        // 續修後需重新對應完工照片 UID，確保指向新複製的照片而非舊資料。
+        foreach (var (clone, originalAfterUid) in clones)
+        {
+            var normalizedOriginalAfterUid = NormalizeOptionalText(originalAfterUid);
+            if (normalizedOriginalAfterUid is null)
+            {
+                continue;
+            }
+
+            if (result.TryGetValue(normalizedOriginalAfterUid, out var mappedAfterUid))
+            {
+                clone.AfterPhotoUid = mappedAfterUid;
+            }
+            else
+            {
+                // 若完工照片未複製成功，避免跨工單引用舊資料，改以清空欄位處理。
+                clone.AfterPhotoUid = null;
+            }
         }
 
         return result;

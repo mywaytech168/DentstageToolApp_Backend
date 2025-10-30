@@ -12,8 +12,8 @@ CREATE TABLE PhotoData (
     Finish_Cost         DECIMAL(10,2),
     -- 維修進度百分比，新流程依此計算實收金額。
     MaintenanceProgress DECIMAL(5,2),
-    -- 照片階段（例如 before / after），供維修後照片綁定使用。
-    PhotoStage          VARCHAR(20),
+    -- 維修後照片 UID，儲存完工照片與估價照片的關聯。
+    AfterPhotoUID       VARCHAR(100),
     -- Fix_Type 改儲存固定鍵值（dent、beauty、paint、other），預設長度調整為 100 以容納描述文字。
     Fix_Type            VARCHAR(100)
 );
