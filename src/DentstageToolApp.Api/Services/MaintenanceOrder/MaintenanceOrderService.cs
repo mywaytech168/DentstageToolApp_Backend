@@ -93,10 +93,26 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(normalizedQuery.Status) && !string.Equals(normalizedQuery.Status, "ALL", StringComparison.OrdinalIgnoreCase))
+        // 維修單狀態改為支援多重條件，與估價單列表行為一致。
+        var maintenanceStatusFilters = normalizedQuery.Status?
+            .Select(status => status?.Trim())
+            .Where(status => !string.IsNullOrWhiteSpace(status))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (maintenanceStatusFilters is { Count: > 0 })
         {
-            var status = normalizedQuery.Status.Trim();
-            ordersQuery = ordersQuery.Where(order => order.Status == status);
+            if (maintenanceStatusFilters.Any(status => string.Equals(status, "ALL", StringComparison.OrdinalIgnoreCase)))
+            {
+                maintenanceStatusFilters = maintenanceStatusFilters
+                    .Where(status => !string.Equals(status, "ALL", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            if (maintenanceStatusFilters.Count > 0)
+            {
+                ordersQuery = ordersQuery.Where(order => order.Status != null && maintenanceStatusFilters.Contains(order.Status));
+            }
         }
 
         if (normalizedQuery.StartDate.HasValue)

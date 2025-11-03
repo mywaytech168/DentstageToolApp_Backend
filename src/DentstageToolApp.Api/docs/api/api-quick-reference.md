@@ -166,9 +166,9 @@ Content-Type: application/json
 > 估價單詳情提供 `amounts` 物件，包含估價金額、折扣與應付金額欄位，維修單詳情亦沿用相同結構。 【F:src/DentstageToolApp.Api/Quotations/QuotationDetailResponse.cs†L9-L96】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L720-L748】
 
 **列表查詢常用欄位**
-- `fixType`：維修類型篩選條件，請使用凹痕、美容、板烤或其他等固定中文標籤，後端會以 LIKE 模式比對，支援多標籤照片資料。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L11-L18】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L181-L200】
-- `status`：估價單狀態碼（110/180/190/191/195）。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L16-L19】
-- `startDate`、`endDate`、`customerKeyword`、`carPlateKeyword`、`page`、`pageSize`。 【F:src/DentstageToolApp.Api/Quotations/QuotationListQuery.cs†L21-L51】
+- `fixType`：維修類型篩選條件，請使用凹痕、美容、板烤或其他等固定中文標籤，後端會以 LIKE 模式比對，支援多標籤照片資料。 【F:src/DentstageToolApp.Api/Models/Quotations/QuotationListQuery.cs†L11-L18】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L181-L204】
+- `status`：估價單狀態碼陣列，可一次傳入多個狀態（110/180/190/191/195）。 【F:src/DentstageToolApp.Api/Models/Quotations/QuotationListQuery.cs†L16-L24】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L205-L226】
+- `startDate`、`endDate`、`customerKeyword`、`carPlateKeyword`、`page`、`pageSize`。 【F:src/DentstageToolApp.Api/Models/Quotations/QuotationListQuery.cs†L21-L51】
 
 **建立／編輯估價單主要結構範例**
 ```json
@@ -275,8 +275,9 @@ Content-Type: application/json
 > 維修單詳情回應沿用 `QuotationDetailResponse` 欄位，並額外提供維修單編號、金額資訊與狀態歷程。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailResponse.cs†L9-L42】
 
 **查詢欄位重點**
-- `fixType`、`status`、`startDate`、`endDate`：對應篩選條件。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderListQuery.cs†L11-L29】
-- `page`、`pageSize`：分頁設定。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderListQuery.cs†L31-L41】
+- `fixType`、`startDate`、`endDate`：對應篩選條件。 【F:src/DentstageToolApp.Api/Models/MaintenanceOrders/MaintenanceOrderListQuery.cs†L11-L29】
+- `status`：維修單狀態碼陣列，可同時帶入多個狀態值（210/220/290/295/296 等）。 【F:src/DentstageToolApp.Api/Models/MaintenanceOrders/MaintenanceOrderListQuery.cs†L16-L24】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L86-L107】
+- `page`、`pageSize`：分頁設定。 【F:src/DentstageToolApp.Api/Models/MaintenanceOrders/MaintenanceOrderListQuery.cs†L31-L41】
 
 **單筆操作欄位**
 - `orderNo`：維修單編號，為詳細／回溯／確認／編輯／續修／完成／終止的必填欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailRequest.cs†L5-L15】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderRevertRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderConfirmRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderContinueRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderCompleteRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderTerminateRequest.cs†L10-L14】

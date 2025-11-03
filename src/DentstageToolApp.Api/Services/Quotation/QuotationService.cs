@@ -203,10 +203,27 @@ public class QuotationService : IQuotationService
             quotationsQuery = quotationsQuery.Where(predicate);
         }
 
-        // 篩選估價單狀態。
-        if (!string.IsNullOrWhiteSpace(query.Status))
+        // 篩選估價單狀態，改為支援多個狀態值，保留 ALL 代表不篩選的語意。
+        var quotationStatusFilters = query.Status?
+            .Select(status => status?.Trim())
+            .Where(status => !string.IsNullOrWhiteSpace(status))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (quotationStatusFilters is { Count: > 0 })
         {
-            quotationsQuery = quotationsQuery.Where(q => q.Status == query.Status);
+            // 若帶入 ALL 代表不限制狀態，故需排除避免阻擋其他條件。
+            if (quotationStatusFilters.Any(status => string.Equals(status, "ALL", StringComparison.OrdinalIgnoreCase)))
+            {
+                quotationStatusFilters = quotationStatusFilters
+                    .Where(status => !string.Equals(status, "ALL", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+
+            if (quotationStatusFilters.Count > 0)
+            {
+                quotationsQuery = quotationsQuery.Where(q => q.Status != null && quotationStatusFilters.Contains(q.Status));
+            }
         }
 
         // 篩選建立日期（起始）。
