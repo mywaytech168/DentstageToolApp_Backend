@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace DentstageToolApp.Api.Models.Quotations;
@@ -14,9 +15,10 @@ public class QuotationListQuery
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 指定估價單狀態碼，對應資料表欄位 Status。 ALL->(null) 110估價中(編輯中) 180估價完成 186估價過期 190已預約 196預約過期 191轉維修(待維修) 195估價或預約取消。
+    /// 指定估價單狀態碼集合，允許同時傳入多個狀態供列表篩選。 ALL->(null) 110估價中(編輯中) 180估價完成 186估價過期 190已預約 196預約過期 191轉維修(待維修) 195估價或預約取消。
+    /// 由於改為陣列型別，前端可透過 QueryString ?status=110&status=180 或 JSON ["110","180"] 傳入，多狀態會轉換為 SQL IN 條件。
     /// </summary>
-    public string? Status { get; set; }
+    public List<string>? Status { get; set; }
 
     /// <summary>
     /// 查詢開始日期，將比對建立時間的下限。
