@@ -1132,11 +1132,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             ?? quotationStore?.StoreName;
 
         var reservationDate = ParseOptionalDate(order.BookDate)
-            ?? quotation?.BookDate?.ToDateTime(TimeOnly.MinValue)
+            ?? (quotation?.BookDate.HasValue == true ? quotation.BookDate.Value.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero)) : (DateTime?)null)
             ?? quotationStore?.ReservationDate;
 
         var repairDate = ParseOptionalDate(order.WorkDate)
-            ?? quotation?.FixDate?.ToDateTime(TimeOnly.MinValue)
+            ?? (quotation?.FixDate.HasValue == true ? quotation.FixDate.Value.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero)) : (DateTime?)null)
             ?? quotationStore?.RepairDate;
 
         // ---------- 優先使用維修單寫入的估價技師 UID，再回退至估價單或原始請求 ----------

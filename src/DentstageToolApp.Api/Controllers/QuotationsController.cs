@@ -62,9 +62,9 @@ public class QuotationsController : ControllerBase
         """
         {
           "fixType": "凹痕",
-          "status": "110",
-          "startDate": "2024-03-01T00:00:00",
-          "endDate": "2024-03-31T23:59:59",
+          "status": ["110", "115", "180", "186", "190", "195", "196", "191"],
+          "startDate": "2023-10-01T00:00:00",
+          "endDate": "2025-10-31T23:59:59",
           "customerKeyword": "林",
           "carPlateKeyword": "AAA",
           "page": 1,

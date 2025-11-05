@@ -89,7 +89,7 @@ public class PurchaseOrdersController : ControllerBase
     [SwaggerMockRequestExample(
         """
         {
-          "purchaseOrderNo": "PO_2025070001"
+          "purchaseOrderNo": "PO_2025100001"
         }
         """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status200OK)]
