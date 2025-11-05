@@ -542,7 +542,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
     {
         if (order.Date.HasValue)
         {
-            return order.Date.Value.ToDateTime(TimeOnly.MinValue);
+            return order.Date.Value.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero));
         }
 
         if (!string.IsNullOrWhiteSpace(order.WorkDate) && DateTime.TryParse(order.WorkDate, out var workDate))

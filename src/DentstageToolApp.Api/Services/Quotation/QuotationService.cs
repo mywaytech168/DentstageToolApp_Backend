@@ -974,9 +974,9 @@ public class QuotationService : IQuotationService
                 EstimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
                     ?? estimationTechnicianUid,
                 CreatedDate = quotation.CreationTimestamp,
-                ReservationDate = quotation.BookDate?.ToDateTime(TimeOnly.MinValue),
+                ReservationDate = ConvertDateOnlyToDateTime(quotation.BookDate),
                 BookMethod = quotation.BookMethod,
-                RepairDate = quotation.FixDate?.ToDateTime(TimeOnly.MinValue)
+                RepairDate = ConvertDateOnlyToDateTime(quotation.FixDate)
             },
             Car = new QuotationCarInfo
             {
@@ -4729,7 +4729,9 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static DateTime? ConvertDateOnlyToDateTime(DateOnly? value)
     {
-        return value?.ToDateTime(TimeOnly.MinValue);
+        // 使用 00:00 作為日期轉換的時間部分，但避免直接引用 TimeOnly.MinValue 常數。
+        // 若 value 為 null，則回傳 null。
+        return value?.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero));
     }
 
     /// <summary>
