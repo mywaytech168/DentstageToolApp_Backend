@@ -550,14 +550,14 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             return workDate;
         }
 
-        if (order.Status210Date.HasValue)
-        {
-            return order.Status210Date;
-        }
-
         if (order.Status220Date.HasValue)
         {
             return order.Status220Date;
+        }
+
+        if (order.Status290Date.HasValue)
+        {
+            return order.Status290Date;
         }
 
         if (order.Status290Date.HasValue)

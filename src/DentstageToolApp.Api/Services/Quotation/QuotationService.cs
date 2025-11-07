@@ -72,6 +72,8 @@ public class QuotationService : IQuotationService
         _logger = logger;
     }
 
+    // 注意: 保持原本的建構式注入 _context。
+
     /// <inheritdoc />
     public async Task<CreateQuotationTestPageResponse> GenerateRandomQuotationTestPageAsync(CancellationToken cancellationToken)
     {
@@ -1707,7 +1709,7 @@ public class QuotationService : IQuotationService
         var orderCreatorUid = NormalizeOptionalText(quotation.CreatorTechnicianUid)
             ?? orderEstimationUid;
 
-        var order = new Order
+            var order = new Order
         {
             OrderUid = orderUid,
             OrderNo = orderNoNew,
@@ -1723,9 +1725,11 @@ public class QuotationService : IQuotationService
             CreatorTechnicianUid = orderCreatorUid,
             StoreUid = quotation.StoreUid,
             Date = DateOnly.FromDateTime(now),
-            Status = "210",
-            Status210Date = now,
-            Status210User = operatorLabel,
+            // 當直接從估價端建立維修單時，預設同時進入維修中狀態（220），
+            // 讓轉單即代表開始維修的流程更為簡潔。
+            Status = "220",
+            Status220Date = now,
+            Status220User = operatorLabel,
             CurrentStatusDate = now,
             CurrentStatusUser = operatorLabel,
             QuatationUid = quotation.QuotationUid,
@@ -1783,13 +1787,111 @@ public class QuotationService : IQuotationService
             photo.RelatedUid = orderUid;
         }
 
-        ApplyStatusAudit(quotation, "191", operatorLabel, now);
+    // 保留估價端的待維修紀錄（191），即便維修單已直接進入 220
+    ApplyStatusAudit(quotation, "191", operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 轉為維修單 {OrderNo}。", operatorLabel, quotation.QuotationNo, orderNoNew);
 
         return BuildMaintenanceResponse(quotation, order, now);
+    }
+
+    /// <summary>
+    /// 將估價單標記為「待維修」（191），僅更新估價單狀態，不建立維修單。
+    /// </summary>
+    public async Task<QuotationStatusChangeResponse> MarkQuotationWaitingAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供待維修的估價單編號。");
+        }
+
+        var quotationNo = EnsureRequestHasQuotationNo(request);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var quotation = await FindQuotationForUpdateAsync(quotationNo, cancellationToken);
+        if (quotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需標記為待維修的估價單。");
+        }
+
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        ApplyStatusAudit(quotation, "191", operatorLabel, now);
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 標記為待維修。", operatorLabel, quotation.QuotationNo);
+
+        return BuildStatusChangeResponse(quotation, now);
+    }
+
+    /// <summary>
+    /// 在估價單端執行確認維修，會將對應的維修單狀態更新為 220 (維修中)。
+    /// 此方法將維護在估價層級以符合流程需求（例如：估價單 191 -> 確認維修 -> 維修單 220）。
+    /// </summary>
+    public async Task<DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderStatusChangeResponse> ConfirmMaintenanceAsync(DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderConfirmRequest request, string operatorName, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供確認維修的條件。");
+        }
+
+        var orderNo = NormalizeRequiredText(request.OrderNo, "維修單編號");
+        var operatorLabel = NormalizeOperator(operatorName);
+        var now = GetTaipeiNow();
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var order = await _context.Orders
+            .Include(o => o.Quatation)
+            .FirstOrDefaultAsync(o => o.OrderNo == orderNo, cancellationToken);
+
+        if (order is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需確認的維修單。");
+        }
+
+        if (string.Equals(order.Status, "295", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new QuotationManagementException(HttpStatusCode.Conflict, "維修單已取消，無法確認維修。");
+        }
+
+        if (string.Equals(order.Status, "220", StringComparison.OrdinalIgnoreCase))
+        {
+            return new DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderStatusChangeResponse
+            {
+                OrderUid = order.OrderUid,
+                OrderNo = order.OrderNo,
+                Status = order.Status,
+                StatusTime = order.Status220Date,
+                Message = "維修單已處於維修中狀態。"
+            };
+        }
+
+        order.Status = "220";
+        order.Status220Date = now;
+        order.Status220User = operatorLabel;
+        order.CurrentStatusDate = now;
+        order.CurrentStatusUser = operatorLabel;
+        order.ModificationTimestamp = now;
+        order.ModifiedBy = operatorLabel;
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("操作人員 {Operator} (via quotation) 將維修單 {OrderNo} 標記為維修中。", operatorLabel, order.OrderNo);
+
+        return new DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderStatusChangeResponse
+        {
+            OrderUid = order.OrderUid,
+            OrderNo = order.OrderNo,
+            Status = order.Status,
+            StatusTime = order.Status220Date,
+            Message = "維修單已更新為維修中。"
+        };
     }
 
     /// <inheritdoc />

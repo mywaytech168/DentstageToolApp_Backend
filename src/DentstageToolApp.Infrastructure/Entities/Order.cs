@@ -243,18 +243,18 @@ public class Order
     public string? Remark { get; set; }
 
     /// <summary>
-    /// 210 狀態時間戳記。
+    /// 220 狀態時間戳記。
+    /// </summary>
+    /// <summary>
+    /// 210 狀態時間戳記（保留與資料庫欄位對應）。
     /// </summary>
     public DateTime? Status210Date { get; set; }
 
     /// <summary>
-    /// 210 狀態處理人。
+    /// 210 狀態處理人（保留與資料庫欄位對應）。
     /// </summary>
     public string? Status210User { get; set; }
 
-    /// <summary>
-    /// 220 狀態時間戳記。
-    /// </summary>
     public DateTime? Status220Date { get; set; }
 
     /// <summary>

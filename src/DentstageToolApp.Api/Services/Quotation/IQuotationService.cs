@@ -79,6 +79,17 @@ public interface IQuotationService
     Task<QuotationMaintenanceConversionResponse> ConvertToMaintenanceAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 將估價單標記為「待維修」（191），但不建立維修單。
+    /// </summary>
+    Task<QuotationStatusChangeResponse> MarkQuotationWaitingAsync(QuotationMaintenanceRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 在估價單層級執行「確認維修」流程：此操作會將對應的維修單狀態更新為 220 (維修中)，
+    /// 但觸發點在於估價單端以便統一工作流程管理。
+    /// </summary>
+    Task<DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderStatusChangeResponse> ConfirmMaintenanceAsync(DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrderConfirmRequest request, string operatorName, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 刪除估價單資料，針對尚未建立工單的估價單進行清除。
     /// </summary>
     /// <param name="request">刪除參數，至少需要估價單編號。</param>

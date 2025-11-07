@@ -802,6 +802,7 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.Content).HasColumnType("text");
         entity.Property(e => e.CarReserved).HasMaxLength(50);
         entity.Property(e => e.Remark).HasColumnType("text");
+        // 保留 Status210 欄位映射以維持與既有資料庫結構相容性。
         entity.Property(e => e.Status210Date)
             .HasColumnName("Status210_Date");
         entity.Property(e => e.Status210User)
