@@ -23,7 +23,6 @@ public class CustomerLookupService : ICustomerLookupService
 {
     private static readonly HashSet<string> ReservationStatusCodes = new(StringComparer.OrdinalIgnoreCase)
     {
-        "210",
         "220"
     };
 

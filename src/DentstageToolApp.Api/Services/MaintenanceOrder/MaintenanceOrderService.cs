@@ -497,8 +497,18 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
             if (string.Equals(currentOrderStatus, "295", StringComparison.OrdinalIgnoreCase))
             {
-                var fallbackStatus = ResolvePreviousOrderStatus(order, currentOrderStatus) ?? "210";
-                ApplyOrderStatusReversion(order, fallbackStatus, operatorLabel, now);
+                var fallbackStatus = ResolvePreviousOrderStatus(order, currentOrderStatus) ?? (order.Status220Date.HasValue ? "220" : null);
+                if (fallbackStatus is not null)
+                {
+                    ApplyOrderStatusReversion(order, fallbackStatus, operatorLabel, now);
+                }
+                else
+                {
+                    // 若取得不到歷史狀態則清除狀態欄位並更新當前狀態時間。
+                    order.Status = null;
+                    order.CurrentStatusDate = now;
+                    order.CurrentStatusUser = operatorLabel;
+                }
             }
             else
             {
@@ -1589,8 +1599,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         return new MaintenanceOrderStatusHistory
         {
-            Status210Date = order.Status210Date,
-            Status210User = NormalizeOptionalText(order.Status210User),
             Status220Date = order.Status220Date,
             Status220User = NormalizeOptionalText(order.Status220User),
             Status290Date = order.Status290Date,
@@ -1614,7 +1622,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         var history = new List<(string Code, DateTime? Timestamp)>
         {
-            ("210", order.Status210Date),
             ("220", order.Status220Date),
             ("290", order.Status290Date),
             ("295", order.Status295Timestamp)
@@ -1629,7 +1636,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         for (var i = currentIndex - 1; i >= 0; i--)
         {
             var (code, timestamp) = history[i];
-            if (timestamp.HasValue || string.Equals(code, "210", StringComparison.OrdinalIgnoreCase))
+            if (timestamp.HasValue)
             {
                 return code;
             }
@@ -1651,10 +1658,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
 
         switch (targetStatus)
         {
-            case "210":
-                order.Status210Date ??= timestamp;
-                order.Status210User ??= operatorLabel;
-                break;
             case "220":
                 order.Status220Date ??= timestamp;
                 order.Status220User ??= operatorLabel;
@@ -1665,7 +1668,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 break;
         }
 
-        var statusOrder = new List<string> { "210", "220", "290", "295" };
+        var statusOrder = new List<string> { "220", "290", "295" };
         var targetIndex = statusOrder.FindIndex(code => string.Equals(code, targetStatus, StringComparison.OrdinalIgnoreCase));
 
         for (var i = targetIndex + 1; i < statusOrder.Count; i++)
@@ -1703,7 +1706,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         return statusCode switch
         {
-            "210" => order.Status210Date,
             "220" => order.Status220Date,
             "290" => order.Status290Date,
             "295" => order.Status295Timestamp,

@@ -255,6 +255,52 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 估價端確認維修：以 QuotationNo 為觸發點，由估價單建立維修單並將維修單狀態更新為 220（維修中）。
+    /// 注意：此介面為估價端流程，若需確認既有工單請使用維修端對應的確認 API（或由前端改以維修端路徑呼叫）。
+    /// </summary>
+    [HttpPost("confirm-maintenance")]
+        [SwaggerMockRequestExample(
+                """
+                {
+                    "quotationNo": "Q25100001"
+                }
+                """)]
+    [ProducesResponseType(typeof(QuotationMaintenanceConversionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<QuotationMaintenanceConversionResponse>> ConfirmMaintenanceAsync([FromBody] DentstageToolApp.Api.Models.MaintenanceOrders.MaintenanceOrQuotationConfirmRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var operatorName = GetCurrentOperatorName();
+            // 目前估價端的確認流程僅以 QuotationNo 為觸發點：由估價單建立並進入維修中 (220)。
+            if (string.IsNullOrWhiteSpace(request?.QuotationNo))
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供 QuotationNo 以確認維修並建立維修單。");
+            }
+
+            var convReq = new QuotationMaintenanceRequest { QuotationNo = request.QuotationNo };
+            var convResp = await _quotationService.ConvertToMaintenanceAsync(convReq, operatorName, cancellationToken);
+            return Ok(convResp);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "估價端確認維修失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "估價端確認維修失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("估價端確認維修流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，維修單未更新。", "估價端確認維修取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "估價端確認維修發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "估價端確認維修失敗");
+        }
+    }
+
+    /// <summary>
     /// 編輯估價單資料，更新車輛、客戶與類別備註。
     /// </summary>
     [HttpPost("edit")]
@@ -666,7 +712,7 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
-    /// 將估價單轉為維修單，回傳新工單編號。
+    /// 僅標記為待維修（191），不建立維修單
     /// </summary>
     [HttpPost("maintenance")]
     [SwaggerMockRequestExample(
@@ -675,8 +721,8 @@ public class QuotationsController : ControllerBase
           "quotationNo": "Q25100001"
         }
         """)]
-    [ProducesResponseType(typeof(QuotationMaintenanceConversionResponse), StatusCodes.Status200OK)]
-    public async Task<ActionResult<QuotationMaintenanceConversionResponse>> ConvertToMaintenanceAsync([FromBody] QuotationMaintenanceRequest request, CancellationToken cancellationToken)
+    [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationStatusChangeResponse>> ConvertToMaintenanceAsync([FromBody] QuotationMaintenanceRequest request, CancellationToken cancellationToken)
     {
         if (!ModelState.IsValid)
         {
@@ -686,7 +732,8 @@ public class QuotationsController : ControllerBase
         try
         {
             var operatorName = GetCurrentOperatorName();
-            var response = await _quotationService.ConvertToMaintenanceAsync(request, operatorName, cancellationToken);
+            // 新流程：POST /api/quotations/maintenance 僅標記為待維修（191），不建立維修單
+            var response = await _quotationService.MarkQuotationWaitingAsync(request, operatorName, cancellationToken);
             return Ok(response);
         }
         catch (QuotationManagementException ex)

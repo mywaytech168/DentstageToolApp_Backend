@@ -1791,14 +1791,14 @@
                 description: '誤按狀態時回復上一階段（依序 295 → 290 → 220 → 210）。'
               },
               {
-                name: '確認維修開始',
+                name: '估價端確認維修 (建立工單)',
                 method: 'POST',
-                path: '/maintenance-orders/confirm',
+                path: '/quotations/confirm-maintenance',
                 template: {
-                  orderNo: 'O25100001'
+                  quotationNo: 'Q25100001'
                 },
                 requiresAuth: true,
-                description: '更新狀態為維修中。'
+                description: '由估價單建立維修單並將其狀態更新為維修中 (220)。'
               },
               {
                 name: '編輯維修單',

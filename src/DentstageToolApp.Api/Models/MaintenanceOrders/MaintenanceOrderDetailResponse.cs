@@ -43,16 +43,6 @@ public class MaintenanceOrderDetailResponse : QuotationDetailResponse
 public class MaintenanceOrderStatusHistory
 {
     /// <summary>
-    /// 210 狀態時間戳記。
-    /// </summary>
-    public DateTime? Status210Date { get; set; }
-
-    /// <summary>
-    /// 210 狀態操作人。
-    /// </summary>
-    public string? Status210User { get; set; }
-
-    /// <summary>
     /// 220 狀態時間戳記。
     /// </summary>
     public DateTime? Status220Date { get; set; }

@@ -159,7 +159,7 @@ Content-Type: application/json
 | POST | `/api/quotations/reserve/update` | 更新既有預約日期。 | JSON 同 `QuotationReservationRequest`。 |
 | POST | `/api/quotations/reserve/cancel` | 取消預約並清除日期。 | JSON 同 `QuotationCancelRequest`。 |
 | POST | `/api/quotations/revert` | 將估價單狀態回溯。 | JSON 對應 `QuotationRevertStatusRequest`。 |
-| POST | `/api/quotations/maintenance` | 估價單轉維修並產生維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
+| POST | `/api/quotations/maintenance` | 將估價單標記為待維修（191），僅更新估價單狀態，不會立即建立維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
 
 > 刪除估價單僅允許狀態碼 110（估價中 / 編輯中）操作，若已產生維修工單需先處理工單後再刪除。 【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1788-L1810】
 
@@ -266,7 +266,8 @@ Content-Type: application/json
 | POST | `/api/maintenance-orders` | 透過 Body 查詢維修單列表。 | JSON 同 `MaintenanceOrderListQuery`。 |
 | POST | `/api/maintenance-orders/detail` | 取得維修單詳細。 | JSON 對應 `MaintenanceOrderDetailRequest`。 |
 | POST | `/api/maintenance-orders/revert` | 維修單狀態回溯。 | JSON 對應 `MaintenanceOrderRevertRequest`。 |
-| POST | `/api/maintenance-orders/confirm` | 確認維修開始。 | JSON 對應 `MaintenanceOrderConfirmRequest`。 |
+<!-- 已移除：維修端確認維修開始（POST /api/maintenance-orders/confirm）
+  此行為已改為由估價端統一處理，請使用 POST /api/quotations/confirm-maintenance 並傳入 quotationNo 以由估價單建立維修單並進入維修中（220）。 -->
 | POST | `/api/maintenance-orders/edit` | 編輯維修單。 | JSON 對應 `UpdateMaintenanceOrderRequest`，欄位與估價單編輯共用。 |
 | POST | `/api/maintenance-orders/continue` | 續修維修單。 | JSON 對應 `MaintenanceOrderContinueRequest`。 |
 | POST | `/api/maintenance-orders/complete` | 維修完成。 | JSON 對應 `MaintenanceOrderCompleteRequest`。 |

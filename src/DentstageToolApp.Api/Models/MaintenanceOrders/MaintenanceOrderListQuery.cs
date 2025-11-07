@@ -15,8 +15,8 @@ public class MaintenanceOrderListQuery
     public string? FixType { get; set; }
 
     /// <summary>
-    /// 維修單狀態碼集合，例如 210 待確認、220 維修中、296 維修過期、295 取消等，可一次傳入多個值進行篩選。
-    /// 支援 QueryString ?status=210&status=220 與 JSON ["210","220"]，後端會自動轉為 SQL IN 條件。
+    /// 維修單狀態碼集合，例如 220 維修中、296 維修過期、295 取消等，可一次傳入多個值進行篩選。
+    /// 支援 QueryString ?status=220&status=296 與 JSON ["220","296"]，後端會自動轉為 SQL IN 條件。
     /// </summary>
     public List<string>? Status { get; set; }
 

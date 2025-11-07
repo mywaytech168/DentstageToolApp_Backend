@@ -1122,7 +1122,7 @@
                   <div class="section-actions">
                     <el-button type="primary" :loading="loading.fetchOrder" :disabled="!hasToken" @click="fetchMaintenanceDetail">取得維修單詳情</el-button>
                     <el-button type="success" :loading="loading.updateOrder" :disabled="!hasToken" @click="updateMaintenanceOrder">送出維修單編輯</el-button>
-                    <el-button type="warning" :loading="loading.confirmOrder" :disabled="!hasToken" @click="confirmMaintenance">確認維修開始 (280)</el-button>
+                    <el-button type="warning" :loading="loading.confirmOrder" :disabled="!hasToken" @click="confirmMaintenance">估價端確認維修 / 建立工單 (220)</el-button>
                     <el-button type="primary" plain :loading="loading.revertOrder" :disabled="!hasToken" @click="revertMaintenanceStatus">狀態回溯</el-button>
                     <el-button type="info" :loading="loading.continueOrder" :disabled="!hasToken" @click="continueMaintenance">續修維修單</el-button>
                     <el-button type="success" plain :loading="loading.completeOrder" :disabled="!hasToken" @click="completeMaintenance">維修完成 (290)</el-button>
@@ -1686,6 +1686,7 @@
         };
 
         const convertToMaintenance = async () => {
+          // POST /api/quotations/maintenance 現在僅標記估價單為待維修 (191)，不會建立維修單
           loading.convertMaintenance = true;
           try {
             const response = await authorizedFetch('/quotations/maintenance', {
@@ -1697,14 +1698,9 @@
               return;
             }
             const data = await response.json();
-            maintenanceForm.orderNo = data.orderNo ?? maintenanceForm.orderNo;
-            if (data.orderNo) {
-              message.success(`轉維修成功，新工單編號：${data.orderNo}`);
-            } else {
-              message.success('轉維修成功。');
-            }
-            appendLog('success', '估價單轉維修成功', data);
+            appendLog('success', '估價單標記為待維修 (191)', data);
             updateLastResponse(data);
+            message.success('已將估價單標記為待維修 (191)。若要建立維修單並進入維修中 (220)，請呼叫「估價端確認維修」。');
             persistSettings();
           } catch (error) {
             appendLog('danger', '估價單轉維修失敗', { message: error.message });
@@ -1777,22 +1773,35 @@
         };
 
         const confirmMaintenance = async () => {
+          // 由估價端觸發：傳入 quotationNo 以建立維修單並將其設為維修中 (220)
+          if (!quotationForm.quotationNo.trim()) {
+            message.warning('請先填入要確認的估價單編號 (quotationNo)。');
+            return;
+          }
+
           loading.confirmOrder = true;
           try {
-            const response = await authorizedFetch('/maintenance-orders/confirm', {
+            const response = await authorizedFetch('/quotations/confirm-maintenance', {
               method: 'POST',
-              body: JSON.stringify({ orderNo: maintenanceForm.orderNo.trim() })
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
             });
             if (!response.ok) {
               await handleProblemDetails(response);
               return;
             }
             const data = await response.json();
-            appendLog('success', '確認維修成功', data);
+            // 如果成功建立工單，回傳中可能包含 orderNo / orderUid
+            if (data.orderNo) {
+              maintenanceForm.orderNo = data.orderNo;
+              message.success(`已建立維修單並設為維修中 (220)，工單編號：${data.orderNo}`);
+            } else {
+              message.success('估價端確認維修完成 (220)。');
+            }
+            appendLog('success', '估價端確認維修成功', data);
             updateLastResponse(data);
-            message.success('維修單已更新為維修中。');
+            persistSettings();
           } catch (error) {
-            appendLog('danger', '確認維修失敗', { message: error.message });
+            appendLog('danger', '估價端確認維修失敗', { message: error.message });
           } finally {
             loading.confirmOrder = false;
           }
