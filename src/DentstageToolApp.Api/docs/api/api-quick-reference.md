@@ -160,6 +160,7 @@ Content-Type: application/json
 | POST | `/api/quotations/reserve/cancel` | 取消預約並清除日期。 | JSON 同 `QuotationCancelRequest`。 |
 | POST | `/api/quotations/revert` | 將估價單狀態回溯。 | JSON 對應 `QuotationRevertStatusRequest`。 |
 | POST | `/api/quotations/maintenance` | 將估價單標記為待維修（191），僅更新估價單狀態，不會立即建立維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
+| POST | `/api/quotations/confirm-maintenance` | 由估價端確認維修：以 `quotationNo` 建立維修單（若尚未建立）並將工單設為維修中（220）。 | JSON 對應 `QuotationMaintenanceConversionRequest`（簡單 `{ "quotationNo": "Q25100001" }`）。 |
 
 > 刪除估價單僅允許狀態碼 110（估價中 / 編輯中）操作，若已產生維修工單需先處理工單後再刪除。 【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1788-L1810】
 
@@ -285,6 +286,7 @@ Content-Type: application/json
 - 維修單回溯：狀態依序 295→290→220→210 逐步回退，最低回到 210。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L187-L244】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L952-L1038】
 - 續修維修單會先將原工單標記為 295，並複製估價單與圖片供後續續修作業。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L458-L546】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
 - `quotationNo`：編輯維修單時可帶入以驗證估價單關聯，沿用估價單編輯欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
+ - `quotationNo`：編輯維修單時可選帶入以驗證估價單關聯（非必要）。若未提供，系統仍可在內部維持既有工單與估價單同步處理邏輯。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
 - `store`：改派技師或更新預約／維修日期時使用，欄位與估價單編輯共用（`estimationTechnicianUid`、`creatorTechnicianUid`、`source`、`bookMethod`、`reservationDate`、`repairDate`）。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L13-L47】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L823-L1013】
 
 ---

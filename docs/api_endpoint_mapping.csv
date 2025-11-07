@@ -33,7 +33,7 @@
 轉維修,搜尋維修單列表,POST,/api/maintenance-orders,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS
 轉維修,取得維修單,POST,/api/maintenance-orders/detail,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_DETAIL
 轉維修,編輯維修單,POST,/api/maintenance-orders/edit,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_EDIT
-轉維修,確認維修,POST,/api/maintenance-orders/confirm,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_CONFIRM
+轉維修,確認維修,POST,/api/quotations/confirm-maintenance,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_QUOTATIONS_CONFIRM_MAINTENANCE
 轉維修,誤按回溯,POST,/api/maintenance-orders/revert,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_REVERT
 維修中,續修,POST,/api/maintenance-orders/continue,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_CONTINUE
 維修中,維修完成,POST,/api/maintenance-orders/complete,https://test-dentstagetoolapp.api.getmywaytech.com/docs/api/index.html?operationId=POST_API_MAINTENANCE_ORDERS_COMPLETE

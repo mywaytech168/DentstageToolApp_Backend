@@ -422,6 +422,83 @@
             }
         }
     },
+    "/api/maintenance-orders/confirm": {
+        "post": {
+            "tags": [
+                "MaintenanceOrders"
+            ],
+            "summary": "（已移除）確認維修開始（移至估價端）",
+            "description": "此端點已移除，請使用 POST /api/quotations/confirm-maintenance 並傳入 quotationNo 以由估價單建立維修單並進入維修中（220）。",
+            "deprecated": true,
+            "requestBody": {
+                "required": true,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "orderNo": { "type": "string" }
+                            }
+                        },
+                        "example": { "orderNo": "O25100001" }
+                    }
+                }
+            },
+            "responses": {
+                "410": {
+                    "description": "已移除：請改用 POST /api/quotations/confirm-maintenance"
+                }
+            }
+        }
+    },
+    "/api/quotations/confirm-maintenance": {
+        "post": {
+            "tags": [
+                "Quotations"
+            ],
+            "summary": "估價端確認維修（由估價單建立維修單並進入維修中）",
+            "description": "以 quotationNo 建立維修單並將維修單狀態更新為 220（維修中）。",
+            "requestBody": {
+                "required": true,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "quotationNo": { "type": "string" }
+                            }
+                        },
+                        "example": { "quotationNo": "Q25100001" }
+                    }
+                }
+            },
+            "responses": {
+                "200": {
+                    "description": "成功建立維修單並回傳維修單資訊",
+                    "content": {
+                        "application/json": {
+                            "schema": { "$ref": "#/components/schemas/QuotationMaintenanceConversionResponse" },
+                            "examples": {
+                                "default": {
+                                    "summary": "建立並回傳新工單",
+                                    "value": {
+                                        "quotationUid": "Q_3A5F...",
+                                        "quotationNo": "Q25100001",
+                                        "status": "220",
+                                        "statusChangedAt": "2025-11-07T08:46:00Z",
+                                        "reservationDate": null,
+                                        "orderUid": "O_7B2D...",
+                                        "orderNo": "O25100001",
+                                        "orderCreatedAt": "2025-11-07T08:46:00Z"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
     "components": {
         "schemas": {
             "HealthCheckResponse": {

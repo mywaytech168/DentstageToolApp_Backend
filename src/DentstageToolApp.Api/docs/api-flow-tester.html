@@ -1742,7 +1742,7 @@
                   quotationNo: 'Q25100001'
                 },
                 requiresAuth: true,
-                description: '將估價單轉為維修單並產生維修編號。'
+                description: '將估價單標記為待維修 (191)，僅更新估價單狀態；若要建立維修單並進入維修中 (220)，請呼叫「估價端確認維修」 (/quotations/confirm-maintenance)。'
               }
             ]
           },
@@ -1805,7 +1805,6 @@
                 method: 'POST',
                 path: '/maintenance-orders/edit',
                 template: {
-                  quotationNo: 'Q25100001',
                   orderNo: 'O25100001',
                   store: {
                     estimationTechnicianUid: 'U_054C053D-FBA6-D843-9BDA-8C68E5027895',
@@ -1845,17 +1844,17 @@
                     beauty: [],
                     paint: []
                   },
-                carBodyConfirmation: {
-                  signaturePhotoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
-                  damageMarkers: [
-                    {
-                      start: { x: 0.42, y: 0.63 },
-                      end: { x: 0.58, y: 0.68 },
-                      hasDent: true,
-                      hasScratch: false,
-                      hasPaintPeel: false,
-                      remark: '主要凹痕'
-                    }
+                  carBodyConfirmation: {
+                    signaturePhotoUid: 'Ph_D4FB9159-CD9E-473A-A3D9-0A8FDD0B76F8',
+                    damageMarkers: [
+                      {
+                        start: { x: 0.42, y: 0.63 },
+                        end: { x: 0.58, y: 0.68 },
+                        hasDent: true,
+                        hasScratch: false,
+                        hasPaintPeel: false,
+                        remark: '主要凹痕'
+                      }
                     ]
                   },
                   maintenance: {
@@ -1895,7 +1894,7 @@
                   }
                 },
                 requiresAuth: true,
-                description: '沿用估價單編輯完整結構同步車輛、客戶、傷痕、車體確認與維修設定。'
+                description: '沿用估價單編輯完整結構同步車輛、客戶、傷痕、車體確認與維修設定。`quotationNo` 為可選欄位（非必要），若提供系統會驗證關聯。'
               },
               {
                 name: '續修維修單',
