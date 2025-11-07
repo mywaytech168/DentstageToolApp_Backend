@@ -22,14 +22,16 @@ namespace DentstageToolApp.Api.Controllers;
 public class MaintenanceOrdersController : ControllerBase
 {
     private readonly IMaintenanceOrderService _maintenanceOrderService;
+    private readonly DentstageToolApp.Api.Services.Quotation.IQuotationService _quotationService;
     private readonly ILogger<MaintenanceOrdersController> _logger;
 
     /// <summary>
     /// 建構子，注入維修單服務與記錄器。
     /// </summary>
-    public MaintenanceOrdersController(IMaintenanceOrderService maintenanceOrderService, ILogger<MaintenanceOrdersController> logger)
+    public MaintenanceOrdersController(IMaintenanceOrderService maintenanceOrderService, DentstageToolApp.Api.Services.Quotation.IQuotationService quotationService, ILogger<MaintenanceOrdersController> logger)
     {
         _maintenanceOrderService = maintenanceOrderService;
+        _quotationService = quotationService;
         _logger = logger;
     }
 
@@ -151,45 +153,6 @@ public class MaintenanceOrdersController : ControllerBase
         {
             _logger.LogError(ex, "維修單狀態回溯流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "維修單狀態回溯失敗");
-        }
-    }
-
-    /// <summary>
-    /// 確認維修開始，將維修單狀態改為維修中。
-    /// </summary>
-    [HttpPost("confirm")]
-    // Swagger 範例提供確認維修狀態時的必要欄位，避免前端遺漏資料。
-    [SwaggerMockRequestExample(
-        """
-        {
-          "orderNo": "O25100001"
-        }
-        """)]
-    [ProducesResponseType(typeof(MaintenanceOrderStatusChangeResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<MaintenanceOrderStatusChangeResponse>> ConfirmMaintenanceAsync([FromBody] MaintenanceOrderConfirmRequest request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var operatorName = GetCurrentOperatorName();
-            var response = await _maintenanceOrderService.ConfirmMaintenanceAsync(request, operatorName, cancellationToken);
-            return Ok(response);
-        }
-        catch (MaintenanceOrderManagementException ex)
-        {
-            _logger.LogWarning(ex, "確認維修失敗：{Message}", ex.Message);
-            return BuildProblemDetails(ex.StatusCode, ex.Message, "確認維修失敗");
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogInformation("確認維修流程被取消。");
-            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，維修單未更新。", "確認維修取消");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "確認維修流程發生未預期錯誤。");
-            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "確認維修失敗");
         }
     }
 

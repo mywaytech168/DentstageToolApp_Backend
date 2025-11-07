@@ -13,4 +13,14 @@ public class UpdateMaintenanceOrderRequest : UpdateQuotationRequest
     /// </summary>
     [Required(ErrorMessage = "請提供維修單編號。")]
     public string OrderNo { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 可選的估價單編號（編輯維修單時非必要）。
+    /// 此屬性影響 Swagger 與前端表單欄位，但會將值委派給基底的 QuotationNo，以維持既有同步邏輯。
+    /// </summary>
+    public new string? QuotationNo
+    {
+        get => base.QuotationNo;
+        set => base.QuotationNo = value;
+    }
 }
