@@ -8,9 +8,16 @@ namespace DentstageToolApp.Api.Models.CarPlates;
 public class CarPlateMaintenanceHistoryResponse
 {
     /// <summary>
-    /// 查詢後使用的正規化車牌號碼，方便前端顯示與後續查詢。
+    /// 影像 / 查詢所辨識出的正規化車牌字串（例如 OCR 或前端輸入整理後的值）。
+    /// 此欄位代表系統用於比對的文字，不一定等同於資料庫內儲存的正式車牌格式。
     /// </summary>
-    public string CarPlateNumber { get; set; } = string.Empty;
+    public string? RecognitionCarPlateNumber { get; set; }
+
+    /// <summary>
+    /// 資料庫中實際對應的車牌號碼（若找到對應車輛則回傳，否則為 null）。
+    /// 這個欄位可用於前端顯示與導向實際車牌／車輛詳細資訊。
+    /// </summary>
+    public string? CarPlateNumber { get; set; }
 
     /// <summary>
     /// 車輛識別碼，協助前端直接導向車輛詳細資訊頁面。

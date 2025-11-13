@@ -8,6 +8,11 @@ public class CarPlateRecognitionResponse
     /// <summary>
     /// 辨識出的車牌號碼。
     /// </summary>
+    public string? RecognitionCarPlateNumber { get; set; }
+
+    /// <summary>
+    /// 辨識出的車牌號碼。
+    /// </summary>
     public string? CarPlateNumber { get; set; }
 
     /// <summary>
