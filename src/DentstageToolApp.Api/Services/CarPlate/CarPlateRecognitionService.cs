@@ -87,16 +87,22 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         var car = await _dbContext.Cars
             .Include(c => c.Orders)
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                c => c.CarNo == normalizedPlate
-                    || c.CarNo == candidatePlate
-                    || c.CarNoQuery == normalizedPlate,
-                cancellationToken);
+            .FirstOrDefaultAsync(c =>
+                // 精準比對（原有行為）
+                c.CarNo == normalizedPlate
+                || c.CarNo == candidatePlate
+                || c.CarNoQuery == normalizedPlate
+                // 新增模糊比對：支援部分車牌或省略連字號的查詢
+             || (c.CarNoQuery != null && c.CarNoQuery.Contains(normalizedPlate))
+             || (c.CarNo != null && c.CarNo.Contains(normalizedPlate))
+             || (c.CarNoQuery != null && c.CarNoQuery.Contains(normalizedPlate)),
+            cancellationToken);
 
         // ---------- 組裝回應區 ----------
         var response = new CarPlateRecognitionResponse
         {
-            CarPlateNumber = normalizedPlate,
+            RecognitionCarPlateNumber = normalizedPlate,
+            CarPlateNumber = car?.CarNo ?? normalizedPlate,
             Confidence = Math.Round(confidence, 2),
             Brand = car?.Brand,
             Model = car?.Model,
@@ -134,40 +140,49 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             .Include(c => c.Orders)
                 .ThenInclude(order => order.Quatation)
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                c => c.CarNo == normalizedPlate
-                    || c.CarNo == trimmedPlate
-                    || c.CarNoQuery == normalizedPlate
-                    || c.CarNoQuery == trimmedPlate,
-                cancellationToken);
+            .FirstOrDefaultAsync(c =>
+                // 精準比對
+                c.CarNo == normalizedPlate
+                || c.CarNo == trimmedPlate
+                || c.CarNoQuery == normalizedPlate
+                || c.CarNoQuery == trimmedPlate
+                // 模糊比對（與 RecognizeAsync 保持一致）
+                || (c.CarNoQuery != null && c.CarNoQuery.Contains(normalizedPlate))
+                || (c.CarNo != null && c.CarNo.Contains(normalizedPlate))
+                || (c.CarNoQuery != null && c.CarNoQuery.Contains(normalizedPlate)),
+            cancellationToken);
 
         var orders = new List<Order>();
 
-        if (car?.Orders is { Count: > 0 })
+        if (car is not null)
         {
-            // 將車輛底下的工單加入集合，作為初始資料。
-            orders.AddRange(car.Orders);
-        }
-
-        var additionalOrders = await _dbContext.Orders
-            .Include(order => order.Quatation)
-            .AsNoTracking()
-            .Where(o =>
-                o.CarNo == normalizedPlate
-                || o.CarNo == trimmedPlate
-                || o.CarNoInput == normalizedPlate
-                || o.CarNoInput == trimmedPlate
-                || o.CarNoInputGlobal == trimmedPlate)
-            .ToListAsync(cancellationToken);
-
-        foreach (var order in additionalOrders)
-        {
-            if (orders.Any(existing => existing.OrderUid == order.OrderUid))
+            // 如果透過模糊或精準查到車輛，直接以該車輛的第一筆資料為主，並僅回傳該車的工單紀錄。
+            // 這可避免在模糊查詢時把不同車牌（或類似字串）的工單混雜在一起。
+            if (car.Orders is { Count: > 0 })
             {
-                continue;
+                orders.AddRange(car.Orders);
             }
+        }
+        else
+        {
+            // 若找不到車輛主檔，保留原有的行為：在 Orders 表中以多欄位進行精準或模糊比對，收集相關工單。
+            var additionalOrders = await _dbContext.Orders
+                .Include(order => order.Quatation)
+                .AsNoTracking()
+                .Where(o =>
+                    // 精準比對
+                    o.CarNo == normalizedPlate
+                    || o.CarNo == trimmedPlate
+                    || o.CarNoInput == normalizedPlate
+                    || o.CarNoInput == trimmedPlate
+                    || o.CarNoInputGlobal == trimmedPlate
+                    // 模糊比對：包含 normalized 或 原始輸入的 trimmedPlate
+                    || (o.CarNo != null && o.CarNo.Contains(normalizedPlate))
+                    || (o.CarNoInput != null && o.CarNoInput.Contains(trimmedPlate))
+                    || (o.CarNoInputGlobal != null && o.CarNoInputGlobal.Contains(trimmedPlate)))
+                .ToListAsync(cancellationToken);
 
-            orders.Add(order);
+            orders.AddRange(additionalOrders);
         }
 
         // ---------- 組裝回應區 ----------
@@ -209,11 +224,16 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             referenceQuotation = await _dbContext.Quatations
                 .AsNoTracking()
                 .Where(quatation =>
+                    // 精準比對
                     quatation.CarNo == normalizedPlate
                     || quatation.CarNo == trimmedPlate
                     || quatation.CarNoInput == normalizedPlate
                     || quatation.CarNoInput == trimmedPlate
-                    || quatation.CarNoInputGlobal == trimmedPlate)
+                    || quatation.CarNoInputGlobal == trimmedPlate
+                    // 模糊比對
+                    || (quatation.CarNo != null && quatation.CarNo.Contains(normalizedPlate))
+                    || (quatation.CarNoInput != null && quatation.CarNoInput.Contains(trimmedPlate))
+                    || (quatation.CarNoInputGlobal != null && quatation.CarNoInputGlobal.Contains(trimmedPlate)))
                 .OrderByDescending(quatation => quatation.ModificationTimestamp ?? quatation.CreationTimestamp ?? DateTime.MinValue)
                 .FirstOrDefaultAsync(cancellationToken);
 
@@ -306,7 +326,8 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         var response = new CarPlateMaintenanceHistoryResponse
         {
-            CarPlateNumber = normalizedPlate,
+            RecognitionCarPlateNumber = normalizedPlate,
+            CarPlateNumber = car?.CarNo ?? normalizedPlate,
             CarUid = carUid,
             BrandUid = brandUid,
             ModelUid = modelUid,
