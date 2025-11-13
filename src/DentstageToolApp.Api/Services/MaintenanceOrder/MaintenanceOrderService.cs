@@ -152,6 +152,23 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         };
     }
 
+    /// <summary>
+    /// 取得建立時間在兩年前（含）或更早的維修單列表，會以台北時區 Now.AddYears(-2) 作為 cutoff。
+    /// 實作上會將傳入的 query 的 EndDate 與 cutoff 取較小者，並委派給 GetOrdersAsync 以重用現有邏輯。
+    /// </summary>
+    public Task<MaintenanceOrderListResponse> GetOlderOrdersAsync(MaintenanceOrderListQuery query, CancellationToken cancellationToken)
+    {
+        var cutoff = GetTaipeiNow().AddYears(-2);
+
+        var effectiveQuery = query ?? new MaintenanceOrderListQuery();
+        if (!effectiveQuery.EndDate.HasValue || effectiveQuery.EndDate.Value > cutoff)
+        {
+            effectiveQuery.EndDate = cutoff;
+        }
+
+        return GetOrdersAsync(effectiveQuery, cancellationToken);
+    }
+
     /// <inheritdoc />
     public async Task<MaintenanceOrderDetailResponse> GetOrderAsync(MaintenanceOrderDetailRequest request, CancellationToken cancellationToken)
     {
@@ -453,7 +470,6 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.ConnectRemark = quotation.ConnectRemark;
         order.BookDate = quotation.BookDate?.ToString("yyyy-MM-dd");
         order.BookMethod = quotation.BookMethod;
-        order.WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd");
         order.FixType = quotation.FixType;
         order.CarReserved = quotation.CarReserved;
         order.Content = plainRemark;
@@ -571,43 +587,38 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             operatorLabel,
             now);
 
-        // ---------- 原維修單狀態更新 ----------
-        sourceOrder.Status = "295";
-        sourceOrder.Status295Timestamp = now;
-        sourceOrder.Status295User = operatorLabel;
-        sourceOrder.CurrentStatusDate = now;
-        sourceOrder.CurrentStatusUser = operatorLabel;
-        sourceOrder.ModificationTimestamp = now;
-        sourceOrder.ModifiedBy = operatorLabel;
-        sourceOrder.StopReason = "續修取消維修";
+    // ---------- 原維修單狀態保留 ----------
+    // 依據最新需求，續修流程僅複製估價與圖片，保留原工單狀態不做取消處理。
+    await _dbContext.Quatations.AddAsync(newQuotation, cancellationToken);
 
-        await _dbContext.Quatations.AddAsync(newQuotation, cancellationToken);
-
-        // ---------- 圖片複製 ----------
-        var photoUidMap = await DuplicatePhotosForContinuationAsync(
+        // ---------- 圖片複製（僅複製未修復項，MaintenanceProgress == null 或 0） ----------
+        var (photoUidMap, estimatedTotal) = await DuplicatePhotosForContinuationAsync(
             quotation?.QuotationUid,
             newQuotation.QuotationUid,
             cancellationToken);
 
+        // 將 remark 中的 PhotoUID 替換為新複本的 UID，並回填估價金額為複製照片之總和。
         var updatedRemark = ReplacePhotoUids(newQuotation.Remark, photoUidMap);
         newQuotation.Remark = updatedRemark;
+        newQuotation.Valuation = estimatedTotal > 0m ? estimatedTotal : newQuotation.Valuation;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "操作人員 {Operator} 針對維修單 {SourceOrder} 複製估價單 {NewQuotation} 並取消原單。",
+            "操作人員 {Operator} 針對維修單 {SourceOrder} 複製估價單 {NewQuotation}，原工單狀態保留不變。",
             operatorLabel,
             sourceOrder.OrderNo,
             newQuotation.QuotationNo);
 
         return new MaintenanceOrderContinuationResponse
         {
-            CancelledOrderUid = sourceOrder.OrderUid ?? string.Empty,
-            CancelledOrderNo = sourceOrder.OrderNo ?? string.Empty,
+            // 原工單不再被標記為取消，保留回傳欄位為空以維持相容性。
+            CancelledOrderUid = string.Empty,
+            CancelledOrderNo = string.Empty,
             QuotationUid = newQuotation.QuotationUid,
             QuotationNo = newQuotation.QuotationNo,
             CreatedAt = newQuotation.CreationTimestamp ?? now,
-            Message = "已複製估價與圖片，原維修單已標記為取消維修。"
+            Message = "已複製估價與圖片，原工單狀態保留不變。"
         };
     }
 
@@ -1892,6 +1903,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         string operatorLabel,
         DateTime timestamp)
     {
+        // 僅複製店舖、車輛、顧客與時間相關欄位，其他欄位保留空白以符合續修需求。
         var clone = new Quatation
         {
             QuotationUid = quotationUid,
@@ -1901,14 +1913,12 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CreatedBy = operatorLabel,
             ModificationTimestamp = timestamp,
             ModifiedBy = operatorLabel,
+            Status = "110",
+
+            // 店舖資訊
             StoreUid = source.StoreUid,
-            UserUid = source.UserUid,
-            UserName = source.UserName,
-            EstimationTechnicianUid = source.EstimationTechnicianUid,
-            CreatorTechnicianUid = source.CreatorTechnicianUid,
-            Date = DateOnly.FromDateTime(timestamp),
-            Status = source.Status,
-            FixType = source.FixType,
+
+            // 車輛資訊
             CarUid = source.CarUid,
             CarNoInputGlobal = source.CarNoInputGlobal,
             CarNoInput = source.CarNoInput,
@@ -1921,84 +1931,19 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CarRemark = source.CarRemark,
             Milage = source.Milage,
             BrandModel = source.BrandModel,
+
+            // 顧客資訊
             CustomerUid = source.CustomerUid,
-            CustomerType = source.CustomerType,
             PhoneInputGlobal = source.PhoneInputGlobal,
             PhoneInput = source.PhoneInput,
             Phone = source.Phone,
             Name = source.Name,
-            Gender = source.Gender,
-            Connect = source.Connect,
-            County = source.County,
-            Township = source.Township,
-            Source = source.Source,
             Email = source.Email,
-            Reason = source.Reason,
-            ConnectRemark = source.ConnectRemark,
-            Valuation = source.Valuation,
-            DiscountPercent = source.DiscountPercent,
-            Discount = source.Discount,
-            DiscountReason = source.DiscountReason,
-            BookDate = source.BookDate,
-            BookMethod = source.BookMethod,
-            CarReserved = source.CarReserved,
-            FixDate = source.FixDate,
-            ToolTest = source.ToolTest,
-            Coat = source.Coat,
-            Envelope = source.Envelope,
-            Paint = source.Paint,
-            Remark = source.Remark,
-            Status110Timestamp = source.Status110Timestamp,
-            Status110User = source.Status110User,
-            Status180Timestamp = source.Status180Timestamp,
-            Status180User = source.Status180User,
-            Status190Timestamp = source.Status190Timestamp,
-            Status190User = source.Status190User,
-            Status191Timestamp = source.Status191Timestamp,
-            Status191User = source.Status191User,
-            Status199Timestamp = source.Status199Timestamp,
-            Status199User = source.Status199User,
-            CurrentStatusDate = timestamp,
-            CurrentStatusUser = operatorLabel,
-            FixExpect = source.FixExpect,
-            Reject = source.Reject,
-            RejectReason = source.RejectReason,
-            PanelBeat = source.PanelBeat,
-            PanelBeatReason = source.PanelBeatReason,
-            FixTimeHour = source.FixTimeHour,
-            FixTimeMin = source.FixTimeMin,
-            FixExpectDay = source.FixExpectDay,
-            FixExpectHour = source.FixExpectHour,
-            FlagRegularCustomer = source.FlagRegularCustomer
-        };
 
-        var statusCode = NormalizeOptionalText(source.Status);
-        if (statusCode is not null)
-        {
-            switch (statusCode)
-            {
-                case "110":
-                    clone.Status110Timestamp = timestamp;
-                    clone.Status110User = operatorLabel;
-                    break;
-                case "180":
-                    clone.Status180Timestamp = timestamp;
-                    clone.Status180User = operatorLabel;
-                    break;
-                case "190":
-                    clone.Status190Timestamp = timestamp;
-                    clone.Status190User = operatorLabel;
-                    break;
-                case "191":
-                    clone.Status191Timestamp = timestamp;
-                    clone.Status191User = operatorLabel;
-                    break;
-                case "195":
-                    clone.Status199Timestamp = timestamp;
-                    clone.Status199User = operatorLabel;
-                    break;
-            }
-        }
+            // 初始化狀態時間與使用者，但不指派具體狀態碼
+            CurrentStatusDate = timestamp,
+            CurrentStatusUser = operatorLabel
+        };
 
         return clone;
     }
@@ -2006,7 +1951,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// <summary>
     /// 嘗試複製舊照片並回傳舊新 PhotoUID 的對照表。
     /// </summary>
-    private async Task<Dictionary<string, string>> DuplicatePhotosForContinuationAsync(
+    private async Task<(Dictionary<string, string> Map, decimal TotalEstimated)> DuplicatePhotosForContinuationAsync(
         string? sourceQuotationUid,
         string targetQuotationUid,
         CancellationToken cancellationToken)
@@ -2015,20 +1960,23 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var normalizedSourceQuotationUid = NormalizeOptionalText(sourceQuotationUid);
         if (normalizedSourceQuotationUid is null)
         {
-            return result;
+            return (result, 0m);
         }
 
+        // 只複製尚未修復的照片（維修進度為 null 或 0）
         var photos = await _dbContext.PhotoData
-            .Where(photo => photo.QuotationUid == normalizedSourceQuotationUid)
+            .Where(photo => photo.QuotationUid == normalizedSourceQuotationUid
+                && (photo.MaintenanceProgress == null || photo.MaintenanceProgress == 0m))
             .ToListAsync(cancellationToken);
 
         if (photos.Count == 0)
         {
-            return result;
+            return (result, 0m);
         }
 
         var storageRoot = EnsurePhotoStorageRoot();
         var clones = new List<(PhotoDatum Clone, string? OriginalAfterUid)>();
+        var totalEstimated = 0m;
 
         foreach (var photo in photos)
         {
@@ -2061,12 +2009,18 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 FlagFinish = photo.FlagFinish,
                 FinishCost = photo.FinishCost,
                 MaintenanceProgress = photo.MaintenanceProgress,
-                AfterPhotoUid = photo.AfterPhotoUid
+                AfterPhotoUid = photo.AfterPhotoUid,
+                FixType = photo.FixType
             };
 
             await _dbContext.PhotoData.AddAsync(clone, cancellationToken);
             clones.Add((clone, photo.AfterPhotoUid));
             result[oldPhotoUid] = newPhotoUid;
+
+            if (photo.Cost.HasValue)
+            {
+                totalEstimated += photo.Cost.Value;
+            }
         }
 
         // 續修後需重新對應完工照片 UID，確保指向新複製的照片而非舊資料。
@@ -2089,7 +2043,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             }
         }
 
-        return result;
+        return (result, decimal.Round(totalEstimated, 2, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>

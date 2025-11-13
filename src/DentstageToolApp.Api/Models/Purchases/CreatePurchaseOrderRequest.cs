@@ -14,4 +14,9 @@ public class CreatePurchaseOrderRequest
     [MinLength(1, ErrorMessage = "至少需建立一筆採購品項。")]
     [Required(ErrorMessage = "請提供採購品項。")]
     public List<CreatePurchaseOrderItemRequest> Items { get; set; } = new();
+
+    /// <summary>
+    /// 採購日期（前端可傳入 YYYY-MM-DD），若不提供預設為建立當天。
+    /// </summary>
+    public DateOnly? PurchaseDate { get; set; }
 }
