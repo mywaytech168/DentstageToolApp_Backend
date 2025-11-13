@@ -34,6 +34,12 @@ public class PurchaseOrderDto
     public DateOnly? PurchaseDate { get; set; }
 
     /// <summary>
+    /// 建立時間（UTC），由系統建立時自動寫入。
+    /// 前端可用於顯示建立日期或排序參考。
+    /// </summary>
+    public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
     /// 採購單總金額。
     /// </summary>
     public decimal TotalAmount { get; set; }

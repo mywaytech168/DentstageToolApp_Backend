@@ -158,7 +158,16 @@ public class PurchaseService : IPurchaseService
 
         // ---------- 實體建立區 ----------
         var now = DateTime.UtcNow;
-        var purchaseDate = DateOnly.FromDateTime(now);
+        // 使用前端傳入的 purchaseDate（若有），否則以建立時間為採購日（UTC 的 DateOnly）
+        DateOnly purchaseDate;
+        if (request.PurchaseDate.HasValue)
+        {
+            purchaseDate = request.PurchaseDate.Value;
+        }
+        else
+        {
+            purchaseDate = DateOnly.FromDateTime(now);
+        }
         var purchaseOrderNo = await GeneratePurchaseOrderNoAsync(now, cancellationToken);
         var orderEntity = new PurchaseOrder
         {
@@ -554,6 +563,7 @@ public class PurchaseService : IPurchaseService
             StoreUid = entity.StoreUid,
             StoreName = entity.Store?.StoreName,
             PurchaseDate = entity.PurchaseDate,
+            CreatedAt = entity.CreationTimestamp,
             TotalAmount = entity.TotalAmount,
             Items = MapOrderItems(entity.PurchaseItems)
         };

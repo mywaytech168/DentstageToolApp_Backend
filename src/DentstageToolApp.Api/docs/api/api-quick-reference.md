@@ -161,6 +161,8 @@ Content-Type: application/json
 | POST | `/api/quotations/revert` | 將估價單狀態回溯。 | JSON 對應 `QuotationRevertStatusRequest`。 |
 | POST | `/api/quotations/maintenance` | 將估價單標記為待維修（191），僅更新估價單狀態，不會立即建立維修單。 | JSON 對應 `QuotationMaintenanceRequest`。 |
 | POST | `/api/quotations/confirm-maintenance` | 由估價端確認維修：以 `quotationNo` 建立維修單（若尚未建立）並將工單設為維修中（220）。 | JSON 對應 `QuotationMaintenanceConversionRequest`（簡單 `{ "quotationNo": "Q25100001" }`）。 |
+| GET | `/api/quotations/old` | 取得建立日期在兩年前（含）或更早的估價單列表（強制套用 cutoff：CreationTimestamp <= Now(Taipei).AddYears(-2)）。 | Query 對應 `QuotationListQuery`（強制 EndDate <= cutoff）。 |
+| POST | `/api/quotations/old` | 以 Body 查詢兩年前或更早的估價單列表（同 GET /api/quotations/old，但可在 Body 傳入複雜過濾條件）。 | JSON 對應 `QuotationListQuery`（強制 EndDate <= cutoff）。 |
 
 > 刪除估價單僅允許狀態碼 110（估價中 / 編輯中）操作，若已產生維修工單需先處理工單後再刪除。 【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1788-L1810】
 
@@ -271,8 +273,41 @@ Content-Type: application/json
   此行為已改為由估價端統一處理，請使用 POST /api/quotations/confirm-maintenance 並傳入 quotationNo 以由估價單建立維修單並進入維修中（220）。 -->
 | POST | `/api/maintenance-orders/edit` | 編輯維修單。 | JSON 對應 `UpdateMaintenanceOrderRequest`，欄位與估價單編輯共用。 |
 | POST | `/api/maintenance-orders/continue` | 續修維修單。 | JSON 對應 `MaintenanceOrderContinueRequest`。 |
+| GET | `/api/maintenance-orders/old` | 取得建立日期在兩年前（含）或更早的維修單列表（強制套用 cutoff：CreationTimestamp <= Now(Taipei).AddYears(-2)）。 | Query 對應 `MaintenanceOrderListQuery`（強制 EndDate <= cutoff）。 |
+| POST | `/api/maintenance-orders/old` | 以 Body 查詢兩年前或更早的維修單列表（同 GET /api/maintenance-orders/old）。 | JSON 對應 `MaintenanceOrderListQuery`（強制 EndDate <= cutoff）。 |
 | POST | `/api/maintenance-orders/complete` | 維修完成。 | JSON 對應 `MaintenanceOrderCompleteRequest`。 |
 | POST | `/api/maintenance-orders/terminate` | 終止維修。 | JSON 對應 `MaintenanceOrderTerminateRequest`。 |
+
+---
+
+## 採購模組（`api/purchase-orders`）
+
+| 方法 | 路徑 | 功能摘要 | 備註 |
+| --- | --- | --- | --- |
+| POST | `/api/purchase-orders/list` | 以 Body 查詢採購單分頁（或使用對應的 Controller 路徑）。 | JSON 對應 `PurchaseOrderListQuery`，回傳 `PurchaseOrderListResponse`（items 包含 `createdAt`）。 |
+| POST | `/api/purchase-orders/create` | 建立採購單。 | JSON 對應 `CreatePurchaseOrderRequest`。 |
+| POST | `/api/purchase-orders/edit` | 編輯採購單（可傳入 `purchaseDate`，前端 DatePicker 可直接送出）。 | JSON 對應 `UpdatePurchaseOrderRequest`（包含 `purchaseDate` 欄位）。 |
+
+**採購單分頁回應說明**
+- `createdAt`：採購單在系統內的建立時間，後端以 UTC 存放並回傳 ISO8601（例如：`2025-11-07T08:46:00Z`）。前端可用於排序、過濾或顯示建立時間。
+
+**採購列表範例（items 節選）**
+```json
+{
+  "pagination": { "page": 1, "pageSize": 20, "totalCount": 2, "totalPages": 1 },
+  "items": [
+    {
+      "purchaseUid": "P_8A2D...",
+      "purchaseNo": "PO2510001",
+      "supplierName": "示例供應商",
+      "purchaseDate": "2025-10-31",
+      "createdAt": "2025-11-01T03:12:45Z",
+      "totalAmount": 12345.67
+    }
+  ]
+}
+```
+
 
 > 維修單詳情回應沿用 `QuotationDetailResponse` 欄位，並額外提供維修單編號、金額資訊與狀態歷程。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailResponse.cs†L9-L42】
 
@@ -284,7 +319,7 @@ Content-Type: application/json
 **單筆操作欄位**
 - `orderNo`：維修單編號，為詳細／回溯／確認／編輯／續修／完成／終止的必填欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderDetailRequest.cs†L5-L15】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderRevertRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderConfirmRequest.cs†L5-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderContinueRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderCompleteRequest.cs†L10-L14】【F:src/DentstageToolApp.Api/MaintenanceOrders/MaintenanceOrderTerminateRequest.cs†L10-L14】
 - 維修單回溯：狀態依序 295→290→220→210 逐步回退，最低回到 210。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L187-L244】【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L952-L1038】
-- 續修維修單會先將原工單標記為 295，並複製估價單與圖片供後續續修作業。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L458-L546】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
+- 續修會複製估價單與圖片，原工單狀態保留不變。 【F:src/DentstageToolApp.Api/Services/MaintenanceOrder/MaintenanceOrderService.cs†L458-L546】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L1275-L1337】
 - `quotationNo`：編輯維修單時可帶入以驗證估價單關聯，沿用估價單編輯欄位。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
  - `quotationNo`：編輯維修單時可選帶入以驗證估價單關聯（非必要）。若未提供，系統仍可在內部維持既有工單與估價單同步處理邏輯。 【F:src/DentstageToolApp.Api/MaintenanceOrders/UpdateMaintenanceOrderRequest.cs†L10-L18】【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L9-L47】
 - `store`：改派技師或更新預約／維修日期時使用，欄位與估價單編輯共用（`estimationTechnicianUid`、`creatorTechnicianUid`、`source`、`bookMethod`、`reservationDate`、`repairDate`）。 【F:src/DentstageToolApp.Api/Quotations/UpdateQuotationRequest.cs†L13-L47】【F:src/DentstageToolApp.Api/Services/Quotation/QuotationService.cs†L823-L1013】

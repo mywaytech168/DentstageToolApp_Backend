@@ -163,6 +163,27 @@ public class QuotationService : IQuotationService
         return response;
     }
 
+    /// <summary>
+    /// 取得建立時間在兩年前（含）或更早的估價單列表。
+    /// 實作上會將傳入的 Query 的 EndDate 與系統 cutoff（Now(Taipei).AddYears(-2)）取較小者，
+    /// 並委派給既有的 GetQuotationsAsync 以重用過濾與分頁邏輯。
+    /// </summary>
+    public Task<QuotationListResponse> GetOlderQuotationsAsync(QuotationListQuery query, CancellationToken cancellationToken)
+    {
+        // 計算台北時區的兩年 cutoff
+        var cutoff = GetTaipeiNow().AddYears(-2);
+
+        var effectiveQuery = query ?? new QuotationListQuery();
+
+        // 若 EndDate 未提供或晚於 cutoff，將 EndDate 設為 cutoff（包含該日）
+        if (!effectiveQuery.EndDate.HasValue || effectiveQuery.EndDate.Value > cutoff)
+        {
+            effectiveQuery.EndDate = cutoff;
+        }
+
+        return GetQuotationsAsync(effectiveQuery, cancellationToken);
+    }
+
     /// <inheritdoc />
     public async Task<QuotationListResponse> GetQuotationsAsync(QuotationListQuery query, CancellationToken cancellationToken)
     {
@@ -1759,7 +1780,7 @@ public class QuotationService : IQuotationService
             ConnectRemark = quotation.ConnectRemark,
             BookDate = quotation.BookDate?.ToString("yyyy-MM-dd"),
             BookMethod = quotation.BookMethod,
-            WorkDate = quotation.FixDate?.ToString("yyyy-MM-dd"),
+            WorkDate = now.ToString("yyyy-MM-dd"),
             FixType = quotation.FixType,
             CarReserved = quotation.CarReserved,
             Content = plainRemark,

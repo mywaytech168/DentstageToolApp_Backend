@@ -15,6 +15,11 @@ public interface IMaintenanceOrderService
     Task<MaintenanceOrderListResponse> GetOrdersAsync(MaintenanceOrderListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 取得建立時間在兩年前（含）或更早的維修單列表，會強制套用系統台北時區的兩年 cutoff：CreationTimestamp <= cutoff。
+    /// </summary>
+    Task<MaintenanceOrderListResponse> GetOlderOrdersAsync(MaintenanceOrderListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 取得單一維修單詳細資料。
     /// </summary>
     Task<MaintenanceOrderDetailResponse> GetOrderAsync(MaintenanceOrderDetailRequest request, CancellationToken cancellationToken);
@@ -35,7 +40,7 @@ public interface IMaintenanceOrderService
     Task UpdateOrderAsync(UpdateMaintenanceOrderRequest request, string operatorName, CancellationToken cancellationToken);
 
     /// <summary>
-    /// 續修維修單，複製估價與圖片並將原維修單標記為取消維修。
+    /// 續修維修單，複製估價與圖片，原工單狀態保留不變。
     /// </summary>
     Task<MaintenanceOrderContinuationResponse> ContinueOrderAsync(MaintenanceOrderContinueRequest request, string operatorName, CancellationToken cancellationToken);
 

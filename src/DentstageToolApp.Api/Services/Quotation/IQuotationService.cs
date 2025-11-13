@@ -18,6 +18,12 @@ public interface IQuotationService
     Task<QuotationListResponse> GetQuotationsAsync(QuotationListQuery query, CancellationToken cancellationToken);
 
     /// <summary>
+    /// 取得「兩年前或更舊」的估價單列表，會強制套用系統當前時間（台北）往前推兩年的 cutoff 條件：CreationTimestamp <= cutoff。
+    /// 除了此強制條件外，其餘的查詢參數（狀態、關鍵字、分頁）仍會套用。
+    /// </summary>
+    Task<QuotationListResponse> GetOlderQuotationsAsync(QuotationListQuery query, CancellationToken cancellationToken);
+
+    /// <summary>
     /// 建立估價單並回傳基本資訊。
     /// </summary>
     /// <param name="request">建立所需的欄位資料。</param>
