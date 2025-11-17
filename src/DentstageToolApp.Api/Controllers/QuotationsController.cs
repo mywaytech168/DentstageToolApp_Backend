@@ -53,6 +53,44 @@ public class QuotationsController : ControllerBase
     }
 
     /// <summary>
+    /// 取得兩年前（含）或更早的估價單列表。此端點會強制套用系統當前台北時間往前推兩年的 cutoff 條件。
+    /// 同時提供 GET 與 POST 兩種呼叫方式（GET 以 QueryString，POST 以 Body 傳入複雜查詢）。
+    /// </summary>
+    [HttpGet("old")]
+    [ProducesResponseType(typeof(QuotationListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationListResponse>> GetOlderQuotationsAsync([FromQuery] QuotationListQuery query, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("查詢兩年前或更舊的估價單，參數：{@Query}", query);
+
+        var resp = await _quotationService.GetOlderQuotationsAsync(query, cancellationToken);
+        return Ok(resp);
+    }
+
+    [HttpPost("old")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "fixType": "凹痕",
+          "status": ["110", "115", "180", "186", "190", "195", "196", "191"],
+          "startDate": "2023-10-01T00:00:00",
+          "endDate": "2023-10-31T23:59:59",
+          "customerKeyword": "林",
+          "carPlateKeyword": "AAA",
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
+    [ProducesResponseType(typeof(QuotationListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<QuotationListResponse>> SearchOlderQuotationsAsync([FromBody] QuotationListQuery request, CancellationToken cancellationToken)
+    {
+        var query = request ?? new QuotationListQuery();
+        _logger.LogDebug("POST 查詢兩年前或更舊的估價單，參數：{@Query}", query);
+
+        var resp = await _quotationService.GetOlderQuotationsAsync(query, cancellationToken);
+        return Ok(resp);
+    }
+
+    /// <summary>
     /// 透過 POST 傳遞查詢條件以取得估價單列表，適合參數較多或需要 Body 傳遞時使用。
     /// </summary>
     /// <param name="request">查詢參數，與 GET 版本相同但由 Body 傳遞。</param>

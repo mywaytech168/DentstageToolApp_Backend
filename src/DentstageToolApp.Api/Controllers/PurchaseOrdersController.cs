@@ -131,24 +131,25 @@ public class PurchaseOrdersController : ControllerBase
     /// </summary>
     [HttpPost("create")]
     [SwaggerMockRequestExample(
-        """
-        {
-          "items": [
-            {
-              "itemName": "公司聚餐",
-              "categoryUid": "PC_12E449E7-3329-489B-86BE-78860BADAB14",
-              "unitPrice": 1200,
-              "quantity": 3
-            },
-            {
-              "itemName": "黏土耗材",
-              "categoryUid": "PC_2B088359-EDE3-4BA4-8356-4E50E31CA733",
-              "unitPrice": 350,
-              "quantity": 5
-            }
-          ]
-        }
-        """)]
+                """
+                {
+                    "purchaseDate": "2025-11-13",
+                    "items": [
+                        {
+                            "itemName": "公司聚餐",
+                            "categoryUid": "PC_12E449E7-3329-489B-86BE-78860BADAB14",
+                            "unitPrice": 1200,
+                            "quantity": 3
+                        },
+                        {
+                            "itemName": "黏土耗材",
+                            "categoryUid": "PC_2B088359-EDE3-4BA4-8356-4E50E31CA733",
+                            "unitPrice": 350,
+                            "quantity": 5
+                        }
+                    ]
+                }
+                """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -195,25 +196,26 @@ public class PurchaseOrdersController : ControllerBase
     /// </summary>
     [HttpPost("edit")]
     [SwaggerMockRequestExample(
-        """
-        {
-          "purchaseOrderUid": "PO_02D53F77-AA02-470A-860C-AA72C40A86E2",
-          "items": [
-            {
-              "itemName": "公司聚餐",
-              "categoryUid": "PC_12E449E7-3329-489B-86BE-78860BADAB14",
-              "unitPrice": 1200,
-              "quantity": 3
-            },
-            {
-              "itemName": "黏土耗材",
-              "categoryUid": "PC_2B088359-EDE3-4BA4-8356-4E50E31CA733",
-              "unitPrice": 350,
-              "quantity": 5
-            }
-          ]
-        }
-        """)]
+                """
+                {
+                    "purchaseOrderUid": "PO_02D53F77-AA02-470A-860C-AA72C40A86E2",
+                    "purchaseDate": "2025-11-13",
+                    "items": [
+                        {
+                            "itemName": "公司聚餐",
+                            "categoryUid": "PC_12E449E7-3329-489B-86BE-78860BADAB14",
+                            "unitPrice": 1200,
+                            "quantity": 3
+                        },
+                        {
+                            "itemName": "黏土耗材",
+                            "categoryUid": "PC_2B088359-EDE3-4BA4-8356-4E50E31CA733",
+                            "unitPrice": 350,
+                            "quantity": 5
+                        }
+                    ]
+                }
+                """)]
     [ProducesResponseType(typeof(PurchaseOrderDetailResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]

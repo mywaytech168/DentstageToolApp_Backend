@@ -52,6 +52,42 @@ public class MaintenanceOrdersController : ControllerBase
     }
 
     /// <summary>
+    /// 取得兩年前（含）或更早的維修單列表。會強制套用系統當前台北時間往前推兩年的 cutoff 條件。
+    /// 提供 GET 與 POST 兩種呼叫方式。
+    /// </summary>
+    [HttpGet("old")]
+    [ProducesResponseType(typeof(MaintenanceOrderListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<MaintenanceOrderListResponse>> GetOlderOrdersAsync([FromQuery] MaintenanceOrderListQuery query, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("查詢兩年前或更舊的維修單，參數：{@Query}", query);
+
+    var resp = await _maintenanceOrderService.GetOlderOrdersAsync(query, cancellationToken);
+        return Ok(resp);
+    }
+
+    [HttpPost("old")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "fixType": "凹痕",
+          "status": ["220", "295", "296", "290"],
+          "startDate": "2023-10-01T00:00:00",
+          "endDate": "2023-10-31T23:59:59",
+          "page": 1,
+          "pageSize": 20
+        }
+        """)]
+    [ProducesResponseType(typeof(MaintenanceOrderListResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<MaintenanceOrderListResponse>> SearchOlderOrdersAsync([FromBody] MaintenanceOrderListQuery request, CancellationToken cancellationToken)
+    {
+        var query = request ?? new MaintenanceOrderListQuery();
+        _logger.LogDebug("POST 查詢兩年前或更舊的維修單，參數：{@Query}", query);
+
+        var resp = await _maintenanceOrderService.GetOlderOrdersAsync(query, cancellationToken);
+        return Ok(resp);
+    }
+
+    /// <summary>
     /// 透過 POST 傳遞查詢條件取得維修單列表。
     /// </summary>
     [HttpPost]
@@ -267,7 +303,7 @@ public class MaintenanceOrdersController : ControllerBase
     }
 
     /// <summary>
-    /// 續修維修單，複製估價單與相關圖片並將原維修單標記為取消。
+    /// 續修維修單，複製估價單與相關項目(維修狀態為0)。
     /// </summary>
     [HttpPost("continue")]
     // 範例展示續修操作只需提供原維修單編號，Swagger 可直接複製使用。

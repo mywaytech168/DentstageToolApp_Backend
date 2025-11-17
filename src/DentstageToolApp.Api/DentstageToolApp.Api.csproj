@@ -8,6 +8,15 @@
     <NoWarn>$(NoWarn);1591</NoWarn>
     <Configurations>Debug;Release;Debug2</Configurations>
   </PropertyGroup>
+  <ItemGroup>
+    <None Remove="scripts\easyocr_recognition.py" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="NLog.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../DentstageToolApp.Infrastructure/DentstageToolApp.Infrastructure.csproj" />
@@ -16,7 +25,14 @@
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.3" />
-    <PackageReference Include="Tesseract" Version="4.1.1" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.3" />
+    <PackageReference Include="NLog.Web.AspNetCore" Version="5.3.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="scripts\easyocr_recognition.py">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>

@@ -12,30 +12,38 @@ using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Tesseract;
+using System.Text.Json;
+using System.Diagnostics;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace DentstageToolApp.Api.Services.CarPlate;
 
 /// <summary>
-/// 使用 Tesseract OCR 實作的車牌辨識服務，負責整合影像辨識與資料庫查詢。
+/// 車牌辨識服務，支援 EasyOCR 引擎，負責整合影像辨識與資料庫查詢。
 /// </summary>
 public class CarPlateRecognitionService : ICarPlateRecognitionService
 {
     private static readonly Regex PlateCandidateRegex = new("[A-Z0-9]{4,10}", RegexOptions.Compiled);
 
-    private readonly TesseractOcrOptions _options;
     private readonly DentstageToolAppContext _dbContext;
     private readonly ILogger<CarPlateRecognitionService> _logger;
+    private readonly string _ocrMode;
+    private readonly EasyOcrOptions _easyOcrOptions;
+
 
     /// <summary>
-    /// 建構子，注入 Tesseract 組態與資料庫內容類別。
+    /// 建構子，注入 OCR 組態與資料庫內容類別。
     /// </summary>
     public CarPlateRecognitionService(
-        IOptions<TesseractOcrOptions> options,
+        IConfiguration configuration,
+        IOptions<EasyOcrOptions> easyOcrOptions,
         DentstageToolAppContext dbContext,
         ILogger<CarPlateRecognitionService> logger)
     {
-        _options = options.Value ?? throw new ArgumentNullException(nameof(options));
+        _ocrMode = configuration["OcrMode"]?.ToLowerInvariant() ?? "easyocr";
+        _easyOcrOptions = easyOcrOptions?.Value ?? new EasyOcrOptions();
         _dbContext = dbContext;
         _logger = logger;
     }
@@ -51,28 +59,23 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         if (imageSource.ImageBytes is null || imageSource.ImageBytes.Length == 0)
         {
-            throw new InvalidDataException("影像內容為空，請重新上傳清晰的車牌照片。");
-        }
-
-        if (string.IsNullOrWhiteSpace(_options.TessDataPath) || !Directory.Exists(_options.TessDataPath))
-        {
-            throw new InvalidOperationException("Tesseract tessdata 路徑未設定或不存在，請於組態確認 TessDataPath。");
+            throw new InvalidDataException("影像內容為空，請重新上傳清晰的車牌照照。");
         }
 
         cancellationToken.ThrowIfCancellationRequested();
 
         // ---------- OCR 解析區 ----------
-        var (rawText, confidence) = await RunTesseractAsync(imageSource.ImageBytes, cancellationToken);
+        var (rawText, confidence) = await RunOcrAsync(imageSource.ImageBytes, cancellationToken);
         if (string.IsNullOrWhiteSpace(rawText))
         {
-            _logger.LogWarning("Tesseract 未從影像讀取到任何文字，檔案名稱：{FileName}", imageSource.FileName);
+            _logger.LogWarning("OCR 未從影像讀取到任何文字，檔案名稱：{FileName}", imageSource.FileName);
             return null;
         }
 
         var candidatePlate = ExtractPlateCandidate(rawText);
         if (string.IsNullOrWhiteSpace(candidatePlate))
         {
-            _logger.LogWarning("Tesseract 雖取得文字但未找到符合格式的車牌，檔案名稱：{FileName}", imageSource.FileName);
+            _logger.LogWarning("OCR 雖取得文字但未找到符合格式的車牌，檔案名稱：{FileName}", imageSource.FileName);
             return null;
         }
 
@@ -153,6 +156,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             cancellationToken);
 
         var orders = new List<Order>();
+                    
 
         if (car is not null)
         {
@@ -431,54 +435,190 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
     }
 
     /// <summary>
-    /// 以 Tesseract 分析影像，回傳完整文字與信心度。
+    /// 執行車牌辨識，使用 EasyOCR 引擎。
     /// </summary>
     /// <param name="imageBytes">影像的位元組陣列。</param>
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>影像中的文字與信心度百分比。</returns>
-    private async Task<(string Text, double Confidence)> RunTesseractAsync(byte[] imageBytes, CancellationToken cancellationToken)
+    private async Task<(string Text, double Confidence)> RunOcrAsync(byte[] imageBytes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        
+        _logger.LogInformation("使用車牌辨識模式：{OcrMode}", _ocrMode);
+
+        // 使用 EasyOCR 引擎
+        var preprocessed = PreprocessForOcr(imageBytes, targetWidth: 1200, blurSigma: 1.2f, doAutoContrast: true);
+        return await RunEasyOcrAsync(preprocessed, cancellationToken);
+    }
+
+    /// <summary>
+    /// 呼叫 EasyOCR 進行車牌辨識（支援 Local 和 API 模式）。
+    /// </summary>
+    private async Task<(string Text, double Confidence)> RunEasyOcrAsync(byte[] imageBytes, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        if (_easyOcrOptions.UseLocal)
         {
-            return await Task.Run(() =>
-            {
-                using var engine = CreateEngine();
-                using var pix = Pix.LoadFromMemory(imageBytes);
-                using var page = engine.Process(pix);
-
-                var text = page.GetText() ?? string.Empty;
-                var meanConfidence = page.GetMeanConfidence() * 100d;
-
-                return (text, meanConfidence);
-            }, cancellationToken);
+            return await RunEasyOcrLocalAsync(imageBytes, cancellationToken);
         }
-        catch (TesseractException ex)
+        else
         {
-            throw new InvalidOperationException("Tesseract OCR 執行失敗，請檢查 tessdata 與語系設定。", ex);
+            return await RunEasyOcrApiAsync(imageBytes, cancellationToken);
         }
     }
 
     /// <summary>
-    /// 建立 Tesseract 引擎，套用字元白名單與版面模式設定。
+    /// 使用本機 Python 腳本執行 EasyOCR 辨識。
     /// </summary>
-    /// <returns>可用的 <see cref="TesseractEngine"/> 實例。</returns>
-    private TesseractEngine CreateEngine()
+    private async Task<(string Text, double Confidence)> RunEasyOcrLocalAsync(byte[] imageBytes, CancellationToken cancellationToken)
     {
-        var engine = new TesseractEngine(_options.TessDataPath, _options.Language, EngineMode.Default);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (!string.IsNullOrWhiteSpace(_options.CharacterWhitelist))
+        var tempFile = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString() + ".png");
+        try
         {
-            engine.SetVariable("tessedit_char_whitelist", _options.CharacterWhitelist);
+            await File.WriteAllBytesAsync(tempFile, imageBytes, cancellationToken);
+
+            var languagesArg = string.Join(",", _easyOcrOptions.Languages);
+            var gpuFlag = _easyOcrOptions.GpuEnabled ? "--gpu" : "--no-gpu";
+            var args = $"\"{_easyOcrOptions.ScriptPath}\" \"{tempFile}\" --languages {languagesArg} {gpuFlag}";
+
+            var psi = new ProcessStartInfo(_easyOcrOptions.PythonPath, args)
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = Process.Start(psi);
+            if (proc is null)
+            {
+                throw new InvalidOperationException($"無法啟動 EasyOCR Python 腳本，Python 路徑：{_easyOcrOptions.PythonPath}");
+            }
+
+            var outputTask = proc.StandardOutput.ReadToEndAsync();
+            var errorTask = proc.StandardError.ReadToEndAsync();
+            await proc.WaitForExitAsync(cancellationToken);
+
+            var output = await outputTask;
+            var error = await errorTask;
+
+            if (proc.ExitCode != 0)
+            {
+                throw new InvalidOperationException($"EasyOCR 執行失敗 (exit code: {proc.ExitCode})\nstderr: {error}");
+            }
+
+            // 解析 JSON 輸出：{"text": "ABC1234", "confidence": 0.95}
+            using var doc = JsonDocument.Parse(output);
+            var root = doc.RootElement;
+
+            var text = root.GetProperty("text").GetString() ?? string.Empty;
+            var confidence = root.TryGetProperty("confidence", out var confEl) && confEl.ValueKind == JsonValueKind.Number
+                ? confEl.GetDouble() * 100d  // 轉換為百分比
+                : 0d;
+
+            return (text, confidence);
+        }
+        finally
+        {
+            try { if (File.Exists(tempFile)) File.Delete(tempFile); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// 呼叫遠端 EasyOCR API 執行辨識。
+    /// </summary>
+    private async Task<(string Text, double Confidence)> RunEasyOcrApiAsync(byte[] imageBytes, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (string.IsNullOrWhiteSpace(_easyOcrOptions.ApiUrl))
+        {
+            throw new InvalidOperationException("EasyOCR API 模式已啟用但未設定 ApiUrl，請於 appsettings.json 設定 EasyOcr.ApiUrl。");
         }
 
-        if (!string.IsNullOrWhiteSpace(_options.PageSegmentationMode) && Enum.TryParse<PageSegMode>(_options.PageSegmentationMode, true, out var mode))
+        using var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+        using var content = new MultipartFormDataContent();
+        using var imageContent = new ByteArrayContent(imageBytes);
+        imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        content.Add(imageContent, "image", "plate.png");
+
+        // 加入語言參數
+        if (_easyOcrOptions.Languages.Any())
         {
-            engine.DefaultPageSegMode = mode;
+            content.Add(new StringContent(string.Join(",", _easyOcrOptions.Languages)), "languages");
         }
 
-        return engine;
+        // 加入 GPU 參數
+        content.Add(new StringContent(_easyOcrOptions.GpuEnabled.ToString().ToLower()), "gpu_enabled");
+
+        var response = await httpClient.PostAsync(_easyOcrOptions.ApiUrl, content, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"EasyOCR API 呼叫失敗 (HTTP {(int)response.StatusCode})：{errorContent}");
+        }
+
+        var jsonResponse = await response.Content.ReadAsStringAsync(cancellationToken);
+        
+        // 解析 API 回應：{"text": "ABC1234", "confidence": 0.95}
+        using var doc = JsonDocument.Parse(jsonResponse);
+        var root = doc.RootElement;
+
+        var text = root.GetProperty("text").GetString() ?? string.Empty;
+        var confidence = root.TryGetProperty("confidence", out var confEl) && confEl.ValueKind == JsonValueKind.Number
+            ? confEl.GetDouble() * 100d  // 轉換為百分比
+            : 0d;
+
+        return (text, confidence);
+    }
+
+    /// <summary>
+    /// 前處理影像以供 OCR 使用：縮放、灰階、可選自動對比以及高斯模糊，最後輸出 PNG bytes。
+    /// </summary>
+    /// <param name="inputImage">輸入影像位元組。</param>
+    /// <param name="targetWidth">目標寬度（保留比例），若 <=0 則不縮放。</param>
+    /// <param name="blurSigma">Gaussian blur sigma 值，若 <=0 則不做模糊。</param>
+    /// <param name="doAutoContrast">是否套用自動對比增強。</param>
+    /// <returns>PNG 格式的位元組陣列，可直接傳入 Pix.LoadFromMemory。</returns>
+    private byte[] PreprocessForOcr(byte[] inputImage, int targetWidth = 1024, float blurSigma = 1.5f, bool doAutoContrast = true)
+    {
+        using var image = Image.Load<Rgba32>(inputImage);
+
+        // 縮放保留比例
+        if (targetWidth > 0 && image.Width > 0 && image.Width != targetWidth)
+        {
+            var newHeight = (int)Math.Round(image.Height * (targetWidth / (double)image.Width));
+            image.Mutate(x => x.Resize(new ResizeOptions
+            {
+                Size = new Size(targetWidth, newHeight),
+                Mode = ResizeMode.Max,
+                Sampler = KnownResamplers.Lanczos3
+            }));
+        }
+
+        // 轉灰階
+        image.Mutate(x => x.Grayscale());
+
+        // 自動對比（可選）— 使用 Contrast 調整（AutoContrast 在某些版本的 ImageSharp 可能不可用）
+        if (doAutoContrast)
+        {
+            // 輕微提高對比度，數值可調（1.0 = 無變化）
+            image.Mutate(x => x.Contrast(1.1f));
+        }
+
+        // Gaussian blur 去噪
+        if (blurSigma > 0.01f)
+        {
+            image.Mutate(x => x.GaussianBlur(blurSigma));
+        }
+
+        using var ms = new MemoryStream();
+        image.SaveAsPng(ms);
+        return ms.ToArray();
     }
 
     /// <summary>
@@ -494,7 +634,22 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         }
 
         var uppercaseText = rawText.ToUpperInvariant();
-        var matches = PlateCandidateRegex.Matches(uppercaseText);
+        // 將所有非英數字的符號（例如 - _ . / 空白等）統一轉為空白，避免把字連在一起
+        var cleaned = Regex.Replace(uppercaseText, "[^A-Z0-9]+", "");
+
+        // 先依 token 檢查（避免跨 token 拼接造成誤判）
+        var tokens = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var token in tokens)
+        {
+            var normalizedToken = NormalizePlate(token);
+            if (!string.IsNullOrWhiteSpace(normalizedToken) && normalizedToken.Length is >= 5 and <= 8)
+            {
+                return normalizedToken;
+            }
+        }
+
+        // 退回以連續英數字的正則比對（在已清理的字串上進行）
+        var matches = PlateCandidateRegex.Matches(cleaned);
 
         foreach (Match match in matches)
         {

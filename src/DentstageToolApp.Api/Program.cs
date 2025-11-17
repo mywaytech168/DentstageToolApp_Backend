@@ -33,8 +33,21 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using NLog;
+using NLog.Web;
+
+// 啟用 NLog 日誌
+var logger = LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
+logger.Debug("NLog 初始化完成");
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
+
+// 清除預設的 Logging Providers 並啟用 NLog
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
 
 // ---------- 服務註冊區 ----------
 // 註冊控制器，提供 API 與路由的基礎功能
@@ -123,7 +136,7 @@ builder.Services.AddDbContext<DentstageToolAppContext>(options =>
 
 // ---------- JWT 與身份驗證設定 ----------
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
-builder.Services.Configure<TesseractOcrOptions>(builder.Configuration.GetSection("TesseractOcr"));
+builder.Services.Configure<EasyOcrOptions>(builder.Configuration.GetSection("EasyOcr"));
 builder.Services.Configure<PhotoStorageOptions>(builder.Configuration.GetSection("PhotoStorage"));
 builder.Services.Configure<AppReleaseOptions>(builder.Configuration.GetSection("AppRelease"));
 builder.Services.Configure<MaintenanceOrderOptions>(builder.Configuration.GetSection("MaintenanceOrders"));
@@ -131,12 +144,6 @@ var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>();
 if (jwtOptions is null || string.IsNullOrWhiteSpace(jwtOptions.Secret))
 {
     throw new InvalidOperationException("未設定 Jwt.Secret，無法產生簽章金鑰。");
-}
-
-var tesseractOptions = builder.Configuration.GetSection("TesseractOcr").Get<TesseractOcrOptions>();
-if (tesseractOptions is null || string.IsNullOrWhiteSpace(tesseractOptions.TessDataPath))
-{
-    throw new InvalidOperationException("未設定 TesseractOcr.TessDataPath，無法啟動車牌辨識服務。");
 }
 
 var appReleaseOptions = builder.Configuration.GetSection("AppRelease").Get<AppReleaseOptions>();
@@ -416,3 +423,16 @@ using (var scope = app.Services.CreateScope())
 
 // 啟動 Web 應用程式
 await app.RunAsync();
+
+}
+catch (Exception exception)
+{
+    // 捕獲啟動失敗的異常並記錄
+    logger.Error(exception, "應用程式因異常而停止");
+    throw;
+}
+finally
+{
+    // 確保 NLog 正確關閉並清空緩衝區
+    LogManager.Shutdown();
+}
