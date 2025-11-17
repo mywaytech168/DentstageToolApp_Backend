@@ -122,6 +122,8 @@ public class PhotosController : ControllerBase
         return File(photo.Content, photo.ContentType, photo.FileName);
     }
 
+    
+
     // ---------- 方法區 ----------
     // 控制器邏輯單純，暫無額外私有方法。
 
