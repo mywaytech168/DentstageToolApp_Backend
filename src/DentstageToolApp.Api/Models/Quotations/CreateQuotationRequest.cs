@@ -76,6 +76,11 @@ public class CreateQuotationStoreInfo
     /// 製單技師識別碼，若未提供則預設與估價技師相同。
     /// </summary>
     public string? CreatorTechnicianUid { get; set; }
+
+    /// <summary>
+    /// 是否為臨時客戶，True 表示本估價單為臨時客戶建立（未在客戶資料庫中正式登記）。
+    /// </summary>
+    public bool IsTemporaryCustomer { get; set; }
 }
 
 /// <summary>
@@ -182,6 +187,11 @@ public class CreateQuotationMaintenanceInfo
     /// 維修設定備註，取代舊版放置於頂層的 remark 欄位。
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 是否已含稅，True 表示估價金額已包含稅款；False 表示估價後需另計稅款。
+    /// </summary>
+    public bool IncludeTax { get; set; }
 }
 
 /// <summary>
@@ -226,6 +236,16 @@ public class QuotationStoreInfo
     public string? CreatorTechnicianName { get; set; }
 
     /// <summary>
+    /// 服務技師識別碼（維修單用）。
+    /// </summary>
+    public string? ServiceTechnicianUid { get; set; }
+
+    /// <summary>
+    /// 服務技師名稱（維修單用）。
+    /// </summary>
+    public string? ServiceTechnicianName { get; set; }
+
+    /// <summary>
     /// 建立日期。
     /// </summary>
     public DateTime? CreatedDate { get; set; }
@@ -236,14 +256,29 @@ public class QuotationStoreInfo
     public DateTime? ReservationDate { get; set; }
 
     /// <summary>
+    /// 預約原因或特殊說明，例如客戶要求或維修要件。
+    /// </summary>
+    public string? ReservationContent { get; set; }
+
+    /// <summary>
     /// 預約方式（例如電話預約、LINE 訊息）。
     /// </summary>
     public string? BookMethod { get; set; }
 
     /// <summary>
+    /// 預約維修日期。客戶預約的實際維修日期。
+    /// </summary>
+    public DateTime? ReservationFixDate { get; set; }
+
+    /// <summary>
     /// 預計維修日期。
     /// </summary>
     public DateTime? RepairDate { get; set; }
+
+    /// <summary>
+    /// 是否為臨時客戶。
+    /// </summary>
+    public bool? IsTemporaryCustomer { get; set; }
 }
 
 /// <summary>
@@ -350,6 +385,11 @@ public class QuotationMaintenanceInfo
     /// 維修相關備註。
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 是否已含稅，True 表示估價金額已包含稅款；False 表示估價後需另計稅款。
+    /// </summary>
+    public bool? IncludeTax { get; set; }
 }
 
 /// <summary>

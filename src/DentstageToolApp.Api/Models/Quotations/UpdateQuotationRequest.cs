@@ -67,6 +67,11 @@ public class QuotationStoreUpdateInfo
     public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
+    /// 服務技師識別碼（UID），用於維修單指定實際服務的技師。
+    /// </summary>
+    public string? ServiceTechnicianUid { get; set; }
+
+    /// <summary>
     /// 預約方式，沿用建立估價單欄位，供前端同步顯示。
     /// </summary>
     public string? BookMethod { get; set; }
@@ -80,5 +85,10 @@ public class QuotationStoreUpdateInfo
     /// 預計維修日期，僅在提供值時才會更新資料庫欄位。
     /// </summary>
     public DateTime? RepairDate { get; set; }
+
+    /// <summary>
+    /// 是否為臨時客戶，影響統計與後續客服流程。
+    /// </summary>
+    public bool? IsTemporaryCustomer { get; set; }
 }
 

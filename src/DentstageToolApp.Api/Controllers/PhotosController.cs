@@ -17,7 +17,6 @@ namespace DentstageToolApp.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/photos")]
-[Authorize]
 public class PhotosController : ControllerBase
 {
     /// <summary>

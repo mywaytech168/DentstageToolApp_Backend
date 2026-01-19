@@ -309,6 +309,16 @@ public class Quatation
     public string? BookMethod { get; set; }
 
     /// <summary>
+    /// 預約內容。記錄轉予約時輸入的預約備註、要求或特殊說明。
+    /// </summary>
+    public string? ReservationContent { get; set; }
+
+    /// <summary>
+    /// 預約維修日。記錄客戶預約的實際維修日期。
+    /// </summary>
+    public DateOnly? ReservationFixDate { get; set; }
+
+    /// <summary>
     /// 代步車需求。
     /// </summary>
     public string? CarReserved { get; set; }
@@ -342,6 +352,11 @@ public class Quatation
     /// 備註。
     /// </summary>
     public string? Remark { get; set; }
+
+    /// <summary>
+    /// 是否為臨時客戶，用於統計臨時客訪客。
+    /// </summary>
+    public bool? IsTemporaryCustomer { get; set; }
 
     /// <summary>
     /// 110 狀態時間戳記。
@@ -452,6 +467,21 @@ public class Quatation
     /// 是否為常客。
     /// </summary>
     public bool? FlagRegularCustomer { get; set; }
+
+    /// <summary>
+    /// 是否開立含稅發票，勾選時自動計算稅額。
+    /// </summary>
+    public bool? IncludeTax { get; set; }
+
+    /// <summary>
+    /// 稅額（5%），於 IncludeTax 為 true 時自動計算。
+    /// </summary>
+    public decimal? TaxAmount { get; set; }
+
+    /// <summary>
+    /// 含稅後總額，計算方式：Amount + TaxAmount。
+    /// </summary>
+    public decimal? TotalWithTax { get; set; }
 
     /// <summary>
     /// 關聯顧客導航屬性。

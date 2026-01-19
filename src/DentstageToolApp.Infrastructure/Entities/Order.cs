@@ -68,6 +68,11 @@ public class Order
     public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
+    /// 服務技師識別碼，紀錄實際執行維修服務的技師。
+    /// </summary>
+    public string? ServiceTechnicianUid { get; set; }
+
+    /// <summary>
     /// 工單日期。
     /// </summary>
     public DateOnly? Date { get; set; }
@@ -383,6 +388,16 @@ public class Order
     public decimal? Rebate { get; set; }
 
     /// <summary>
+    /// 稅額（5%），於含稅時自動計算並儲存。
+    /// </summary>
+    public decimal? TaxAmount { get; set; }
+
+    /// <summary>
+    /// 含稅後總額，計算方式：Amount + TaxAmount。
+    /// </summary>
+    public decimal? TotalWithTax { get; set; }
+
+    /// <summary>
     /// 是否為常客。
     /// </summary>
     public bool? FlagRegularCustomer { get; set; }
@@ -391,6 +406,11 @@ public class Order
     /// 是否為外部合作案件。
     /// </summary>
     public bool? FlagExternalCooperation { get; set; }
+
+    /// <summary>
+    /// 是否為臨時客戶，同步自估價單，用於統計。
+    /// </summary>
+    public bool? IsTemporaryCustomer { get; set; }
 
     /// <summary>
     /// 關聯報價單導航屬性。

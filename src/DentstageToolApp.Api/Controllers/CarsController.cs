@@ -163,6 +163,58 @@ public class CarsController : ControllerBase
     }
 
     /// <summary>
+    /// 車牌模糊搜尋，回傳符合條件的車輛清單（最多 50 筆）。
+    /// </summary>
+    /// <remarks>
+    /// 支援部分車牌號碼比對，用於自動完成或下拉選單。
+    /// {"plateKeyword": "ABC", "limit": 10}
+    /// </remarks>
+    [HttpPost("plate-search")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "plateKeyword": "ABC"
+        }
+        """)]
+    [ProducesResponseType(typeof(CarPlateFuzzySearchResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<CarPlateFuzzySearchResponse>> FuzzySearchCarByPlateAsync(
+        [FromBody] CarPlateFuzzySearchRequest? request, 
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return BuildProblemDetails(HttpStatusCode.BadRequest, "請提供欲查詢的車牌關鍵字。", "車牌模糊搜尋失敗");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var response = await _carQueryService.FuzzySearchByPlateAsync(request, cancellationToken);
+            return Ok(response);
+        }
+        catch (CarQueryServiceException ex)
+        {
+            _logger.LogWarning(ex, "車牌模糊搜尋失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "車牌模糊搜尋失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("車牌模糊搜尋流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，資料未異動。", "車牌模糊搜尋已取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "車牌模糊搜尋流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "車牌模糊搜尋失敗");
+        }
+    }
+
+    /// <summary>
     /// 新增車輛資料，建立車牌、品牌 UID、型號 UID 與備註等欄位。
     /// </summary>
     /// <remarks>

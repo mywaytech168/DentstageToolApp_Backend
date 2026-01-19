@@ -27,7 +27,7 @@ public class CustomerPhoneSearchResponse
         = Array.Empty<CustomerPhoneSearchItem>();
 
     /// <summary>
-    /// 與電話相關的維修紀錄統計資訊。
+    /// 與電話相關的統計資訊，包含估價單與維修單的分類統計。
     /// </summary>
     public CustomerMaintenanceSummary MaintenanceSummary { get; set; } =
         new CustomerMaintenanceSummary();
@@ -60,7 +60,7 @@ public class CustomerPhoneSearchDetailResponse
         = null;
 
     /// <summary>
-    /// 與電話相關的維修紀錄統計資訊。
+    /// 與電話相關的統計資訊，包含估價單與維修單的分類統計。
     /// </summary>
     public CustomerMaintenanceSummary MaintenanceSummary { get; set; } =
         new CustomerMaintenanceSummary();
@@ -156,27 +156,19 @@ public class CustomerPhoneSearchDetailItem : CustomerPhoneSearchItem
 }
 
 /// <summary>
-/// 與指定電話相關的維修統計資訊，提供取消與預約次數。
+/// 與指定電話相關的統計資訊，分別包含估價單與維修單的分類統計。
 /// </summary>
 public class CustomerMaintenanceSummary
 {
     /// <summary>
-    /// 相關維修單總筆數，包含所有狀態。
+    /// 估價單統計資訊，包含總筆數、預約次數、取消次數等。
     /// </summary>
-    public int TotalOrders { get; set; }
+    public QuotationStatisticsSummary Quotation { get; set; } =
+        new QuotationStatisticsSummary();
 
     /// <summary>
-    /// 狀態屬於預約的維修單數量。
+    /// 維修單統計資訊，包含總筆數、預約次數、取消次數等。
     /// </summary>
-    public int ReservationCount { get; set; }
-
-    /// <summary>
-    /// 狀態屬於取消或終止的維修單數量。
-    /// </summary>
-    public int CancellationCount { get; set; }
-
-    /// <summary>
-    /// 是否有任何維修紀錄，供前端快速判斷是否需要顯示歷史。
-    /// </summary>
-    public bool HasMaintenanceHistory { get; set; }
+    public OrderStatisticsSummary Maintenance { get; set; } =
+        new OrderStatisticsSummary();
 }

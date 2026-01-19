@@ -391,7 +391,8 @@
         });
         const createRequestText = ref(`{
   "store": {
-    "estimationTechnicianUid": ""
+    "estimationTechnicianUid": "",
+    "isTemporaryCustomer": false
   },
   "car": {
     "carUid": ""
@@ -404,10 +405,14 @@
       {
         "photo": "",
         "position": "左前門",
+        "positionOther": "",
         "description": "測試損傷位置",
         "estimatedAmount": 4500
       }
     ]
+  },
+  "maintenance": {
+    "includeTax": false
   }
 }`);
         const createResponse = ref('');
@@ -580,11 +585,17 @@
               if (typeof item.position === 'string' && item.position.trim()) {
                 normalizedItem.position = item.position.trim();
               }
+              if (typeof item.positionOther === 'string' && item.positionOther.trim()) {
+                normalizedItem.positionOther = item.positionOther.trim();
+              }
               if (typeof item.description === 'string' && item.description.trim()) {
                 normalizedItem.description = item.description.trim();
               }
               if (typeof item.dentStatus === 'string' && item.dentStatus.trim()) {
                 normalizedItem.dentStatus = item.dentStatus.trim();
+              }
+              if (typeof item.dentStatusOther === 'string' && item.dentStatusOther.trim()) {
+                normalizedItem.dentStatusOther = item.dentStatusOther.trim();
               }
               if (typeof item.fixType === 'string' && item.fixType.trim()) {
                 normalizedItem.fixType = item.fixType.trim();
@@ -642,6 +653,9 @@
         }
         if (keepBoolean(maintenance.hasRepainted)) {
           normalized.hasRepainted = true;
+        }
+        if (typeof maintenance.includeTax === 'boolean') {
+          normalized.includeTax = maintenance.includeTax;
         }
         if (keepBoolean(maintenance.needToolEvaluation)) {
           normalized.needToolEvaluation = true;

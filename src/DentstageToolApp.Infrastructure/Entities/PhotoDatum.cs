@@ -28,6 +28,11 @@ public class PhotoDatum
     public string? Posion { get; set; }
 
     /// <summary>
+    /// 拍攀位置爲「other」時的操述。
+    /// </summary>
+    public string? PositionOther { get; set; }
+
+    /// <summary>
     /// 文字註解。
     /// </summary>
     public string? Comment { get; set; }

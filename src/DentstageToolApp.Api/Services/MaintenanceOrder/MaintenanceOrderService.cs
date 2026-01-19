@@ -199,8 +199,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var quotationDetail = await TryGetQuotationDetailAsync(orderEntity, cancellationToken);
         var actualAmount = await CalculateActualAmountAsync(orderEntity, quotationDetail, cancellationToken);
         var netAmount = CalculateNetAmount(actualAmount, orderEntity.Rebate);
+        
+        // 查詢服務技師名稱
+        var serviceTechnicianName = await GetServiceTechnicianNameAsync(orderEntity.ServiceTechnicianUid, cancellationToken);
 
-        return MapToDetail(orderEntity, quotationDetail, actualAmount, netAmount);
+        return MapToDetail(orderEntity, quotationDetail, actualAmount, netAmount, serviceTechnicianName);
     }
 
     /// <summary>
@@ -243,6 +246,31 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 根據技師 UID 查詢其名稱。
+    /// </summary>
+    private async Task<string?> GetServiceTechnicianNameAsync(string? technicianUid, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(technicianUid))
+        {
+            return null;
+        }
+
+        try
+        {
+            var technician = await _dbContext.Technicians
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.TechnicianUid == technicianUid, cancellationToken);
+            
+            return NormalizeOptionalText(technician?.TechnicianName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "查詢技師名稱失敗，技師UID: {TechnicianUid}", technicianUid);
+            return null;
+        }
     }
 
     /// <inheritdoc />
@@ -482,6 +510,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         order.EstimationTechnicianUid = NormalizeOptionalText(quotation.EstimationTechnicianUid)
             ?? NormalizeOptionalText(quotation.UserUid);
         order.CreatorTechnicianUid = quotation.CreatorTechnicianUid;
+        order.ServiceTechnicianUid = NormalizeOptionalText(request?.Store?.ServiceTechnicianUid);
         order.Amount = amount;
 
         var updatedActual = await CalculateActualAmountAsync(order, null, cancellationToken);
@@ -489,6 +518,22 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         if (updatedActual.HasValue)
         {
             order.Amount = updatedNet ?? updatedActual;
+        }
+
+        // ---------- 同步臨時客戶標籤 ----------
+        order.IsTemporaryCustomer = quotation.IsTemporaryCustomer;
+
+        // ---------- 計算並儲存稅額 ----------
+        var baseAmount = order.Amount;
+        if (quotation.IncludeTax == true && baseAmount.HasValue)
+        {
+            order.TaxAmount = decimal.Round(baseAmount.Value * 0.05m, 2, MidpointRounding.AwayFromZero);
+            order.TotalWithTax = decimal.Round(baseAmount.Value + order.TaxAmount.Value, 2, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            order.TaxAmount = null;
+            order.TotalWithTax = null;
         }
 
         // ---------- 維修單取消狀態同步 ----------
@@ -821,12 +866,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     {
         var quotation = order.Quatation;
         var storeName = quotation?.StoreNavigation?.StoreName;
-        // ---------- 估價技師名稱以維修單優先，其次才回退估價單資料 ----------
-        var estimationTechnicianName = quotation?.EstimationTechnicianNavigation?.TechnicianName
-            ?? NormalizeOptionalText(quotation?.UserName)
-            ?? NormalizeOptionalText(order.UserName)
-            ?? quotation?.CurrentStatusUser;
-        // ---------- UID 先讀取維修單欄位，避免每次查詢都回頭 Join 估價單 ----------
+        // ---------- 估價技師 UID 先讀取維修單欄位，避免每次查詢都回頭 Join 估價單 ----------
         var estimationTechnicianUid = NormalizeOptionalText(order.EstimationTechnicianUid)
             ?? NormalizeOptionalText(order.UserUid)
             ?? NormalizeOptionalText(quotation?.EstimationTechnicianUid)
@@ -834,8 +874,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var creatorUid = NormalizeOptionalText(order.CreatorTechnicianUid)
             ?? NormalizeOptionalText(quotation?.CreatorTechnicianUid);
 
-        var creatorName = NormalizeOptionalText(quotation?.CreatedBy)
-            ?? NormalizeOptionalText(order.UserName);
+        // ---------- 服務技師資訊 ----------
+        var serviceTechnicianUid = NormalizeOptionalText(order.ServiceTechnicianUid);
 
         return new MaintenanceOrderSummaryResponse
         {
@@ -849,9 +889,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             CarPlate = order.CarNo,
             EstimationTechnicianUid = estimationTechnicianUid,
             CreatorTechnicianUid = creatorUid,
+            ServiceTechnicianUid = serviceTechnicianUid,
             StoreName = NormalizeOptionalText(storeName) ?? NormalizeOptionalText(order.StoreUid),
-            EstimationTechnicianName = NormalizeOptionalText(estimationTechnicianName),
-            CreatorTechnicianName = creatorName,
+            ServiceTechnicianName = null, // 需要後續透過 Join 或 Navigation 補充
             CreatedAt = order.CreationTimestamp
         };
     }
@@ -859,10 +899,10 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// <summary>
     /// 將維修單實體與估價詳情整併成統一輸出格式。
     /// </summary>
-    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail, decimal? actualAmount, decimal? netAmount)
+    private static MaintenanceOrderDetailResponse MapToDetail(Order order, QuotationDetailResponse? quotationDetail, decimal? actualAmount, decimal? netAmount, string? serviceTechnicianName = null)
     {
         var quotation = order.Quatation;
-        var storeInfo = BuildStoreInfo(order, quotationDetail?.Store);
+        var storeInfo = BuildStoreInfo(order, quotationDetail?.Store, serviceTechnicianName);
         var carInfo = BuildCarInfo(order, quotationDetail?.Car);
         var customerInfo = BuildCustomerInfo(order, quotationDetail?.Customer);
         var photos = ClonePhotoSummaries(quotationDetail?.Photos);
@@ -897,12 +937,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private async Task<decimal?> CalculateActualAmountAsync(Order order, QuotationDetailResponse? quotationDetail, CancellationToken cancellationToken)
     {
-        var detailActual = SumActualAmount(quotationDetail?.Photos);
-        if (detailActual.HasValue)
-        {
-            return detailActual;
-        }
-
+        // 直接從維修單相關記錄讀取實收金額，不再基於進度自動計算
         var orderUid = NormalizeOptionalText(order.OrderUid);
         if (orderUid is null)
         {
@@ -914,9 +949,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             .Where(photo => photo.RelatedUid == orderUid)
             .Select(photo => new
             {
-                photo.Cost,
-                photo.FinishCost,
-                photo.MaintenanceProgress
+                photo.FinishCost
             })
             .ToListAsync(cancellationToken);
 
@@ -929,43 +962,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var hasValue = false;
         foreach (var record in photoRecords)
         {
-            var normalizedProgress = NormalizeProgress(record.MaintenanceProgress);
-            var actual = ResolveActualAmount(record.Cost, normalizedProgress, record.FinishCost);
-            if (actual.HasValue)
+            if (record.FinishCost.HasValue)
             {
-                total += actual.Value;
-                hasValue = true;
-            }
-        }
-
-        return hasValue ? decimal.Round(total, 2, MidpointRounding.AwayFromZero) : null;
-    }
-
-    /// <summary>
-    /// 將維修詳情中的實際金額累計，若缺少資料則回傳 null。
-    /// </summary>
-    private static decimal? SumActualAmount(QuotationPhotoSummaryCollection? photos)
-    {
-        if (photos is null)
-        {
-            return null;
-        }
-
-        var total = 0m;
-        var hasValue = false;
-
-        foreach (var summary in photos.EnumerateAll())
-        {
-            if (summary is null)
-            {
-                continue;
-            }
-
-            var normalizedProgress = NormalizeProgress(summary.MaintenanceProgress);
-            var actual = ResolveActualAmount(summary.EstimatedAmount, normalizedProgress, summary.ActualAmount);
-            if (actual.HasValue)
-            {
-                total += actual.Value;
+                total += record.FinishCost.Value;
                 hasValue = true;
             }
         }
@@ -1012,18 +1011,13 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? finishCost)
     {
+        // 只使用完工金額，忽略進度計算
         if (finishCost.HasValue)
         {
             return decimal.Round(finishCost.Value, 2, MidpointRounding.AwayFromZero);
         }
 
-        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
-        {
-            return null;
-        }
-
-        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
-        return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
+        return null;
     }
 
     /// <summary>
@@ -1145,7 +1139,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// <summary>
     /// 組裝店鋪資訊，優先使用維修單最新資料，若缺少則回退估價單內容。
     /// </summary>
-    private static QuotationStoreInfo BuildStoreInfo(Order order, QuotationStoreInfo? quotationStore)
+    private static QuotationStoreInfo BuildStoreInfo(Order order, QuotationStoreInfo? quotationStore, string? serviceTechnicianName = null)
     {
         var quotation = order.Quatation;
         var normalizedStoreName = NormalizeOptionalText(quotation?.StoreNavigation?.StoreName)
@@ -1159,6 +1153,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         var repairDate = ParseOptionalDate(order.WorkDate)
             ?? (quotation?.FixDate.HasValue == true ? quotation.FixDate.Value.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero)) : (DateTime?)null)
             ?? quotationStore?.RepairDate;
+
+        var reservationFixDate = (quotation?.ReservationFixDate.HasValue == true ? quotation.ReservationFixDate.Value.ToDateTime(TimeOnly.FromTimeSpan(TimeSpan.Zero)) : (DateTime?)null)
+            ?? quotationStore?.ReservationFixDate;
 
         // ---------- 優先使用維修單寫入的估價技師 UID，再回退至估價單或原始請求 ----------
         var estimationTechnicianUid = NormalizeOptionalText(order.EstimationTechnicianUid)
@@ -1195,14 +1192,20 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             StoreName = normalizedStoreName,
             EstimationTechnicianName = resolvedEstimationTechnicianName,
             CreatorTechnicianName = resolvedCreatorName,
+            ServiceTechnicianUid = NormalizeOptionalText(order.ServiceTechnicianUid),
+            ServiceTechnicianName = serviceTechnicianName,
             CreatedDate = order.CreationTimestamp
                 ?? quotation?.CreationTimestamp
                 ?? quotationStore?.CreatedDate,
             ReservationDate = reservationDate,
+            ReservationContent = quotation?.ReservationContent ?? quotationStore?.ReservationContent,
             BookMethod = NormalizeOptionalText(order.BookMethod)
                 ?? NormalizeOptionalText(quotation?.BookMethod)
                 ?? quotationStore?.BookMethod,
-            RepairDate = repairDate
+            ReservationFixDate = reservationFixDate,
+            RepairDate = repairDate,
+            // ---------- 同步臨時客戶標籤 ----------
+            IsTemporaryCustomer = order.IsTemporaryCustomer ?? quotation?.IsTemporaryCustomer ?? quotationStore?.IsTemporaryCustomer
         };
     }
 
@@ -1327,7 +1330,9 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             {
                 Photo = summary.Photo,
                 Position = summary.Position,
+                PositionOther = summary.PositionOther,
                 DentStatus = summary.DentStatus,
+                DentStatusOther = summary.DentStatusOther,
                 Description = summary.Description,
                 EstimatedAmount = summary.EstimatedAmount,
                 FixType = summary.FixType,
@@ -1366,6 +1371,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             HasDent = marker?.HasDent ?? false,
             HasScratch = marker?.HasScratch ?? false,
             HasPaintPeel = marker?.HasPaintPeel ?? false,
+            HasScuff = marker?.HasScuff ?? false,
             Remark = marker?.Remark
         }).ToList() ?? new List<QuotationCarBodyDamageMarker>();
 
@@ -1392,6 +1398,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 ApplyWrapping = quotationMaintenance.ApplyWrapping,
                 HasRepainted = quotationMaintenance.HasRepainted,
                 NeedToolEvaluation = quotationMaintenance.NeedToolEvaluation,
+                IncludeTax = quotationMaintenance.IncludeTax,
                 OtherFee = quotationMaintenance.OtherFee,
                 EstimatedRepairDays = quotationMaintenance.EstimatedRepairDays,
                 EstimatedRepairHours = quotationMaintenance.EstimatedRepairHours,
@@ -1591,15 +1598,20 @@ public class MaintenanceOrderService : IMaintenanceOrderService
     /// </summary>
     private static QuotationAmountInfo BuildAmountInfo(Order order, decimal? actualAmount, decimal? netAmount)
     {
+        // 讀取資料表儲存的含稅狀態、稅額與含稅後總額
+        bool? includeTax = order.Quatation?.IncludeTax;
+
         return new QuotationAmountInfo
         {
             Valuation = order.Valuation,
             Discount = order.Discount,
             DiscountPercent = order.DiscountPercent,
             Amount = order.Amount,
-            ActualAmount = actualAmount,
             Rebate = order.Rebate,
-            NetAmount = netAmount ?? order.Amount
+            NetAmount = netAmount ?? order.Amount,
+            IncludeTax = includeTax,
+            TaxAmount = order.TaxAmount,
+            TotalWithTax = order.TotalWithTax
         };
     }
 

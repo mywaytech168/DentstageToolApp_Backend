@@ -21,6 +21,21 @@ public class CarPlateRecognitionResponse
     public double Confidence { get; set; }
 
     /// <summary>
+    /// 車輛識別碼。
+    /// </summary>
+    public string? CarUid { get; set; }
+
+    /// <summary>
+    /// 品牌識別碼。
+    /// </summary>
+    public string? BrandUid { get; set; }
+
+    /// <summary>
+    /// 車型識別碼。
+    /// </summary>
+    public string? ModelUid { get; set; }
+
+    /// <summary>
     /// 車輛品牌。
     /// </summary>
     public string? Brand { get; set; }
@@ -36,9 +51,24 @@ public class CarPlateRecognitionResponse
     public string? Color { get; set; }
 
     /// <summary>
+    /// 是否有維修紀錄。
+    /// </summary>
+    public bool HasMaintenanceRecords { get; set; }
+
+    /// <summary>
     /// 是否曾經在系統中維修過。
     /// </summary>
     public bool HasMaintenanceHistory { get; set; }
+
+    /// <summary>
+    /// 里程數。
+    /// </summary>
+    public int? Milage { get; set; }
+
+    /// <summary>
+    /// 車輛備註。
+    /// </summary>
+    public string? CarRemark { get; set; }
 
     /// <summary>
     /// 服務端提供的說明訊息，用於提示前端後續流程。

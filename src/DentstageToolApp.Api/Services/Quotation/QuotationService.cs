@@ -124,7 +124,9 @@ public class QuotationService : IQuotationService
                 CreatorTechnicianUid = technician?.TechnicianUid ?? BuildFallbackUid("U"),
                 BookMethod = BuildBookMethodText(random),
                 ReservationDate = reservationDate,
-                RepairDate = repairDate
+                RepairDate = repairDate,
+                // 新增臨時客戶隨機測試資料（50% 機率）
+                IsTemporaryCustomer = random.Next(2) == 0
             },
             Car = new CreateQuotationCarInfo
             {
@@ -479,6 +481,9 @@ public class QuotationService : IQuotationService
         var storeInfo = request.Store ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供店家資訊。");
         var carInfo = request.Car ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供車輛資訊。");
         var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
+        
+        // 提取臨時客戶標記
+        var isTemporaryCustomer = storeInfo.IsTemporaryCustomer;
 
         // 僅透過技師識別碼即可反查門市資料，減少前端傳遞欄位。
         var technicianEntity = await GetTechnicianEntityAsync(storeInfo.EstimationTechnicianUid, cancellationToken);
@@ -521,6 +526,7 @@ public class QuotationService : IQuotationService
         // ---------- 維修設定處理 ----------
         // 先整理維修設定欄位，維修類型若未提供將在綁定照片後自動推論。
         var maintenanceInfo = request.Maintenance ?? new CreateQuotationMaintenanceInfo();
+        var includeTax = maintenanceInfo.IncludeTax;
         var reserveCarFlag = ConvertBooleanToFlag(maintenanceInfo.ReserveCar);
         var coatingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyCoating);
         var wrappingFlag = ConvertBooleanToFlag(maintenanceInfo.ApplyWrapping);
@@ -755,11 +761,15 @@ public class QuotationService : IQuotationService
             // 消息來源改由客戶主檔統一帶入，避免前端重複傳遞同一資料。
             Source = customerSource,
             Email = customerEmail,
+            IsTemporaryCustomer = isTemporaryCustomer,
+            IncludeTax = includeTax,
             Remark = remarkPayload,
             Discount = roundingDiscount,
             DiscountPercent = percentageDiscount,
             DiscountReason = discountReason,
             Valuation = valuation,
+            TaxAmount = includeTax && valuation.HasValue ? decimal.Round(valuation.Value * 0.05m, 2, MidpointRounding.AwayFromZero) : null,
+            TotalWithTax = includeTax && valuation.HasValue ? decimal.Round(valuation.Value + decimal.Round(valuation.Value * 0.05m, 2, MidpointRounding.AwayFromZero), 2, MidpointRounding.AwayFromZero) : null,
             FixTimeHour = fixTimeHour,
             FixTimeMin = fixTimeMin,
             FixExpect = fixExpectText,
@@ -929,6 +939,7 @@ public class QuotationService : IQuotationService
         var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
         var mergedCategoryAdjustments = MergeCategoryAdjustments(extraData?.CategoryAdjustments, columnCategoryAdjustments);
         var hasExplicitCategoryAdjustments = HasCategoryAdjustments(extraData?.CategoryAdjustments);
+        var hasCategoryAdjustmentStructure = extraData?.CategoryAdjustments is not null;
         var aggregatedFixType = string.IsNullOrWhiteSpace(quotation.FixType)
             ? DetermineOverallFixType(normalizedDamages)
             : quotation.FixType;
@@ -953,6 +964,10 @@ public class QuotationService : IQuotationService
         if (financials.HasAdjustmentData)
         {
             categoryAdjustments = CloneCategoryAdjustments(financials.Adjustments);
+        }
+        else if (hasCategoryAdjustmentStructure && extraData?.CategoryAdjustments is not null)
+        {
+            categoryAdjustments = CloneCategoryAdjustments(extraData.CategoryAdjustments);
         }
         // 回傳時優先採用舊系統欄位，若舊資料仍存於 remark JSON 中則保留相容性。
         var estimatedRepairDays = quotation.FixExpectDay ?? extraData?.EstimatedRepairDays;
@@ -982,7 +997,10 @@ public class QuotationService : IQuotationService
                 Discount = quotation.Discount,
                 DiscountPercent = quotation.DiscountPercent,
                 // Quatation 實體未直接提供 Amount 欄位，因此統一由服務層計算後回傳。
-                Amount = amount
+                Amount = amount,
+                IncludeTax = quotation.IncludeTax,
+                TaxAmount = quotation.TaxAmount,
+                TotalWithTax = quotation.TotalWithTax
             },
             Store = new QuotationStoreInfo
             {
@@ -998,8 +1016,11 @@ public class QuotationService : IQuotationService
                     ?? estimationTechnicianUid,
                 CreatedDate = quotation.CreationTimestamp,
                 ReservationDate = ConvertDateOnlyToDateTime(quotation.BookDate),
+                ReservationContent = quotation.ReservationContent,
                 BookMethod = quotation.BookMethod,
-                RepairDate = ConvertDateOnlyToDateTime(quotation.FixDate)
+                ReservationFixDate = ConvertDateOnlyToDateTime(quotation.ReservationFixDate),
+                RepairDate = ConvertDateOnlyToDateTime(quotation.FixDate),
+                IsTemporaryCustomer = quotation.IsTemporaryCustomer
             },
             Car = new QuotationCarInfo
             {
@@ -1036,6 +1057,7 @@ public class QuotationService : IQuotationService
                 ApplyWrapping = ParseBooleanFlag(quotation.Envelope),
                 HasRepainted = ParseBooleanFlag(quotation.Paint),
                 NeedToolEvaluation = ParseBooleanFlag(quotation.ToolTest),
+                IncludeTax = quotation.IncludeTax,
                 Remark = maintenanceRemark,
                 OtherFee = otherFee,
                 RoundingDiscount = roundingDiscount,
@@ -1496,6 +1518,40 @@ public class QuotationService : IQuotationService
             categoryAdjustmentsForExtra);
         quotation.Remark = SerializeRemark(maintenanceRemark, extraData);
 
+        // ---------- 臨時客標記與含稅狀態同步 ----------
+        if (storeInfo?.IsTemporaryCustomer.HasValue ?? false)
+        {
+            quotation.IsTemporaryCustomer = storeInfo.IsTemporaryCustomer.Value;
+        }
+
+        if (maintenanceInfo?.IncludeTax.HasValue ?? false)
+        {
+            quotation.IncludeTax = maintenanceInfo.IncludeTax.Value;
+        }
+
+        // ---------- 稅費計算 ----------
+        if (quotation.IncludeTax ?? false)
+        {
+            if (valuation.HasValue)
+            {
+                quotation.TaxAmount = decimal.Round(valuation.Value * 0.05m, 2, MidpointRounding.AwayFromZero);
+                quotation.TotalWithTax = decimal.Round(valuation.Value + quotation.TaxAmount.Value, 2, MidpointRounding.AwayFromZero);
+            }
+            else
+            {
+                quotation.TaxAmount = null;
+                quotation.TotalWithTax = null;
+            }
+        }
+        else
+        {
+            quotation.TaxAmount = null;
+            quotation.TotalWithTax = null;
+        }
+
+        quotation.ModificationTimestamp = now;
+        quotation.ModifiedBy = operatorLabel;
+
         await _context.SaveChangesAsync(cancellationToken);
 
         if (photoUids.Count > 0)
@@ -1589,12 +1645,20 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorName);
         var now = GetTaipeiNow();
 
-        quotation.BookDate = reservationDate;
+        // 轉預約時，將提供的預約日期存入 ReservationFixDate
+        quotation.ReservationFixDate = reservationDate;
+        
+        // 若提供預約內容，則儲存到估價單
+        if (!string.IsNullOrWhiteSpace(request.ReservationContent))
+        {
+            quotation.ReservationContent = request.ReservationContent.Trim();
+        }
+        
         ApplyStatusAudit(quotation, "190", operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 轉為預約狀態。", operatorLabel, quotation.QuotationNo);
+        _logger.LogInformation("操作人員 {Operator} 將估價單 {QuotationNo} 轉為預約狀態，預約維修日：{BookDate}，預約內容：{ReservationContent}", operatorLabel, quotation.QuotationNo, quotation.BookDate, quotation.ReservationContent ?? "未提供");
 
         return BuildStatusChangeResponse(quotation, now);
     }
@@ -1626,12 +1690,18 @@ public class QuotationService : IQuotationService
         var operatorLabel = NormalizeOperator(operatorName);
         var now = GetTaipeiNow();
 
-        quotation.BookDate = reservationDate;
+        // 更改預約日期時，將提供的日期存入 ReservationFixDate
+        quotation.ReservationFixDate = reservationDate;
+        // 更新預約原因（若有提供）
+        if (!string.IsNullOrWhiteSpace(request.ReservationContent))
+        {
+            quotation.ReservationContent = request.ReservationContent.Trim();
+        }
         ApplyStatusAudit(quotation, "190", operatorLabel, now);
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("操作人員 {Operator} 調整估價單 {QuotationNo} 的預約日期。", operatorLabel, quotation.QuotationNo);
+        _logger.LogInformation("操作人員 {Operator} 調整估價單 {QuotationNo} 的預約日期與預約原因。", operatorLabel, quotation.QuotationNo);
 
         return BuildStatusChangeResponse(quotation, now);
     }
@@ -1791,7 +1861,11 @@ public class QuotationService : IQuotationService
             DiscountReason = quotation.DiscountReason,
             Amount = amount,
             FlagRegularCustomer = quotation.FlagRegularCustomer,
-            FlagExternalCooperation = false
+            FlagExternalCooperation = false,
+            // ---------- 同步估價單的臨時客戶標籤與稅額 ----------
+            IsTemporaryCustomer = quotation.IsTemporaryCustomer,
+            TaxAmount = quotation.TaxAmount,
+            TotalWithTax = quotation.TotalWithTax
         };
 
         // ---------- 類別折扣欄位同步 ----------
@@ -1807,6 +1881,9 @@ public class QuotationService : IQuotationService
         {
             photo.RelatedUid = orderUid;
         }
+
+    // 轉維修時，自動填入當前日期作為維修日
+    quotation.FixDate = DateOnly.FromDateTime(now);
 
     // 保留估價端的待維修紀錄（191），即便維修單已直接進入 220
     ApplyStatusAudit(quotation, "191", operatorLabel, now);
@@ -2007,7 +2084,189 @@ public class QuotationService : IQuotationService
         };
     }
 
+    /// <summary>
+    /// 複製指定的估價單（包含所有照片），建立一個新的估價單，狀態設為 110（估價中）。
+    /// </summary>
+    public async Task<DuplicateQuotationResponse> DuplicateQuotationAsync(string quotationNo, string operatorName, CancellationToken cancellationToken)
+    {
+        // ---------- 參數驗證區 ----------
+        if (string.IsNullOrWhiteSpace(quotationNo))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供估價單編號。");
+        }
+
+        var operatorLabel = NormalizeOptionalText(operatorName);
+        var now = DateTime.UtcNow;
+
+        // ---------- 讀取源估價單 ----------
+        var sourceQuotation = await _context.Quatations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(q => q.QuotationNo == quotationNo.Trim(), cancellationToken);
+
+        if (sourceQuotation is null)
+        {
+            throw new QuotationManagementException(HttpStatusCode.NotFound, "估價單不存在或已被刪除。");
+        }
+
+        // ---------- 生成新的序號與編號 ----------
+        var quotationSerial = await GenerateNextSerialNumberAsync(now, cancellationToken);
+        var quotationUidNew = BuildQuotationUid();
+        var quotationNoNew = BuildQuotationNo(quotationSerial, now);
+
+        // ---------- 複製估價單實體 ----------
+        var newQuotation = new Quatation
+        {
+            QuotationUid = quotationUidNew,
+            QuotationNo = quotationNoNew,
+            SerialNum = quotationSerial,
+
+            // 複製業務相關欄位
+            StoreUid = sourceQuotation.StoreUid,
+            UserUid = sourceQuotation.UserUid,
+            UserName = sourceQuotation.UserName,
+            EstimationTechnicianUid = sourceQuotation.EstimationTechnicianUid,
+            CreatorTechnicianUid = sourceQuotation.CreatorTechnicianUid,
+            
+            // 複製車輛相關欄位
+            CarUid = sourceQuotation.CarUid,
+            CarNo = sourceQuotation.CarNo,
+            CarNoInput = sourceQuotation.CarNoInput,
+            CarNoInputGlobal = sourceQuotation.CarNoInputGlobal,
+            BrandUid = sourceQuotation.BrandUid,
+            ModelUid = sourceQuotation.ModelUid,
+            Color = sourceQuotation.Color,
+            CarRemark = sourceQuotation.CarRemark,
+            Milage = sourceQuotation.Milage,
+            BrandModel = sourceQuotation.BrandModel,
+            
+            // 複製客戶相關欄位
+            CustomerUid = sourceQuotation.CustomerUid,
+            PhoneInputGlobal = sourceQuotation.PhoneInputGlobal,
+            PhoneInput = sourceQuotation.PhoneInput,
+            Phone = sourceQuotation.Phone,
+            CustomerType = sourceQuotation.CustomerType,
+            Name = sourceQuotation.Name,
+            Gender = sourceQuotation.Gender,
+            Connect = sourceQuotation.Connect,
+            County = sourceQuotation.County,
+            Township = sourceQuotation.Township,
+            Source = sourceQuotation.Source,
+            Email = sourceQuotation.Email,
+            Reason = sourceQuotation.Reason,
+
+            // 複製費用相關欄位
+            DentOtherFee = sourceQuotation.DentOtherFee,
+            DentPercentageDiscount = sourceQuotation.DentPercentageDiscount,
+            DentDiscountReason = sourceQuotation.DentDiscountReason,
+            PaintOtherFee = sourceQuotation.PaintOtherFee,
+            PaintPercentageDiscount = sourceQuotation.PaintPercentageDiscount,
+            PaintDiscountReason = sourceQuotation.PaintDiscountReason,
+            OtherOtherFee = sourceQuotation.OtherOtherFee,
+            OtherPercentageDiscount = sourceQuotation.OtherPercentageDiscount,
+            OtherDiscountReason = sourceQuotation.OtherDiscountReason,
+
+            // 複製其他資訊
+            ToolTest = sourceQuotation.ToolTest,
+            Coat = sourceQuotation.Coat,
+            Envelope = sourceQuotation.Envelope,
+            Paint = sourceQuotation.Paint,
+            Remark = sourceQuotation.Remark,
+            IsTemporaryCustomer = sourceQuotation.IsTemporaryCustomer,
+            IncludeTax = sourceQuotation.IncludeTax,
+
+            // 清除預約相關欄位（新估價單應無預約資訊）
+            BookDate = null,
+            BookMethod = null,
+            CarReserved = null,
+            FixDate = null,
+
+            // 設定新狀態為 110（估價中）
+            Status = "110",
+            Status110Timestamp = now,
+            Status110User = operatorLabel,
+
+            // 清除其他狀態欄位
+            Status180Timestamp = null,
+            Status180User = null,
+            Status190Timestamp = null,
+            Status190User = null,
+            Status191Timestamp = null,
+            Status191User = null,
+            Status199Timestamp = null,
+            Status199User = null,
+
+            // 設定新的建立資訊
+            CreationTimestamp = now,
+            CreatedBy = operatorLabel,
+            ModificationTimestamp = now,
+            ModifiedBy = operatorLabel
+        };
+
+        await _context.Quatations.AddAsync(newQuotation, cancellationToken);
+
+        // ---------- 複製所有照片 ----------
+        var sourcePhotos = await _context.PhotoData
+            .AsNoTracking()
+            .Where(p => p.QuotationUid == sourceQuotation.QuotationUid)
+            .ToListAsync(cancellationToken);
+
+        foreach (var sourcePhoto in sourcePhotos)
+        {
+            var newPhoto = new PhotoDatum
+            {
+                PhotoUid = BuildPhotoUid(),
+                QuotationUid = quotationUidNew,
+                RelatedUid = sourcePhoto.RelatedUid,
+                Posion = sourcePhoto.Posion,
+                PositionOther = sourcePhoto.PositionOther,
+                Comment = sourcePhoto.Comment,
+                PhotoShape = sourcePhoto.PhotoShape,
+                PhotoShapeOther = sourcePhoto.PhotoShapeOther,
+                PhotoShapeShow = sourcePhoto.PhotoShapeShow,
+                Cost = sourcePhoto.Cost,
+                FlagFinish = sourcePhoto.FlagFinish,
+                FinishCost = sourcePhoto.FinishCost,
+                MaintenanceProgress = sourcePhoto.MaintenanceProgress,
+                AfterPhotoUid = sourcePhoto.AfterPhotoUid,
+                FixType = sourcePhoto.FixType
+            };
+
+            await _context.PhotoData.AddAsync(newPhoto, cancellationToken);
+        }
+
+        // ---------- 保存資料庫 ----------
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // ---------- 記錄審計日誌 ----------
+        _logger.LogInformation(
+            "操作人員 {Operator} 複製估價單 {SourceQuotationNo} ({SourceQuotationUid}) 至 {NewQuotationNo} ({NewQuotationUid})，共複製 {PhotoCount} 張照片。",
+            operatorLabel,
+            sourceQuotation.QuotationNo,
+            sourceQuotation.QuotationUid,
+            quotationNoNew,
+            quotationUidNew,
+            sourcePhotos.Count);
+
+        return new DuplicateQuotationResponse
+        {
+            QuotationUid = quotationUidNew,
+            QuotationNo = quotationNoNew,
+            SourceQuotationUid = sourceQuotation.QuotationUid,
+            SourceQuotationNo = sourceQuotation.QuotationNo,
+            CreatedAt = now,
+            Message = "已複製估價單。"
+        };
+    }
+
     // ---------- 方法區 ----------
+
+    /// <summary>
+    /// 建立照片唯一識別碼，使用 Ph_ 前綴搭配 GUID。
+    /// </summary>
+    private static string BuildPhotoUid()
+    {
+        return $"Ph_{Guid.NewGuid().ToString().ToUpperInvariant()}";
+    }
 
     /// <summary>
     /// 針對估價單查詢套用編號的過濾條件。
@@ -2656,11 +2915,11 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將 remark 字串還原為可讀取的備註與擴充資料。
     /// </summary>
-    private static (string? PlainRemark, QuotationExtraData? Extra) ParseRemark(string? remark)
+    private static (string PlainRemark, QuotationExtraData? Extra) ParseRemark(string? remark)
     {
         if (string.IsNullOrWhiteSpace(remark))
         {
-            return (null, null);
+            return (string.Empty, null);
         }
 
         try
@@ -2668,14 +2927,14 @@ public class QuotationService : IQuotationService
             var envelope = JsonSerializer.Deserialize<QuotationRemarkEnvelope>(remark, JsonOptions);
             if (envelope is null)
             {
-                return (remark, null);
+                return (string.Empty, null);
             }
 
-            return (NormalizeOptionalText(envelope.PlainRemark), envelope.Extra);
+            return (NormalizeOptionalText(envelope.PlainRemark) ?? string.Empty, envelope.Extra);
         }
         catch (JsonException)
         {
-            return (remark, null);
+            return (string.Empty, null);
         }
     }
 
@@ -2794,10 +3053,10 @@ public class QuotationService : IQuotationService
     /// </summary>
     private static string SerializeRemark(string? plainRemark, QuotationExtraData? extraData)
     {
-        var normalizedRemark = NormalizeOptionalText(plainRemark);
+        var normalizedRemark = NormalizeOptionalText(plainRemark) ?? string.Empty;
         if (extraData is null)
         {
-            return normalizedRemark ?? string.Empty;
+            return normalizedRemark;
         }
 
         var envelope = new QuotationRemarkEnvelope
@@ -3383,7 +3642,7 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? DentStatus, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? AfterPhotoUid)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? PositionOther, string? DentStatus, string? DentStatusOther, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? AfterPhotoUid)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
 
         foreach (var damage in damages)
@@ -3395,7 +3654,9 @@ public class QuotationService : IQuotationService
 
             QuotationDamageFixTypeHelper.EnsureFixTypeDefaults(damage);
             var position = NormalizeOptionalText(damage.DisplayPosition);
+            var positionOther = NormalizeOptionalText(damage.DisplayPositionOther);
             var dentStatus = NormalizeOptionalText(damage.DisplayDentStatus);
+            var dentStatusOther = NormalizeOptionalText(damage.DisplayDentStatusOther);
             var description = NormalizeOptionalText(damage.DisplayDescription);
             var amount = damage.DisplayEstimatedAmount;
             var progress = NormalizeProgress(damage.DisplayMaintenanceProgress);
@@ -3445,7 +3706,7 @@ public class QuotationService : IQuotationService
                 && (normalizedSignatureUid is null || !string.Equals(beforePhotoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase)))
             {
                 var mappedAfterPhotoUid = afterPhotoUids.Count > 0 ? afterPhotoUids[0] : null;
-                metadata.Add((beforePhotoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, mappedAfterPhotoUid));
+                metadata.Add((beforePhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, mappedAfterPhotoUid));
             }
 
             // 完工照片僅需帶入欄位資訊並清空 AfterPhotoUid，確保資料庫不會誤存舊值。
@@ -3456,7 +3717,7 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                metadata.Add((afterPhotoUid, position, dentStatus, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, null));
+                metadata.Add((afterPhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, null));
             }
         }
 
@@ -3489,7 +3750,7 @@ public class QuotationService : IQuotationService
                 continue;
             }
 
-            var comment = BuildDamageComment(info.Position, info.DentStatus, info.Description, info.EstimatedAmount);
+            var comment = BuildDamageComment(info.Position, info.PositionOther, info.DentStatus, info.DentStatusOther, info.Description, info.EstimatedAmount);
 
             if (photo.Posion != info.Position)
             {
@@ -3497,9 +3758,21 @@ public class QuotationService : IQuotationService
                 updated = true;
             }
 
+            if (photo.PositionOther != info.PositionOther)
+            {
+                photo.PositionOther = info.PositionOther;
+                updated = true;
+            }
+
             if (photo.PhotoShapeShow != info.DentStatus)
             {
                 photo.PhotoShapeShow = info.DentStatus;
+                updated = true;
+            }
+
+            if (photo.PhotoShapeOther != info.DentStatusOther)
+            {
+                photo.PhotoShapeOther = info.DentStatusOther;
                 updated = true;
             }
 
@@ -3524,6 +3797,12 @@ public class QuotationService : IQuotationService
             if (info.ActualAmount.HasValue && photo.FinishCost != info.ActualAmount)
             {
                 photo.FinishCost = info.ActualAmount;
+                updated = true;
+            }
+            // 新增：當沒有提供 actualAmount 時，將 estimatedAmount 帶入 FinishCost
+            else if (!info.ActualAmount.HasValue && info.EstimatedAmount.HasValue && photo.FinishCost != info.EstimatedAmount)
+            {
+                photo.FinishCost = info.EstimatedAmount;
                 updated = true;
             }
 
@@ -3855,7 +4134,9 @@ public class QuotationService : IQuotationService
             {
                 DisplayPhoto = photoUid,
                 DisplayPosition = photo?.Posion,
+                DisplayPositionOther = photo?.PositionOther,
                 DisplayDentStatus = photo?.PhotoShapeShow,
+                DisplayDentStatusOther = photo?.PhotoShapeOther,
                 DisplayDescription = photo?.Comment,
                 DisplayEstimatedAmount = photo?.Cost,
                 DisplayFixType = fixTypeDisplay,
@@ -3905,9 +4186,19 @@ public class QuotationService : IQuotationService
                     damage.DisplayPosition = photo.Posion;
                 }
 
+                if (string.IsNullOrWhiteSpace(damage.DisplayPositionOther) && !string.IsNullOrWhiteSpace(photo.PositionOther))
+                {
+                    damage.DisplayPositionOther = photo.PositionOther;
+                }
+
                 if (string.IsNullOrWhiteSpace(damage.DisplayDentStatus) && !string.IsNullOrWhiteSpace(photo.PhotoShapeShow))
                 {
                     damage.DisplayDentStatus = photo.PhotoShapeShow;
+                }
+
+                if (string.IsNullOrWhiteSpace(damage.DisplayDentStatusOther) && !string.IsNullOrWhiteSpace(photo.PhotoShapeOther))
+                {
+                    damage.DisplayDentStatusOther = photo.PhotoShapeOther;
                 }
 
                 if (string.IsNullOrWhiteSpace(damage.DisplayDescription) && !string.IsNullOrWhiteSpace(photo.Comment))
@@ -3985,7 +4276,8 @@ public class QuotationService : IQuotationService
     }
 
     /// <summary>
-    /// 依據預估金額與進度計算實收金額，若外部已提供值則優先使用。
+    /// 返回實收金額：若有外部提供則優先使用，否則沿用估價金額。
+    /// 編輯估價單時，estimatedAmount 變動需同步帶入 actualAmount，避免前端遺漏填寫造成實收為空。
     /// </summary>
     private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? providedActual)
     {
@@ -3994,13 +4286,13 @@ public class QuotationService : IQuotationService
             return decimal.Round(providedActual.Value, 2, MidpointRounding.AwayFromZero);
         }
 
-        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
+        // 未提供實收時，直接沿用預估金額，確保實收欄位不為空值
+        if (estimatedAmount.HasValue)
         {
-            return null;
+            return decimal.Round(estimatedAmount.Value, 2, MidpointRounding.AwayFromZero);
         }
 
-        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
-        return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
+        return null;
     }
 
     /// <summary>
@@ -4112,7 +4404,9 @@ public class QuotationService : IQuotationService
             {
                 Photo = primaryPhotoUid,
                 Position = NormalizeOptionalText(damage.Position),
+                PositionOther = NormalizeOptionalText(damage.PositionOther),
                 DentStatus = NormalizeOptionalText(damage.DentStatus),
+                DentStatusOther = NormalizeOptionalText(damage.DentStatusOther),
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
                 FixType = NormalizeOptionalText(damage.FixType) ?? fixTypeKey,
@@ -4196,6 +4490,7 @@ public class QuotationService : IQuotationService
                     HasDent = marker?.HasDent ?? false,
                     HasScratch = marker?.HasScratch ?? false,
                     HasPaintPeel = marker?.HasPaintPeel ?? false,
+                    HasScuff = marker?.HasScuff ?? false,
                     Remark = marker?.Remark
                 })
                 .ToList()
@@ -4212,18 +4507,30 @@ public class QuotationService : IQuotationService
     /// <summary>
     /// 將傷痕資訊轉換成照片註解文字，方便人員辨識。
     /// </summary>
-    private static string? BuildDamageComment(string? position, string? dentStatus, string? description, decimal? amount)
+    private static string? BuildDamageComment(string? position, string? positionOther, string? dentStatus, string? dentStatusOther, string? description, decimal? amount)
     {
         var parts = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(position))
         {
             parts.Add($"位置：{position}");
+            
+            // 若位置為 "other"，並有 PositionOther 描述，則略加描述
+            if (position == "other" && !string.IsNullOrWhiteSpace(positionOther))
+            {
+                parts.Add($"位置描述：{positionOther}");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(dentStatus))
         {
             parts.Add($"狀況：{dentStatus}");
+            
+            // 若凹痕狀況為 "其他"，並有 DentStatusOther 描述，則略加描述
+            if (!string.IsNullOrWhiteSpace(dentStatusOther))
+            {
+                parts.Add($"狀況描述：{dentStatusOther}");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(description))
@@ -4540,6 +4847,7 @@ public class QuotationService : IQuotationService
             FixExpectDay = random.Next(0, 3),
             FixExpectHour = random.Next(0, 24),
             Remark = "此為隨機測試資料，正式使用前請再次確認。",
+            IncludeTax = random.Next(2) == 0,
             CategoryAdjustments = new QuotationMaintenanceCategoryAdjustmentCollection
             {
                 Dent = new QuotationMaintenanceCategoryAdjustment

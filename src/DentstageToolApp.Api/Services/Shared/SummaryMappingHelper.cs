@@ -175,6 +175,16 @@ internal static class SummaryMappingHelper
         var technicianMap = await LoadTechnicianNamesAsync(dbContext, technicianUids, cancellationToken);
         var userMap = await LoadUserDisplayNamesAsync(dbContext, userUids, cancellationToken);
 
+        // ---------- 收集維修單 UID 以批次查詢照片資料計算實收金額 ----------
+        var orderUids = orders
+            .Select(order => NormalizeOptionalText(order.OrderUid))
+            .Where(uid => uid is not null)
+            .Select(uid => uid!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var actualAmountMap = await CalculateActualAmountsAsync(dbContext, orderUids, cancellationToken);
+
         var summaries = new List<MaintenanceOrderSummaryResponse>(orders.Count);
         foreach (var order in orders)
         {
@@ -183,15 +193,12 @@ internal static class SummaryMappingHelper
                 ?? NormalizeOptionalText(order.UserUid);
             var normalizedCreatorUid = NormalizeOptionalText(order.CreatorTechnicianUid);
             var normalizedUserUid = NormalizeOptionalText(order.UserUid);
+            var normalizedServiceTechnicianUid = NormalizeOptionalText(order.ServiceTechnicianUid);
 
-            var estimatorName = LookupName(normalizedEstimatorUid, technicianMap)
-                ?? LookupName(normalizedUserUid, userMap)
-                ?? NormalizeOptionalText(order.UserName)
-                ?? NormalizeOptionalText(order.CreatedBy);
-
-            var creatorName = LookupName(normalizedCreatorUid, technicianMap)
-                ?? NormalizeOptionalText(order.CreatedBy)
-                ?? NormalizeOptionalText(order.UserName);
+            var normalizedOrderUid = NormalizeOptionalText(order.OrderUid);
+            var actualAmount = normalizedOrderUid is not null && actualAmountMap.TryGetValue(normalizedOrderUid, out var amount)
+                ? (decimal?)amount
+                : null;
 
             summaries.Add(new MaintenanceOrderSummaryResponse
             {
@@ -205,10 +212,11 @@ internal static class SummaryMappingHelper
                 CarPlate = order.CarNo,
                 EstimationTechnicianUid = normalizedEstimatorUid,
                 CreatorTechnicianUid = normalizedCreatorUid,
+                ServiceTechnicianUid = normalizedServiceTechnicianUid,
                 StoreName = LookupName(normalizedStoreUid, storeMap) ?? normalizedStoreUid,
-                EstimationTechnicianName = estimatorName,
-                CreatorTechnicianName = creatorName,
-                CreatedAt = order.CreationTimestamp
+                ServiceTechnicianName = null, // 需要後續透過 Join 或 Navigation 補充
+                CreatedAt = order.CreationTimestamp,
+                ActualAmount = actualAmount
             });
         }
 
@@ -403,6 +411,98 @@ internal static class SummaryMappingHelper
         }
 
         return map.TryGetValue(key, out var value) ? value : null;
+    }
+
+    /// <summary>
+    /// 批次計算維修單的實收金額，依照片維修進度與完工金額累計。
+    /// </summary>
+    private static async Task<Dictionary<string, decimal>> CalculateActualAmountsAsync(
+        DentstageToolAppContext dbContext,
+        List<string> orderUids,
+        CancellationToken cancellationToken)
+    {
+        var result = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+        if (orderUids.Count == 0)
+        {
+            return result;
+        }
+
+        // 查詢所有相關照片的預估金額、完工金額與維修進度
+        var photoRecords = await dbContext.PhotoData
+            .AsNoTracking()
+            .Where(photo => orderUids.Contains(photo.RelatedUid))
+            .Select(photo => new
+            {
+                photo.RelatedUid,
+                photo.Cost,
+                photo.FinishCost,
+                photo.MaintenanceProgress
+            })
+            .ToListAsync(cancellationToken);
+
+        // 依維修單 UID 分組並計算實收金額
+        var groupedByOrder = photoRecords
+            .Where(photo => !string.IsNullOrWhiteSpace(photo.RelatedUid))
+            .GroupBy(photo => photo.RelatedUid!, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groupedByOrder)
+        {
+            var orderUid = group.Key;
+            var total = 0m;
+            var hasValue = false;
+
+            foreach (var record in group)
+            {
+                var normalizedProgress = NormalizeProgress(record.MaintenanceProgress);
+                var actual = ResolveActualAmount(record.Cost, normalizedProgress, record.FinishCost);
+                if (actual.HasValue)
+                {
+                    total += actual.Value;
+                    hasValue = true;
+                }
+            }
+
+            if (hasValue)
+            {
+                result[orderUid] = decimal.Round(total, 2, MidpointRounding.AwayFromZero);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 正規化維修進度數值，限制在 0~100 並四捨五入至小數兩位。
+    /// </summary>
+    private static decimal? NormalizeProgress(decimal? progress)
+    {
+        if (!progress.HasValue)
+        {
+            return null;
+        }
+
+        var clamped = Math.Clamp(progress.Value, 0m, 100m);
+        return decimal.Round(clamped, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>
+    /// 依據預估金額與進度計算實收金額，若已有完工金額則優先使用。
+    /// </summary>
+    private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? finishCost)
+    {
+        if (finishCost.HasValue)
+        {
+            return decimal.Round(finishCost.Value, 2, MidpointRounding.AwayFromZero);
+        }
+
+        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
+        {
+            return null;
+        }
+
+        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
+        return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>

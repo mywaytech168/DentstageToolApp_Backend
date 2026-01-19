@@ -41,4 +41,15 @@ public class MaintenanceOrderListQuery
     /// </summary>
     [Range(1, 200, ErrorMessage = "每頁筆數需介於 1 到 200。")]
     public int PageSize { get; set; } = 20;
+
+    /// <summary>
+    /// 顧客姓名關鍵字，支援部分比對（例：輸入「林」可匹配「林小明」、「林先生」）。
+    /// </summary>
+    public string? CustomerKeyword { get; set; }
+
+    /// <summary>
+    /// 車牌關鍵字，支援部分比對（例：輸入「AAA」可匹配「AAA-123」、「12-AAA」）。
+    /// 會同時比對維修單的 CarNo、CarNoInput、CarNoInputGlobal 以及關聯估價單的車牌欄位。
+    /// </summary>
+    public string? CarPlateKeyword { get; set; }
 }

@@ -73,6 +73,8 @@ public class MaintenanceOrdersController : ControllerBase
           "status": ["220", "295", "296", "290"],
           "startDate": "2023-10-01T00:00:00",
           "endDate": "2023-10-31T23:59:59",
+          "customerKeyword": "林",
+          "carPlateKeyword": "AAA",
           "page": 1,
           "pageSize": 20
         }
@@ -99,6 +101,8 @@ public class MaintenanceOrdersController : ControllerBase
           "status": ["220", "295", "296", "290"],
           "startDate": "2023-10-01T00:00:00",
           "endDate": "2025-10-31T23:59:59",
+          "customerKeyword": "林",
+          "carPlateKeyword": "AAA",
           "page": 1,
           "pageSize": 20
         }
@@ -204,10 +208,12 @@ public class MaintenanceOrdersController : ControllerBase
           "store": {
             "estimationTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
             "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
+            "serviceTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027895",
             "source": "官方網站",
             "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
-            "repairDate": "2024-10-25T09:00:00"
+            "repairDate": "2024-10-25T09:00:00",
+            "isTemporaryCustomer": false
           },
           "car": {
             "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
@@ -220,10 +226,13 @@ public class MaintenanceOrdersController : ControllerBase
               {
                 "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
+                "positionOther": "其他",
                 "dentStatus": "大面積",
+                "dentStatusOther": "其他凹痕描述",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500,
                 "MaintenanceProgress": 80,
+                "actualAmount": 4500,
                 "afterPhotoUid": "Ph_A0481C86-8F01-4BE7-9BC2-1E8EAA1C47A1"
               }
             ],
@@ -233,10 +242,13 @@ public class MaintenanceOrdersController : ControllerBase
               {
                 "photo": "Ph_2B71AFAE-4F9E-4E60-9AD5-16F1C927A2C8",
                 "position": "保桿內塑料件",
+                "positionOther": "其他",
                 "dentStatus": "拆件檢測",
+                "dentStatusOther": "拆件補充說明",
                 "description": "需確認內部樑是否受損",
                 "estimatedAmount": 1200,
                 "MaintenanceProgress": 50,
+                "actualAmount": 1200,
                 "afterPhotoUid": "Ph_BB9C7AB2-62A4-4C11-A6AE-7E20A4E1F9F2"
               }
             ]
@@ -250,6 +262,7 @@ public class MaintenanceOrdersController : ControllerBase
                 "hasDent": true,
                 "hasScratch": false,
                 "hasPaintPeel": false,
+                "hasScuff": false,
                 "remark": "主要凹痕"
               }
             ]
@@ -261,6 +274,7 @@ public class MaintenanceOrdersController : ControllerBase
             "applyWrapping": false,
             "hasRepainted": false,
             "needToolEvaluation": true,
+            "includeTax": false,
             "otherFee": 800,
             "roundingDiscount": 200,
             "percentageDiscount": 10,

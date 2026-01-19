@@ -33,4 +33,12 @@ public interface ICarQueryService
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>回傳單筆車輛資料與相關單據。</returns>
     Task<CarPlateSearchResponse> SearchByPlateAsync(CarPlateSearchRequest request, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 車牌模糊搜尋，回傳符合條件的車輛清單。
+    /// </summary>
+    /// <param name="request">車牌模糊搜尋條件。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>回傳符合條件的車輛清單。</returns>
+    Task<CarPlateFuzzySearchResponse> FuzzySearchByPlateAsync(CarPlateFuzzySearchRequest request, CancellationToken cancellationToken);
 }

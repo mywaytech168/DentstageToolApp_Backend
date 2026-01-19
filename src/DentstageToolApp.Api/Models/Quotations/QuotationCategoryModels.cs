@@ -240,6 +240,22 @@ public class QuotationDamageItem
     }
 
     /// <summary>
+    /// 位置為「other」時的補充描述，說明傷痕所在的具體位置。
+    /// </summary>
+    [JsonIgnore]
+    public string? PositionOther { get; set; }
+
+    /// <summary>
+    /// 英文欄位「positionOther」，在位置設為「other」時提供補充描述。
+    /// </summary>
+    [JsonPropertyName("positionOther")]
+    public string? DisplayPositionOther
+    {
+        get => PositionOther;
+        set => PositionOther = value;
+    }
+
+    /// <summary>
     /// 內部使用的凹痕狀態描述。
     /// </summary>
     [JsonIgnore]
@@ -264,6 +280,22 @@ public class QuotationDamageItem
     {
         get => null;
         set => DentStatus = value;
+    }
+
+    /// <summary>
+    /// 內部使用的凹痕狀況其他描述。
+    /// </summary>
+    [JsonIgnore]
+    public string? DentStatusOther { get; set; }
+
+    /// <summary>
+    /// 新欄位：前端使用英文欄位「dentStatusOther」，對應凹痕狀況為「其他」時的描述。
+    /// </summary>
+    [JsonPropertyName("dentStatusOther")]
+    public string? DisplayDentStatusOther
+    {
+        get => DentStatusOther;
+        set => DentStatusOther = value;
     }
 
     /// <summary>
@@ -329,7 +361,7 @@ public class QuotationDamageItem
     /// <summary>
     /// 新欄位：MaintenanceProgress 供前端提交與顯示維修進度，與資料庫欄位對應。
     /// </summary>
-    [JsonPropertyName("MaintenanceProgress")]
+    [JsonPropertyName("maintenanceProgress")]
     public decimal? DisplayMaintenanceProgress
     {
         get => MaintenanceProgress;
@@ -1453,6 +1485,11 @@ public class QuotationCarBodyDamageMarker
     /// 是否為掉漆，對應前端勾選的掉漆類型。
     /// </summary>
     public bool HasPaintPeel { get; set; }
+
+    /// <summary>
+    /// 是否為擦傷，對應前端勾選的擦傷類型。
+    /// </summary>
+    public bool HasScuff { get; set; }
 
     /// <summary>
     /// 補充備註，協助記錄詳細損傷描述。

@@ -700,6 +700,10 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FlagRegularCustomer)
             .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_RegularCustomer");
+        entity.Property(e => e.IsTemporaryCustomer)
+            .HasColumnType("tinyint(1)")
+            .HasColumnName("IsTemporaryCustomer")
+            .HasDefaultValue(false);
 
         entity.HasOne(d => d.Customer)
             .WithMany(p => p.Quatations)
@@ -883,6 +887,10 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FlagExternalCooperation)
             .HasColumnType("tinyint(1)")
             .HasColumnName("Flag_ExternalCooperation");
+        entity.Property(e => e.IsTemporaryCustomer)
+            .HasColumnType("tinyint(1)")
+            .HasColumnName("IsTemporaryCustomer")
+            .HasDefaultValue(false);
 
         entity.HasOne(d => d.Quatation)
             .WithMany(p => p.Orders)

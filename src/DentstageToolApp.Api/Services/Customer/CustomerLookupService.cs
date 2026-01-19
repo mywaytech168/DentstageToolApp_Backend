@@ -284,14 +284,14 @@ public class CustomerLookupService : ICustomerLookupService
             .OrderByDescending(item => item.CreatedAt ?? DateTime.MinValue)
             .ToList();
 
-        var summary = BuildMaintenanceSummary(relatedOrders);
+        var summary = BuildMaintenanceSummary(relatedQuotations, relatedOrders);
 
-        var message = BuildMessage(customerItems.Count, summary.TotalOrders);
+        var message = BuildMessage(customerItems.Count, summary.Maintenance.TotalOrders);
 
         _logger.LogInformation(
             "電話搜尋完成（含歷史），找到 {CustomerCount} 位客戶與 {OrderCount} 筆維修單。",
             customerItems.Count,
-            summary.TotalOrders);
+            summary.Maintenance.TotalOrders);
 
         return new CustomerPhoneSearchDetailContext
         {
@@ -617,16 +617,82 @@ public class CustomerLookupService : ICustomerLookupService
     /// <summary>
     /// 依據維修單集合計算取消與預約次數。
     /// </summary>
-    private static CustomerMaintenanceSummary BuildMaintenanceSummary(IReadOnlyCollection<Order> orders)
+    private static CustomerMaintenanceSummary BuildMaintenanceSummary(IReadOnlyCollection<Quatation> quotations, IReadOnlyCollection<Order> orders)
+    {
+        // 計算估價單統計
+        var quotationStats = BuildQuotationStatistics(quotations);
+        // 計算維修單統計
+        var maintenanceStats = BuildOrderStatistics(orders);
+
+        return new CustomerMaintenanceSummary
+        {
+            Quotation = quotationStats,
+            Maintenance = maintenanceStats
+        };
+    }
+
+    /// <summary>
+    /// 根據估價單清單計算統計資訊。
+    /// </summary>
+    private static QuotationStatisticsSummary BuildQuotationStatistics(IReadOnlyCollection<Quatation> quotations)
+    {
+        if (quotations.Count == 0)
+        {
+            return new QuotationStatisticsSummary
+            {
+                TotalQuotations = 0,
+                ReservationCount = 0,
+                CancellationCount = 0,
+                HasQuotationHistory = false
+            };
+        }
+
+        var reservationCount = 0;
+        var cancellationCount = 0;
+
+        foreach (var quotation in quotations)
+        {
+            var status = quotation.Status;
+            if (string.IsNullOrWhiteSpace(status))
+            {
+                continue;
+            }
+
+            // 使用相同的狀態判斷邏輯
+            if (IsCancellationStatus(status))
+            {
+                cancellationCount++;
+                continue;
+            }
+
+            if (IsReservationStatus(status))
+            {
+                reservationCount++;
+            }
+        }
+
+        return new QuotationStatisticsSummary
+        {
+            TotalQuotations = quotations.Count,
+            ReservationCount = reservationCount,
+            CancellationCount = cancellationCount,
+            HasQuotationHistory = true
+        };
+    }
+
+    /// <summary>
+    /// 根據維修單清單計算統計資訊。
+    /// </summary>
+    private static OrderStatisticsSummary BuildOrderStatistics(IReadOnlyCollection<Order> orders)
     {
         if (orders.Count == 0)
         {
-            return new CustomerMaintenanceSummary
+            return new OrderStatisticsSummary
             {
                 TotalOrders = 0,
                 ReservationCount = 0,
                 CancellationCount = 0,
-                HasMaintenanceHistory = false
+                HasOrderHistory = false
             };
         }
 
@@ -653,12 +719,12 @@ public class CustomerLookupService : ICustomerLookupService
             }
         }
 
-        return new CustomerMaintenanceSummary
+        return new OrderStatisticsSummary
         {
             TotalOrders = orders.Count,
             ReservationCount = reservationCount,
             CancellationCount = cancellationCount,
-            HasMaintenanceHistory = true
+            HasOrderHistory = true
         };
     }
 

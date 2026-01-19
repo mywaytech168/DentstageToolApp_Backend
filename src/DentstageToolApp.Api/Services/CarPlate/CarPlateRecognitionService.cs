@@ -1,10 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using DentstageToolApp.Api.Models.CarPlates;
 using DentstageToolApp.Api.Models.Options;
 using DentstageToolApp.Infrastructure.Data;
@@ -12,11 +5,18 @@ using DentstageToolApp.Infrastructure.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
-using System.Diagnostics;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Processing;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Processing;
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace DentstageToolApp.Api.Services.CarPlate;
 
@@ -89,6 +89,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         // ---------- 資料庫查詢區 ----------
         var car = await _dbContext.Cars
             .Include(c => c.Orders)
+                .ThenInclude(order => order.Quatation)
             .AsNoTracking()
             .FirstOrDefaultAsync(c =>
                 // 精準比對（原有行為）
@@ -102,18 +103,78 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             cancellationToken);
 
         // ---------- 組裝回應區 ----------
+        var hasMaintenanceRecords = car?.Orders?.Any() == true;
+
+        // 從工單與報價單中解析 BrandUid 和 ModelUid（與 GetMaintenanceHistoryAsync 一致）
+        var orders = car?.Orders?.ToList() ?? new List<Order>();
+        var referenceOrder = orders.FirstOrDefault();
+
+        var quotationCandidates = orders
+            .Select(order => order.Quatation)
+            .Where(quatation => quatation is not null)
+            .Cast<Quatation>()
+            .ToList();
+
+        var referenceQuotation = quotationCandidates.FirstOrDefault();
+
+        // 若無對應報價單，額外查詢同車牌的最新估價資料
+        if (referenceQuotation is null)
+        {
+            referenceQuotation = await _dbContext.Quatations
+                .AsNoTracking()
+                .Where(quatation =>
+                    quatation.CarNo == normalizedPlate
+                    || quatation.CarNo == candidatePlate
+                    || quatation.CarNoInput == normalizedPlate
+                    || quatation.CarNoInput == candidatePlate
+                    || quatation.CarNoInputGlobal == candidatePlate
+                    || (quatation.CarNo != null && quatation.CarNo.Contains(normalizedPlate))
+                    || (quatation.CarNoInput != null && quatation.CarNoInput.Contains(candidatePlate))
+                    || (quatation.CarNoInputGlobal != null && quatation.CarNoInputGlobal.Contains(candidatePlate)))
+                .OrderByDescending(quatation => quatation.ModificationTimestamp ?? quatation.CreationTimestamp ?? DateTime.MinValue)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (referenceQuotation is not null)
+            {
+                quotationCandidates.Add(referenceQuotation);
+            }
+        }
+
+        // 品牌與車型識別碼僅存於估價資料，收集所有報價資訊後挑選第一筆有效值
+        var brandUid = ResolveFirstValue(
+            BuildCandidateList(
+                referenceOrder?.Quatation?.BrandUid,
+                referenceQuotation?.BrandUid,
+                orders.Select(o => o.Quatation?.BrandUid),
+                quotationCandidates.Select(quatation => quatation.BrandUid)));
+
+        var modelUid = ResolveFirstValue(
+            BuildCandidateList(
+                referenceOrder?.Quatation?.ModelUid,
+                referenceQuotation?.ModelUid,
+                orders.Select(o => o.Quatation?.ModelUid),
+                quotationCandidates.Select(quatation => quatation.ModelUid)));
+        
         var response = new CarPlateRecognitionResponse
         {
             RecognitionCarPlateNumber = normalizedPlate,
             CarPlateNumber = car?.CarNo ?? normalizedPlate,
             Confidence = Math.Round(confidence, 2),
+            CarUid = car?.CarUid,
+            BrandUid = brandUid,
+            ModelUid = modelUid,
             Brand = car?.Brand,
             Model = car?.Model,
             Color = car?.Color,
-            HasMaintenanceHistory = car?.Orders?.Any() == true,
-            Message = car is null
-                ? "資料庫無相符車輛，請確認車牌是否正確或需新增車輛資料。"
-                : "辨識成功，已回傳車輛基本資料與維修紀錄。",
+            HasMaintenanceRecords = hasMaintenanceRecords,
+            HasMaintenanceHistory = hasMaintenanceRecords,
+            Milage = car?.Milage,
+            CarRemark = car?.CarRemark,
+            Message = hasMaintenanceRecords
+                ? "查詢成功，已列出歷史維修資料。"
+                : car is null
+                    ? "查無維修紀錄，請確認車牌是否正確或尚未建立維修單。"
+                    : "查無維修紀錄，請確認車牌是否正確或尚未建立維修單。",
         };
 
         return response;

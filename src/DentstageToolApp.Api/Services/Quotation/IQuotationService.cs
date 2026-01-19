@@ -109,4 +109,13 @@ public interface IQuotationService
     /// <param name="cancellationToken">取消權杖。</param>
     /// <returns>包含測試草稿與摘要資訊的結構。</returns>
     Task<CreateQuotationTestPageResponse> GenerateRandomQuotationTestPageAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// 複製指定的估價單（包含所有照片），建立一個新的估價單，狀態設為 110（估價中）。
+    /// </summary>
+    /// <param name="quotationNo">來源估價單的編號。</param>
+    /// <param name="operatorName">操作人員名稱，用於紀錄複製操作。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>新建立的估價單資訊。</returns>
+    Task<DuplicateQuotationResponse> DuplicateQuotationAsync(string quotationNo, string operatorName, CancellationToken cancellationToken);
 }

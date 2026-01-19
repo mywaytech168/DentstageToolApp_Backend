@@ -58,22 +58,27 @@ public class MaintenanceOrderSummaryResponse
     public string? CreatorTechnicianUid { get; set; }
 
     /// <summary>
+    /// 服務技師識別碼。
+    /// </summary>
+    public string? ServiceTechnicianUid { get; set; }
+
+    /// <summary>
     /// 所屬店鋪名稱。
     /// </summary>
     public string? StoreName { get; set; }
 
     /// <summary>
-    /// 估價技師名稱。
+    /// 服務技師名稱。
     /// </summary>
-    public string? EstimationTechnicianName { get; set; }
-
-    /// <summary>
-    /// 製單技師或建立人員名稱。
-    /// </summary>
-    public string? CreatorTechnicianName { get; set; }
+    public string? ServiceTechnicianName { get; set; }
 
     /// <summary>
     /// 建立時間。
     /// </summary>
     public DateTime? CreatedAt { get; set; }
+
+    /// <summary>
+    /// 實收金額，由維修單照片的完工成本（FinishCost）加總而得。
+    /// </summary>
+    public decimal? ActualAmount { get; set; }
 }

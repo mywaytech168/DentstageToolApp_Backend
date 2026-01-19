@@ -273,6 +273,103 @@ public class CarQueryService : ICarQueryService
         }
     }
 
+    /// <inheritdoc />
+    public async Task<CarPlateFuzzySearchResponse> FuzzySearchByPlateAsync(CarPlateFuzzySearchRequest request, CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            throw new CarQueryServiceException(HttpStatusCode.BadRequest, "請提供查詢條件。");
+        }
+
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var normalizedKeyword = NormalizePlate(request.PlateKeyword);
+            if (string.IsNullOrWhiteSpace(normalizedKeyword))
+            {
+                throw new CarQueryServiceException(HttpStatusCode.BadRequest, "請輸入車牌關鍵字。");
+            }
+
+            var plateKey = ExtractPlateKey(normalizedKeyword);
+
+            _logger.LogInformation(
+                "執行車牌模糊搜尋，關鍵字：{Keyword}，比對字串：{Key}。",
+                normalizedKeyword,
+                plateKey);
+
+            // 查詢符合條件的車輛（多查一筆以判斷是否有更多結果）
+            var carsQuery = _dbContext.Cars.AsNoTracking();
+            if (!string.IsNullOrEmpty(plateKey))
+            {
+                var digitsPattern = $"%{plateKey}%";
+                carsQuery = carsQuery.Where(car =>
+                    (car.CarNoQuery != null && EF.Functions.Like(car.CarNoQuery, digitsPattern))
+                    || (car.CarNo != null && EF.Functions.Like(car.CarNo, $"%{normalizedKeyword}%")));
+            }
+            else
+            {
+                var rawPattern = $"%{normalizedKeyword}%";
+                carsQuery = carsQuery.Where(car =>
+                    car.CarNo != null && EF.Functions.Like(car.CarNo, rawPattern));
+            }
+
+            var carsToReturn = await carsQuery
+                .OrderByDescending(car => car.CreationTimestamp)
+                .ThenBy(car => car.CarUid)
+                .ToListAsync(cancellationToken);
+
+            // 查詢相關估價單與維修單數量
+            var carUids = carsToReturn
+                .Select(car => NormalizeOptionalText(car.CarUid))
+                .Where(uid => uid is not null)
+                .Select(uid => uid!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var quotationCounts = await GetQuotationCountsByCarAsync(carUids, cancellationToken);
+            var orderCounts = await GetMaintenanceOrderCountsByCarAsync(carUids, cancellationToken);
+
+            // 批次查詢維修單摘要資料
+            var maintenanceOrdersDict = await GetMaintenanceOrderSummariesByCarAsync(carUids, cancellationToken);
+
+            var brandModelUidMap = await ResolveBrandModelUidsAsync(carsToReturn, cancellationToken);
+
+            var items = carsToReturn
+                .Select(car => MapToFuzzySearchItem(car, quotationCounts, orderCounts, brandModelUidMap, maintenanceOrdersDict))
+                .ToList();
+
+            var message = BuildFuzzySearchMessage(items.Count);
+
+            _logger.LogInformation(
+                "車牌模糊搜尋完成，找到 {Count} 筆車輛。",
+                items.Count);
+
+            return new CarPlateFuzzySearchResponse
+            {
+                QueryKeyword = normalizedKeyword,
+                Cars = items,
+                TotalCount = items.Count,
+                HasMore = false,
+                Message = message
+            };
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("車牌模糊搜尋流程被取消。");
+            throw new CarQueryServiceException((HttpStatusCode)499, "查詢已取消，請重新嘗試。");
+        }
+        catch (CarQueryServiceException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "車牌模糊搜尋時發生未預期錯誤。");
+            throw new CarQueryServiceException(HttpStatusCode.InternalServerError, "車牌模糊搜尋發生錯誤，請稍後再試。");
+        }
+    }
+
     // ---------- 方法區 ----------
 
     /// <summary>
@@ -1114,5 +1211,146 @@ public class CarQueryService : ICarQueryService
         public Dictionary<string, string> ByBrand { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public Dictionary<string, string> ByName { get; } = new(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 批次查詢車輛的估價單數量。
+    /// </summary>
+    private async Task<Dictionary<string, int>> GetQuotationCountsByCarAsync(
+        List<string> carUids,
+        CancellationToken cancellationToken)
+    {
+        if (carUids.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var counts = await _dbContext.Quatations
+            .AsNoTracking()
+            .Where(q => carUids.Contains(q.CarUid))
+            .GroupBy(q => q.CarUid)
+            .Select(g => new { CarUid = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return counts
+            .Where(item => !string.IsNullOrWhiteSpace(item.CarUid))
+            .ToDictionary(
+                item => item.CarUid!,
+                item => item.Count,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 批次查詢車輛的維修單數量。
+    /// </summary>
+    private async Task<Dictionary<string, int>> GetMaintenanceOrderCountsByCarAsync(
+        List<string> carUids,
+        CancellationToken cancellationToken)
+    {
+        if (carUids.Count == 0)
+        {
+            return new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var counts = await _dbContext.Orders
+            .AsNoTracking()
+            .Where(o => carUids.Contains(o.CarUid))
+            .GroupBy(o => o.CarUid)
+            .Select(g => new { CarUid = g.Key, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        return counts
+            .Where(item => !string.IsNullOrWhiteSpace(item.CarUid))
+            .ToDictionary(
+                item => item.CarUid!,
+                item => item.Count,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 批次查詢車輛的維修單摘要清單。
+    /// </summary>
+    private async Task<Dictionary<string, List<MaintenanceOrderSummaryResponse>>> GetMaintenanceOrderSummariesByCarAsync(
+        List<string> carUids,
+        CancellationToken cancellationToken)
+    {
+        if (carUids.Count == 0)
+        {
+            return new Dictionary<string, List<MaintenanceOrderSummaryResponse>>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var orders = await _dbContext.Orders
+            .AsNoTracking()
+            .Where(o => carUids.Contains(o.CarUid))
+            .ToListAsync(cancellationToken);
+
+        var summaries = await SummaryMappingHelper.BuildMaintenanceSummariesAsync(
+            _dbContext,
+            orders,
+            cancellationToken);
+
+        // 建立 OrderUid -> CarUid 映射
+        var orderToCarUidMap = orders
+            .Where(o => !string.IsNullOrWhiteSpace(o.OrderUid) && !string.IsNullOrWhiteSpace(o.CarUid))
+            .ToDictionary(
+                o => o.OrderUid!,
+                o => o.CarUid!,
+                StringComparer.OrdinalIgnoreCase);
+
+        // 根據 OrderUid 映射到 CarUid 後分組
+        return summaries
+            .Where(s => !string.IsNullOrWhiteSpace(s.OrderUid) && orderToCarUidMap.ContainsKey(s.OrderUid))
+            .GroupBy(s => orderToCarUidMap[s.OrderUid], StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.ToList(),
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// 將車輛實體轉換為模糊搜尋項目。
+    /// </summary>
+    private static CarPlateFuzzySearchItem MapToFuzzySearchItem(
+        CarEntity car,
+        IReadOnlyDictionary<string, int> quotationCounts,
+        IReadOnlyDictionary<string, int> orderCounts,
+        IReadOnlyDictionary<string, (string? BrandUid, string? ModelUid)> brandModelUidMap,
+        IReadOnlyDictionary<string, List<MaintenanceOrderSummaryResponse>> maintenanceOrdersDict)
+    {
+        var (brand, model) = ResolveCarBrandAndModel(car);
+        var carUid = NormalizeOptionalText(car.CarUid);
+
+        var quotationCount = carUid is not null && quotationCounts.TryGetValue(carUid, out var qCount) ? qCount : 0;
+        var orderCount = carUid is not null && orderCounts.TryGetValue(carUid, out var oCount) ? oCount : 0;
+        var maintenanceOrders = carUid is not null && maintenanceOrdersDict.TryGetValue(carUid, out var orders) ? orders : new List<MaintenanceOrderSummaryResponse>();
+
+        return new CarPlateFuzzySearchItem
+        {
+            CarUid = car.CarUid,
+            CarPlateNumber = NormalizeOptionalText(car.CarNo),
+            Brand = brand,
+            Model = model,
+            Color = NormalizeOptionalText(car.Color),
+            BrandModel = NormalizeOptionalText(car.BrandModel),
+            CreatedAt = car.CreationTimestamp,
+            Mileage = car.Milage,
+            CarRemark = NormalizeOptionalText(car.CarRemark),
+            QuotationCount = quotationCount,
+            MaintenanceOrderCount = orderCount,
+            MaintenanceOrders = maintenanceOrders
+        };
+    }
+
+    /// <summary>
+    /// 建立模糊搜尋結果訊息。
+    /// </summary>
+    private static string BuildFuzzySearchMessage(int count)
+    {
+        if (count == 0)
+        {
+            return "未找到符合條件的車輛。";
+        }
+
+        return $"找到 {count} 筆車輛。";
     }
 }

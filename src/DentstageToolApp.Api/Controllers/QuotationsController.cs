@@ -134,7 +134,8 @@ public class QuotationsController : ControllerBase
             "creatorTechnicianUid": "U_054C053D-FBA6-D843-9BDA-8C68E5027896",
             "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
-            "repairDate": "2024-10-25T09:00:00"
+            "repairDate": "2024-10-25T09:00:00",
+            "isTemporaryCustomer": false
           },
           "car": {
             "carUid": "Ca_67E5D66A-DDDB-478E-B0CC-90975CABEC0E"
@@ -147,7 +148,9 @@ public class QuotationsController : ControllerBase
               {
                 "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
+                "positionOther": "其他",
                 "dentStatus": "大面積",
+                "dentStatusOther": "其他凹痕描述",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500
               }
@@ -157,7 +160,9 @@ public class QuotationsController : ControllerBase
               {
                 "photo": "Ph_1F8AC157-5AC2-4E9C-9E0C-A5E8B4C8F3B0",
                 "position": "右後葉子板",
+                "positionOther": "其他",
                 "dentStatus": "刮痕",
+                "dentStatusOther": "刮痕補充說明",
                 "description": "刮傷需補土烤漆",
                 "estimatedAmount": 3200
               }
@@ -173,6 +178,7 @@ public class QuotationsController : ControllerBase
                   "hasDent": true,
                   "hasScratch": false,
                   "hasPaintPeel": false,
+                  "hasScuff": false,
                   "remark": "主要凹痕"
                 }
               ]
@@ -183,6 +189,7 @@ public class QuotationsController : ControllerBase
             "applyWrapping": true,
             "hasRepainted": true,
             "needToolEvaluation": false,
+            "includeTax": false,
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 3,
             "estimatedRestorationPercentage": 91,
@@ -352,7 +359,8 @@ public class QuotationsController : ControllerBase
             "source": "官方網站",
             "bookMethod": "LINE 預約",
             "reservationDate": "2024-10-15T10:00:00",
-            "repairDate": "2024-10-25T09:00:00"
+            "repairDate": "2024-10-25T09:00:00",
+            "isTemporaryCustomer": false
           },
           "car": {
             "carUid": "Ca_00D20FB3-E0D1-440A-93C4-4F62AB511C2D"
@@ -365,7 +373,9 @@ public class QuotationsController : ControllerBase
               {
                 "photo": "Ph_759F19C7-5D62-4DB2-8021-2371C3136F7B",
                 "position": "前保桿",
+                "positionOther": "其他",
                 "dentStatus": "大面積",
+                "dentStatusOther": "其他凹痕描述",
                 "description": "需板金搭配烤漆",
                 "estimatedAmount": 4500
               }
@@ -374,7 +384,9 @@ public class QuotationsController : ControllerBase
               {
                 "photo": "Ph_A67C6B52-A09F-4C7D-B1F1-9CDA3B67E2C5",
                 "position": "內裝皮革",
+                "positionOther": "其他",
                 "dentStatus": "美容拋光",
+                "dentStatusOther": "拋光補充說明",
                 "description": "座椅刮痕需要美容處理",
                 "estimatedAmount": 1500
               }
@@ -391,6 +403,7 @@ public class QuotationsController : ControllerBase
                 "hasDent": true,
                 "hasScratch": false,
                 "hasPaintPeel": false,
+                "hasScuff": false,
                 "remark": "主要凹痕"
               }
             ]
@@ -401,6 +414,7 @@ public class QuotationsController : ControllerBase
             "applyWrapping": false,
             "hasRepainted": false,
             "needToolEvaluation": true,
+            "includeTax": false,
             "estimatedRepairDays": 1,
             "estimatedRepairHours": 6,
             "estimatedRestorationPercentage": 90,
@@ -589,7 +603,8 @@ public class QuotationsController : ControllerBase
         """
         {
           "quotationNo": "Q25100001",
-          "reservationDate": "2024-11-20T10:00:00"
+                    "reservationDate": "2024-11-20T10:00:00",
+                    "reservationContent": "前保桿板烤，請預留代步車"
         }
         """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
@@ -631,7 +646,8 @@ public class QuotationsController : ControllerBase
         """
         {
           "quotationNo": "Q25100001",
-          "reservationDate": "2024-11-25T14:30:00"
+                    "reservationDate": "2024-11-25T14:30:00",
+                    "reservationContent": "調整到下午時段，仍需代步車"
         }
         """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]
@@ -788,6 +804,50 @@ public class QuotationsController : ControllerBase
         {
             _logger.LogError(ex, "轉維修流程發生未預期錯誤。");
             return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "轉維修失敗");
+        }
+    }
+
+    /// <summary>
+    /// 複製指定的估價單（包含所有照片），建立新的估價單，狀態設為 110（估價中）。
+    /// </summary>
+    [HttpPost("duplicate")]
+    [SwaggerMockRequestExample(
+        """
+        {
+          "quotationNo": "Q25100001"
+        }
+        """)]
+    [ProducesResponseType(typeof(DuplicateQuotationResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<DuplicateQuotationResponse>> DuplicateQuotationAsync([FromBody] QuotationActionRequestBase request, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var quotationNo = request.EnsureAndGetQuotationNo();
+            var operatorName = GetCurrentOperatorName();
+            var response = await _quotationService.DuplicateQuotationAsync(quotationNo, operatorName, cancellationToken);
+            return Ok(response);
+        }
+        catch (QuotationManagementException ex)
+        {
+            _logger.LogWarning(ex, "複製估價單失敗：{Message}", ex.Message);
+            return BuildProblemDetails(ex.StatusCode, ex.Message, "複製估價單失敗");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("複製估價單流程被取消。");
+            return BuildProblemDetails((HttpStatusCode)499, "請求已取消，複製未建立。", "複製估價單取消");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "複製估價單流程發生未預期錯誤。");
+            return BuildProblemDetails(HttpStatusCode.InternalServerError, "系統處理請求時發生錯誤，請稍後再試。", "複製估價單失敗");
         }
     }
 

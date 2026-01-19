@@ -98,11 +98,6 @@ public class QuotationAmountInfo
     public decimal? Amount { get; set; }
 
     /// <summary>
-    /// 實際收費金額，會依維修進度自動計算。
-    /// </summary>
-    public decimal? ActualAmount { get; set; }
-
-    /// <summary>
     /// 退傭金額，供後台統一顯示與計算淨額。
     /// </summary>
     public decimal? Rebate { get; set; }
@@ -111,6 +106,21 @@ public class QuotationAmountInfo
     /// 扣除退傭後的淨收金額。
     /// </summary>
     public decimal? NetAmount { get; set; }
+
+    /// <summary>
+    /// 是否開立含稅發票。
+    /// </summary>
+    public bool? IncludeTax { get; set; }
+
+    /// <summary>
+    /// 稅額（5%），於 IncludeTax 為 true 時自動計算。
+    /// </summary>
+    public decimal? TaxAmount { get; set; }
+
+    /// <summary>
+    /// 含稅後總額，計算方式：Amount + TaxAmount。
+    /// </summary>
+    public decimal? TotalWithTax { get; set; }
 }
 
 /// <summary>
@@ -239,9 +249,41 @@ public class QuotationDamageSummary
     public string? Position { get; set; }
 
     /// <summary>
+    /// 位置為「其他」時的補充描述。
+    /// </summary>
+    [JsonIgnore]
+    public string? PositionOther { get; set; }
+
+    /// <summary>
+    /// 英文欄位 positionOther，提供前端使用的「其他」位置描述。
+    /// </summary>
+    [JsonPropertyName("positionOther")]
+    public string? DisplayPositionOther
+    {
+        get => PositionOther;
+        set => PositionOther = value;
+    }
+
+    /// <summary>
     /// 凹痕狀態描述，例如大面積或輕微凹痕。
     /// </summary>
     public string? DentStatus { get; set; }
+
+    /// <summary>
+    /// 凹痕狀態為「其他」時的補充描述。
+    /// </summary>
+    [JsonIgnore]
+    public string? DentStatusOther { get; set; }
+
+    /// <summary>
+    /// 英文欄位 dentStatusOther，提供前端使用的「其他」凹痕狀況描述。
+    /// </summary>
+    [JsonPropertyName("dentStatusOther")]
+    public string? DisplayDentStatusOther
+    {
+        get => DentStatusOther;
+        set => DentStatusOther = value;
+    }
 
     /// <summary>
     /// 傷痕說明或處理建議。
@@ -329,7 +371,7 @@ public class QuotationDamageSummary
     /// <summary>
     /// 新欄位：MaintenanceProgress，提供前端顯示與提交維修進度。
     /// </summary>
-    [JsonPropertyName("MaintenanceProgress")]
+    [JsonPropertyName("maintenanceProgress")]
     public decimal? DisplayMaintenanceProgress
     {
         get => MaintenanceProgress;
@@ -443,6 +485,11 @@ public class QuotationMaintenanceDetail
     /// 是否需要工具評估。
     /// </summary>
     public bool? NeedToolEvaluation { get; set; }
+
+    /// <summary>
+    /// 是否含稅。
+    /// </summary>
+    public bool? IncludeTax { get; set; }
 
     /// <summary>
     /// 其他估價費用。
