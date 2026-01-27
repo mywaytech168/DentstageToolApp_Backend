@@ -19,13 +19,11 @@ public class CreateQuotationRequest
     /// <summary>
     /// 車輛相關資訊，對應 <see cref="CreateQuotationCarInfo"/>，僅需提供車輛 UID 及可選擇覆寫品牌與車型。
     /// </summary>
-    [Required]
     public CreateQuotationCarInfo Car { get; set; } = new();
 
     /// <summary>
     /// 客戶相關資訊，對應 <see cref="CreateQuotationCustomerInfo"/>，主要傳遞客戶 UID 以便後端載入姓名與聯絡資料。
     /// </summary>
-    [Required]
     public CreateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
@@ -116,6 +114,7 @@ public class CreateQuotationMaintenanceInfo
     /// <summary>
     /// 其他估價費用，包含耗材或外包等額外支出。
     /// </summary>
+    [JsonPropertyName("otherFee")]
     public decimal? OtherFee { get; set; }
 
     /// <summary>
@@ -166,16 +165,13 @@ public class CreateQuotationMaintenanceInfo
     /// <summary>
     /// 零頭折扣金額，協助估價單呈現整數金額。
     /// </summary>
+    [JsonPropertyName("roundingDiscount")]
     public decimal? RoundingDiscount { get; set; }
-
-    /// <summary>
-    /// 折扣百分比，允許輸入整數或小數（例如 10 代表 10%）。
-    /// </summary>
-    public decimal? PercentageDiscount { get; set; }
 
     /// <summary>
     /// 折扣原因說明，利於與客戶或內部人員溝通折扣依據。
     /// </summary>
+    [JsonPropertyName("discountReason")]
     public string? DiscountReason { get; set; }
 
     /// <summary>
@@ -314,6 +310,7 @@ public class QuotationMaintenanceInfo
     /// <summary>
     /// 其他估價費用。
     /// </summary>
+    [JsonPropertyName("otherFee")]
     public decimal? OtherFee { get; set; }
 
     /// <summary>
@@ -364,16 +361,13 @@ public class QuotationMaintenanceInfo
     /// <summary>
     /// 零頭折扣金額。
     /// </summary>
+    [JsonPropertyName("roundingDiscount")]
     public decimal? RoundingDiscount { get; set; }
-
-    /// <summary>
-    /// 折扣百分比。
-    /// </summary>
-    public decimal? PercentageDiscount { get; set; }
 
     /// <summary>
     /// 折扣原因。
     /// </summary>
+    [JsonPropertyName("discountReason")]
     public string? DiscountReason { get; set; }
 
     /// <summary>
@@ -519,7 +513,6 @@ public class CreateQuotationCarInfo
     /// <summary>
     /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌等細節。
     /// </summary>
-    [Required(ErrorMessage = "請選擇車輛資料。")]
     public string? CarUid { get; set; }
 
     /// <summary>
@@ -598,7 +591,6 @@ public class CreateQuotationCustomerInfo
     /// <summary>
     /// 客戶唯一識別碼，透過此欄位自動帶入客戶姓名與聯絡資訊。
     /// </summary>
-    [Required(ErrorMessage = "請選擇客戶資料。")]
     public string? CustomerUid { get; set; }
 }
 
@@ -610,7 +602,6 @@ public class QuotationCustomerInfo
     /// <summary>
     /// 客戶唯一識別碼，若提供則會自動帶出客戶聯絡資料。
     /// </summary>
-    [Required(ErrorMessage = "請選擇客戶資料。")]
     public string? CustomerUid { get; set; }
 
     /// <summary>

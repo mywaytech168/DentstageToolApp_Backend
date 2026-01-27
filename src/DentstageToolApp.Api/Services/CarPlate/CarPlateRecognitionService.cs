@@ -389,6 +389,29 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
 
         var milage = ResolveFirstValue(milageCandidates);
 
+        // ---------- 客戶資訊整理區 ----------
+        // 依序優先級：工單客戶 > 估價單客戶
+        // 優先取得第一筆有效的客戶紀錄，避免混雜不同客戶資訊
+        CarPlateRelatedCustomerInfo? primaryCustomer = null;
+
+        // 優先從工單取得客戶（工單為最新、最直接的客戶紀錄來源）
+        var referenceOrderForCustomer = orders.FirstOrDefault(o => !string.IsNullOrEmpty(o.CustomerUid));
+        if (referenceOrderForCustomer != null)
+        {
+            primaryCustomer = MapToRelatedCustomerInfo(referenceOrderForCustomer, isTemporaryCustomer: false);
+        }
+        else
+        {
+            // 若工單無客戶資訊，嘗試從估價單獲取
+            var referenceQuotationForCustomer = quotationCandidates
+                .FirstOrDefault(q => !string.IsNullOrEmpty(q.CustomerUid));
+            if (referenceQuotationForCustomer != null)
+            {
+                var isTemp = referenceQuotationForCustomer.IsTemporaryCustomer ?? false;
+                primaryCustomer = MapToRelatedCustomerInfo(referenceQuotationForCustomer, isTemporaryCustomer: isTemp);
+            }
+        }
+
         var response = new CarPlateMaintenanceHistoryResponse
         {
             RecognitionCarPlateNumber = normalizedPlate,
@@ -402,10 +425,9 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             HasMaintenanceRecords = recordItems.Count > 0,
             Milage = milage,
             CarRemark = carRemark,
+            Customer = primaryCustomer,
             Records = recordItems,
-            Message = recordItems.Count > 0
-                ? "查詢成功，已列出歷史維修資料。"
-                : "查無維修紀錄，請確認車牌是否正確或尚未建立維修單。"
+            Message = BuildSearchMessage(recordItems.Count, primaryCustomer != null)
         };
 
         return response;
@@ -493,6 +515,74 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// 根據查詢結果組裝提示訊息。
+    /// </summary>
+    /// <param name="recordCount">維修紀錄筆數。</param>
+    /// <param name="hasCustomerInfo">是否取得客戶資訊。</param>
+    /// <returns>組裝完成的提示訊息。</returns>
+    private static string BuildSearchMessage(int recordCount, bool hasCustomerInfo)
+    {
+        if (recordCount > 0)
+        {
+            return hasCustomerInfo
+                ? "查詢成功，已列出歷史維修資料與客戶資訊。"
+                : "查詢成功，已列出歷史維修資料（未找到相關客戶）。";
+        }
+
+        return "查無維修紀錄，請確認車牌是否正確或尚未建立維修單。";
+    }
+
+    /// <summary>
+    /// 將工單資訊轉換為客戶資訊物件。
+    /// </summary>
+    /// <param name="order">工單實體。</param>
+    /// <param name="isTemporaryCustomer">是否為臨時客戶。</param>
+    /// <returns>客戶資訊物件。</returns>
+    private static CarPlateRelatedCustomerInfo MapToRelatedCustomerInfo(Order order, bool isTemporaryCustomer)
+    {
+        return new CarPlateRelatedCustomerInfo
+        {
+            CustomerUid = order.CustomerUid,
+            Name = order.Name,
+            CustomerType = order.CustomerType,
+            Phone = order.Phone,
+            Email = order.Email,
+            Gender = order.Gender,
+            County = order.County,
+            Township = order.Township,
+            Remark = order.ConnectRemark,
+            Source = order.Source,
+            Reason = order.Reason,
+            IsTemporaryCustomer = isTemporaryCustomer
+        };
+    }
+
+    /// <summary>
+    /// 將估價單資訊轉換為客戶資訊物件。
+    /// </summary>
+    /// <param name="quotation">估價單實體。</param>
+    /// <param name="isTemporaryCustomer">是否為臨時客戶。</param>
+    /// <returns>客戶資訊物件。</returns>
+    private static CarPlateRelatedCustomerInfo MapToRelatedCustomerInfo(Quatation quotation, bool isTemporaryCustomer)
+    {
+        return new CarPlateRelatedCustomerInfo
+        {
+            CustomerUid = quotation.CustomerUid,
+            Name = quotation.Name,
+            CustomerType = quotation.CustomerType,
+            Phone = quotation.Phone,
+            Email = quotation.Email,
+            Gender = quotation.Gender,
+            County = quotation.County,
+            Township = quotation.Township,
+            Remark = quotation.ConnectRemark,
+            Source = quotation.Source,
+            Reason = quotation.Reason,
+            IsTemporaryCustomer = isTemporaryCustomer
+        };
     }
 
     /// <summary>

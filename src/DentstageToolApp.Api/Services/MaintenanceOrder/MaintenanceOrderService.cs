@@ -1335,6 +1335,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 DentStatusOther = summary.DentStatusOther,
                 Description = summary.Description,
                 EstimatedAmount = summary.EstimatedAmount,
+                DismantlingFee = summary.DismantlingFee,
                 FixType = summary.FixType,
                 FixTypeName = summary.FixTypeName,
                 MaintenanceProgress = summary.MaintenanceProgress,
@@ -1605,10 +1606,8 @@ public class MaintenanceOrderService : IMaintenanceOrderService
         {
             Valuation = order.Valuation,
             Discount = order.Discount,
-            DiscountPercent = order.DiscountPercent,
             Amount = order.Amount,
             Rebate = order.Rebate,
-            NetAmount = netAmount ?? order.Amount,
             IncludeTax = includeTax,
             TaxAmount = order.TaxAmount,
             TotalWithTax = order.TotalWithTax
@@ -2018,6 +2017,7 @@ public class MaintenanceOrderService : IMaintenanceOrderService
                 PhotoShapeOther = photo.PhotoShapeOther,
                 PhotoShapeShow = photo.PhotoShapeShow,
                 Cost = photo.Cost,
+                DismantlingFee = photo.DismantlingFee,
                 FlagFinish = photo.FlagFinish,
                 FinishCost = photo.FinishCost,
                 MaintenanceProgress = photo.MaintenanceProgress,
@@ -2032,6 +2032,11 @@ public class MaintenanceOrderService : IMaintenanceOrderService
             if (photo.Cost.HasValue)
             {
                 totalEstimated += photo.Cost.Value;
+            }
+
+            if (photo.DismantlingFee.HasValue)
+            {
+                totalEstimated += photo.DismantlingFee.Value;
             }
         }
 

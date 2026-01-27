@@ -396,6 +396,22 @@ public class QuotationDamageItem
     }
 
     /// <summary>
+    /// 內部使用的拆裝費。
+    /// </summary>
+    [JsonIgnore]
+    public decimal? DismantlingFee { get; set; }
+
+    /// <summary>
+    /// 新欄位：英文欄位名稱「dismantlingFee」，供前端提交與顯示拆裝費。
+    /// </summary>
+    [JsonPropertyName("dismantlingFee")]
+    public decimal? DisplayDismantlingFee
+    {
+        get => DismantlingFee;
+        set => DismantlingFee = value;
+    }
+
+    /// <summary>
     /// 維修後照片識別碼，指向對應的完工照片 UID。
     /// </summary>
     [JsonIgnore]
@@ -576,6 +592,16 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             writer.WriteNullValue();
         }
 
+        writer.WritePropertyName("dismantlingFee");
+        if (target.DisplayDismantlingFee.HasValue)
+        {
+            writer.WriteNumberValue(target.DisplayDismantlingFee.Value);
+        }
+        else
+        {
+            writer.WriteNullValue();
+        }
+
         writer.WritePropertyName("MaintenanceProgress");
         if (target.DisplayMaintenanceProgress.HasValue)
         {
@@ -646,6 +672,7 @@ public class QuotationDamageCollectionConverter : JsonConverter<List<QuotationDa
             DisplayDentStatus = ReadString(element, "dentStatus", "凹痕狀況"),
             DisplayDescription = ReadString(element, "description", "說明"),
             DisplayEstimatedAmount = ReadDecimal(element, "estimatedAmount", "預估金額"),
+            DisplayDismantlingFee = ReadDecimal(element, "dismantlingFee"),
             DisplayFixType = ReadString(element, "fixType", "維修類型"),
             FixTypeName = ReadString(element, "fixTypeName"),
             DisplayMaintenanceProgress = ReadDecimal(element, "MaintenanceProgress") ?? ReadDecimal(element, "progressPercentage"),

@@ -65,6 +65,11 @@ public class CarPlateMaintenanceHistoryResponse
     public string? CarRemark { get; set; }
 
     /// <summary>
+    /// 車牌關聯的首筆客戶資訊，優先取自最新的工單或估價單，若無客戶關聯則為 null。
+    /// </summary>
+    public CarPlateRelatedCustomerInfo? Customer { get; set; }
+
+    /// <summary>
     /// 維修紀錄清單，按照時間新至舊排序。
     /// </summary>
     public IReadOnlyCollection<CarPlateMaintenanceRecordDto> Records { get; set; } = new List<CarPlateMaintenanceRecordDto>();

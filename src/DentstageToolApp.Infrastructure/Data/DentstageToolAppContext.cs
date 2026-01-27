@@ -1036,6 +1036,9 @@ public class DentstageToolAppContext : DbContext
         entity.Property(e => e.FixType)
             .HasMaxLength(100)
             .HasColumnName("Fix_Type");
+        entity.Property(e => e.DismantlingFee)
+            .HasColumnType("decimal(10,2)")
+            .HasColumnName("DismantlingFee");
 
         entity.HasOne(d => d.Quatation)
             .WithMany(p => p.PhotoData)

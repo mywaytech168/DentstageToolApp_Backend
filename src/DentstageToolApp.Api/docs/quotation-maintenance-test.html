@@ -239,7 +239,8 @@
       if (keepNumber(maintenance.otherFee)) {
         normalized.otherFee = maintenance.otherFee;
       }
-      if (keepNumber(maintenance.roundingDiscount)) {
+      // 零頭折扣需要被發送，即使為 0 也應保留
+      if (typeof maintenance.roundingDiscount === 'number') {
         normalized.roundingDiscount = maintenance.roundingDiscount;
       }
       if (keepNumber(maintenance.percentageDiscount)) {
@@ -269,38 +270,21 @@
 
       if (maintenance.categoryAdjustments && typeof maintenance.categoryAdjustments === 'object') {
         const filtered = {};
-        let hasActualAdjustment = false;
         Object.keys(maintenance.categoryAdjustments).forEach((key) => {
           const template = maintenance.categoryAdjustments[key];
           const otherFee = typeof template?.otherFee === 'number' ? template.otherFee : 0;
           const percentageDiscount = typeof template?.percentageDiscount === 'number' ? template.percentageDiscount : 0;
           const discountReason = typeof template?.discountReason === 'string' ? template.discountReason.trim() : '';
 
-          if (otherFee !== 0 || percentageDiscount !== 0 || discountReason) {
-            filtered[key] = {
-              otherFee,
-              percentageDiscount,
-              discountReason
-            };
-            hasActualAdjustment = true;
-          }
+          filtered[key] = {
+            otherFee,
+            percentageDiscount,
+            discountReason
+          };
         });
 
-        if (hasActualAdjustment) {
-          if (!Object.prototype.hasOwnProperty.call(filtered, 'beauty')) {
-            const beautySource = maintenance.categoryAdjustments.beauty;
-            const beautyFee = typeof beautySource?.otherFee === 'number' ? beautySource.otherFee : 0;
-            const beautyDiscount = typeof beautySource?.percentageDiscount === 'number' ? beautySource.percentageDiscount : 0;
-            const beautyReason = typeof beautySource?.discountReason === 'string' ? beautySource.discountReason.trim() : '';
-            filtered.beauty = beautyFee !== 0 || beautyDiscount !== 0 || beautyReason
-              ? {
-                  otherFee: beautyFee,
-                  percentageDiscount: beautyDiscount,
-                  discountReason: beautyReason
-                }
-              : {};
-          }
-
+        // 總是包含 categoryAdjustments，即使為空或全為 0
+        if (Object.keys(filtered).length > 0) {
           normalized.categoryAdjustments = filtered;
         }
       }
@@ -429,11 +413,14 @@
             if (typeof item.dentStatusOther === 'string' && item.dentStatusOther.trim()) {
               normalizedItem.dentStatusOther = item.dentStatusOther.trim();
             }
-            if (typeof item.fixType === 'string' && item.fixType.trim()) {
+            if (typeof item.fixType === 'string') {
               normalizedItem.fixType = item.fixType.trim();
             }
             if (typeof item.estimatedAmount === 'number' && item.estimatedAmount !== 0) {
               normalizedItem.estimatedAmount = item.estimatedAmount;
+            }
+            if (typeof item.dismantlingFee === 'number' && item.dismantlingFee !== 0) {
+              normalizedItem.dismantlingFee = item.dismantlingFee;
             }
             if (typeof item.actualAmount === 'number' && item.actualAmount !== 0 && item.actualAmount !== null) {
               normalizedItem.actualAmount = item.actualAmount;
@@ -599,6 +586,7 @@
             dentStatusOther: typeof item?.dentStatusOther === 'string' ? item.dentStatusOther : '',
             description: typeof item?.description === 'string' ? item.description : '',
             estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 0,
+            dismantlingFee: typeof item?.dismantlingFee === 'number' ? item.dismantlingFee : 0,
             actualAmount: typeof item?.actualAmount === 'number' ? item.actualAmount : null,
             maintenanceProgress: typeof item?.maintenanceProgress === 'number' ? item.maintenanceProgress : null,
             fixType: typeof item?.fixType === 'string' ? item.fixType : ''
@@ -817,6 +805,9 @@
                 estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 
                   (typeof item?.DisplayEstimatedAmount === 'number' ? item.DisplayEstimatedAmount : 
                   (typeof item?.displayEstimatedAmount === 'number' ? item.displayEstimatedAmount : 0)),
+                dismantlingFee: typeof item?.dismantlingFee === 'number' ? item.dismantlingFee : 
+                  (typeof item?.DisplayDismantlingFee === 'number' ? item.DisplayDismantlingFee : 
+                  (typeof item?.displayDismantlingFee === 'number' ? item.displayDismantlingFee : 0)),
                 actualAmount: typeof item?.actualAmount === 'number' ? item.actualAmount : 
                   (typeof item?.DisplayActualAmount === 'number' ? item.DisplayActualAmount : 
                   (typeof item?.displayActualAmount === 'number' ? item.displayActualAmount : null)),
@@ -846,6 +837,9 @@
             estimatedAmount: typeof item?.estimatedAmount === 'number' ? item.estimatedAmount : 
               (typeof item?.DisplayEstimatedAmount === 'number' ? item.DisplayEstimatedAmount : 
               (typeof item?.displayEstimatedAmount === 'number' ? item.displayEstimatedAmount : 0)),
+            dismantlingFee: typeof item?.dismantlingFee === 'number' ? item.dismantlingFee : 
+              (typeof item?.DisplayDismantlingFee === 'number' ? item.DisplayDismantlingFee : 
+              (typeof item?.displayDismantlingFee === 'number' ? item.displayDismantlingFee : 0)),
             actualAmount: typeof item?.actualAmount === 'number' ? item.actualAmount : 
               (typeof item?.DisplayActualAmount === 'number' ? item.DisplayActualAmount : 
               (typeof item?.displayActualAmount === 'number' ? item.displayActualAmount : null)),
@@ -947,7 +941,7 @@
               discountReason: detail.maintenance.discountReason ?? '',
               remark: detail.maintenance.remark ?? '',
               includeTax: !!detail.maintenance.includeTax,
-              categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments)
+              categoryAdjustments: detail.maintenance.categoryAdjustments || createEmptyCategoryAdjustments()
             }
           : undefined
       };
@@ -1043,7 +1037,7 @@
                   : 0,
               discountReason: detail.maintenance.discountReason ?? '',
               remark: detail.maintenance.remark ?? '',
-              categoryAdjustments: normalizeCategoryAdjustments(detail.maintenance.categoryAdjustments)
+              categoryAdjustments: detail.maintenance.categoryAdjustments || createEmptyCategoryAdjustments()
             }
           : undefined
       };
@@ -1612,14 +1606,6 @@
           try {
             const payload = safeParse(quotationForm.editPayload || '{}');
             if (payload && typeof payload === 'object') {
-              if (payload.maintenance) {
-                const adjustments = normalizeCategoryAdjustments(payload.maintenance.categoryAdjustments);
-                if (Object.keys(adjustments).length > 0) {
-                  payload.maintenance.categoryAdjustments = adjustments;
-                } else {
-                  delete payload.maintenance.categoryAdjustments;
-                }
-              }
               trimQuotationLikePayload(payload);
             }
             const response = await authorizedFetch('/quotations/edit', {
@@ -1839,8 +1825,9 @@
           }
           loading.duplicateQuotation = true;
           try {
-            const response = await authorizedFetch(`/quotations/${quotationForm.quotationNo.trim()}/duplicate`, {
-              method: 'POST'
+            const response = await authorizedFetch('/quotations/duplicate', {
+              method: 'POST',
+              body: JSON.stringify({ quotationNo: quotationForm.quotationNo.trim() })
             });
             if (!response.ok) {
               await handleProblemDetails(response);
@@ -1900,14 +1887,6 @@
           try {
             const payload = safeParse(maintenanceForm.editPayload || '{}');
             if (payload && typeof payload === 'object') {
-              if (payload.maintenance) {
-                const adjustments = normalizeCategoryAdjustments(payload.maintenance.categoryAdjustments);
-                if (Object.keys(adjustments).length > 0) {
-                  payload.maintenance.categoryAdjustments = adjustments;
-                } else {
-                  delete payload.maintenance.categoryAdjustments;
-                }
-              }
               trimQuotationLikePayload(payload);
             }
             const response = await authorizedFetch('/maintenance-orders/edit', {

@@ -83,6 +83,11 @@ public class PhotoDatum
     public string? FixType { get; set; }
 
     /// <summary>
+    /// 拆裝費，用於單獨計費常需拆卸的部位（如保桿、門板等），按維修進度計算。
+    /// </summary>
+    public decimal? DismantlingFee { get; set; }
+
+    /// <summary>
     /// 關聯報價單導航屬性。
     /// </summary>
     public Quatation? Quatation { get; set; }

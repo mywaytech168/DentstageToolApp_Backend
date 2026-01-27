@@ -603,8 +603,8 @@ public class QuotationsController : ControllerBase
         """
         {
           "quotationNo": "Q25100001",
-                    "reservationDate": "2024-11-20T10:00:00",
-                    "reservationContent": "前保桿板烤，請預留代步車"
+          "reservationDate": "2024-11-20T10:00:00",
+          "reservationContent": "前保桿板烤，請預留代步車"
         }
         """)]
     [ProducesResponseType(typeof(QuotationStatusChangeResponse), StatusCodes.Status200OK)]

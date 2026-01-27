@@ -88,11 +88,6 @@ public class QuotationAmountInfo
     public decimal? Discount { get; set; }
 
     /// <summary>
-    /// 折扣百分比。
-    /// </summary>
-    public decimal? DiscountPercent { get; set; }
-
-    /// <summary>
     /// 最終應付金額。
     /// </summary>
     public decimal? Amount { get; set; }
@@ -101,11 +96,6 @@ public class QuotationAmountInfo
     /// 退傭金額，供後台統一顯示與計算淨額。
     /// </summary>
     public decimal? Rebate { get; set; }
-
-    /// <summary>
-    /// 扣除退傭後的淨收金額。
-    /// </summary>
-    public decimal? NetAmount { get; set; }
 
     /// <summary>
     /// 是否開立含稅發票。
@@ -294,6 +284,11 @@ public class QuotationDamageSummary
     /// 預估維修金額。
     /// </summary>
     public decimal? EstimatedAmount { get; set; }
+
+    /// <summary>
+    /// 拆裝費用。
+    /// </summary>
+    public decimal? DismantlingFee { get; set; }
 
     /// <summary>
     /// 維修類型中文標籤，僅供後端內部判斷分群與歷史資料相容，不再直接輸出至 API。

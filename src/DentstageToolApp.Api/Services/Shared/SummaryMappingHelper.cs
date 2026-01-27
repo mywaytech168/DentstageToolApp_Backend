@@ -436,6 +436,7 @@ internal static class SummaryMappingHelper
             {
                 photo.RelatedUid,
                 photo.Cost,
+                photo.DismantlingFee,
                 photo.FinishCost,
                 photo.MaintenanceProgress
             })
@@ -455,7 +456,7 @@ internal static class SummaryMappingHelper
             foreach (var record in group)
             {
                 var normalizedProgress = NormalizeProgress(record.MaintenanceProgress);
-                var actual = ResolveActualAmount(record.Cost, normalizedProgress, record.FinishCost);
+                var actual = ResolveActualAmount(record.Cost, record.DismantlingFee, normalizedProgress, record.FinishCost);
                 if (actual.HasValue)
                 {
                     total += actual.Value;
@@ -487,21 +488,29 @@ internal static class SummaryMappingHelper
     }
 
     /// <summary>
-    /// 依據預估金額與進度計算實收金額，若已有完工金額則優先使用。
+    /// 依據預估金額、拆裝費與進度計算實收金額，若已有完工金額則優先使用。
+    /// 計算公式：(預估金額 + 拆裝費) × (進度% / 100)
     /// </summary>
-    private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? normalizedProgress, decimal? finishCost)
+    private static decimal? ResolveActualAmount(decimal? estimatedAmount, decimal? dismantlingFee, decimal? normalizedProgress, decimal? finishCost)
     {
         if (finishCost.HasValue)
         {
             return decimal.Round(finishCost.Value, 2, MidpointRounding.AwayFromZero);
         }
 
-        if (!estimatedAmount.HasValue || !normalizedProgress.HasValue)
+        if (!normalizedProgress.HasValue)
         {
             return null;
         }
 
-        var actual = estimatedAmount.Value * (normalizedProgress.Value / 100m);
+        var baseCost = (estimatedAmount ?? 0) + (dismantlingFee ?? 0);
+        
+        if (baseCost == 0)
+        {
+            return null;
+        }
+
+        var actual = baseCost * (normalizedProgress.Value / 100m);
         return decimal.Round(actual, 2, MidpointRounding.AwayFromZero);
     }
 

@@ -479,8 +479,8 @@ public class QuotationService : IQuotationService
 
         // ---------- 參數整理區 ----------
         var storeInfo = request.Store ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供店家資訊。");
-        var carInfo = request.Car ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供車輛資訊。");
-        var customerInfo = request.Customer ?? throw new QuotationManagementException(HttpStatusCode.BadRequest, "請提供客戶資訊。");
+        var carInfo = request.Car;
+        var customerInfo = request.Customer;
         
         // 提取臨時客戶標記
         var isTemporaryCustomer = storeInfo.IsTemporaryCustomer;
@@ -550,7 +550,6 @@ public class QuotationService : IQuotationService
         var rejectFlag = !string.IsNullOrEmpty(unrepairableReason);
         var panelBeatFlag = !string.IsNullOrEmpty(suggestedPaintReason);
         var roundingDiscount = maintenanceInfo.RoundingDiscount;
-        var legacyPercentageDiscount = maintenanceInfo.PercentageDiscount;
         var rawDiscountReason = NormalizeOptionalText(maintenanceInfo.DiscountReason);
         var requestedCategoryAdjustments = maintenanceInfo.CategoryAdjustments;
 
@@ -560,84 +559,129 @@ public class QuotationService : IQuotationService
         var repairDate = NormalizeOptionalDate(storeInfo.RepairDate);
 
         // 透過車輛主檔自動帶出車牌與品牌資訊，流程僅需車輛 UID 即可，先驗證識別碼後統一補齊細節。
-        var requestCarUid = NormalizeRequiredText(carInfo.CarUid, "車輛識別碼");
-        var carEntity = await GetCarEntityAsync(requestCarUid, cancellationToken);
-        if (carEntity is null)
+        var requestCarUid = NormalizeOptionalText(carInfo?.CarUid);
+        string carUid = null;
+        string originalLicensePlate = null;
+        string licensePlateWithSymbol = null;
+        string licensePlate = null;
+        string brand = null;
+        string model = null;
+        string color = null;
+        string carRemark = null;
+        int? carMileage = null;
+        string brandUid = null;
+        string modelUid = null;
+
+        if (requestCarUid is null)
         {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
+            // 若未提供車輛資訊，允許創建估價單但後續估價完成時需補齊
+            carUid = null;
+            originalLicensePlate = null;
+            licensePlateWithSymbol = null;
+            licensePlate = null;
+            brand = null;
+            model = null;
+            color = null;
+            carRemark = null;
+            carMileage = null;
+            brandUid = null;
+            modelUid = null;
         }
-
-        // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
-        var carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
-        var originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
-        // 依需求保留原始車牌的連字號供 CarNoInput 欄位使用，同時統一為大寫格式。
-        var licensePlateWithSymbol = originalLicensePlate.ToUpperInvariant();
-        // 系統實際使用的車牌欄位需移除連字號，方便搜尋與報表統計。
-        var licensePlate = NormalizeLicensePlate(originalLicensePlate);
-        var brand = NormalizeOptionalText(carEntity.Brand);
-        var model = NormalizeOptionalText(carEntity.Model);
-        var color = NormalizeOptionalText(carEntity.Color);
-        var carRemark = NormalizeOptionalText(carEntity.CarRemark);
-        var carMileage = carEntity.Milage;
-
-        // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
-        var brandUid = NormalizeOptionalText(carInfo.BrandUid);
-        if (brandUid is null && brand is not null)
+        else
         {
-            var matchedBrandUid = await _context.Brands
-                .AsNoTracking()
-                .Where(entity => entity.BrandName == brand)
-                .Select(entity => entity.BrandUid)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            brandUid = NormalizeOptionalText(matchedBrandUid);
-        }
-
-        var modelUid = NormalizeOptionalText(carInfo.ModelUid);
-        if (modelUid is null && model is not null)
-        {
-            var modelQuery = _context.Models
-                .AsNoTracking()
-                .Where(entity => entity.ModelName == model);
-
-            if (brandUid is not null)
+            var carEntity = await GetCarEntityAsync(requestCarUid, cancellationToken);
+            if (carEntity is null)
             {
-                modelQuery = modelQuery.Where(entity => entity.BrandUid == brandUid);
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
             }
 
-            var matchedModelUid = await modelQuery
-                .Select(entity => entity.ModelUid)
-                .FirstOrDefaultAsync(cancellationToken);
+            // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
+            carUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
+            originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
+            // 依需求保留原始車牌的連字號供 CarNoInput 欄位使用，同時統一為大寫格式。
+            licensePlateWithSymbol = originalLicensePlate.ToUpperInvariant();
+            // 系統實際使用的車牌欄位需移除連字號，方便搜尋與報表統計。
+            licensePlate = NormalizeLicensePlate(originalLicensePlate);
+            brand = NormalizeOptionalText(carEntity.Brand);
+            model = NormalizeOptionalText(carEntity.Model);
+            color = NormalizeOptionalText(carEntity.Color);
+            carRemark = NormalizeOptionalText(carEntity.CarRemark);
+            carMileage = carEntity.Milage;
 
-            modelUid = NormalizeOptionalText(matchedModelUid);
+            // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
+            brandUid = NormalizeOptionalText(carInfo?.BrandUid);
+            if (brandUid is null && brand is not null)
+            {
+                var matchedBrandUid = await _context.Brands
+                    .AsNoTracking()
+                    .Where(entity => entity.BrandName == brand)
+                    .Select(entity => entity.BrandUid)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                brandUid = NormalizeOptionalText(matchedBrandUid);
+            }
+
+            modelUid = NormalizeOptionalText(carInfo?.ModelUid);
+            if (modelUid is null && model is not null)
+            {
+                var modelQuery = _context.Models
+                    .AsNoTracking()
+                    .Where(entity => entity.ModelName == model);
+
+                if (brandUid is not null)
+                {
+                    modelQuery = modelQuery.Where(entity => entity.BrandUid == brandUid);
+                }
+
+                var matchedModelUid = await modelQuery
+                    .Select(entity => entity.ModelUid)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                modelUid = NormalizeOptionalText(matchedModelUid);
+            }
+
+            if (carInfo?.Mileage.HasValue == true)
+            {
+                // 若前端提供即時里程數，優先覆寫車輛主檔的舊資料。
+                carMileage = carInfo.Mileage;
+            }
         }
 
-        if (carInfo.Mileage.HasValue)
+        // 允許客戶信息為 null（在評估完成時再驗證），僅在有提供 UID 時才自動補齊
+        var requestCustomerUid = NormalizeOptionalText(customerInfo?.CustomerUid);
+        string customerUid = null;
+        string customerName = null;
+        string customerPhone = null;
+        string customerGender = null;
+        string customerType = null;
+        string customerCounty = null;
+        string customerTownship = null;
+        string customerReason = null;
+        string customerSource = null;
+        string customerRemark = null;
+        string customerEmail = null;
+
+        if (requestCustomerUid is not null)
         {
-            // 若前端提供即時里程數，優先覆寫車輛主檔的舊資料。
-            carMileage = carInfo.Mileage;
-        }
+            var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
+            if (customerEntity is null)
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的客戶資料。");
+            }
 
-        // 透過客戶主檔自動帶出姓名與聯絡資訊，讓前端僅需傳遞 UID 即可完成建檔。
-        var requestCustomerUid = NormalizeRequiredText(customerInfo.CustomerUid, "客戶識別碼");
-        var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
-        if (customerEntity is null)
-        {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的客戶資料。");
+            // 透過客戶主檔補齊姓名、聯絡電話等欄位
+            customerUid = NormalizeRequiredText(customerEntity.CustomerUid, "客戶識別碼");
+            customerName = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
+            customerPhone = NormalizeOptionalText(customerEntity.Phone);
+            customerGender = NormalizeOptionalText(customerEntity.Gender);
+            customerType = NormalizeOptionalText(customerEntity.CustomerType);
+            customerCounty = NormalizeOptionalText(customerEntity.County);
+            customerTownship = NormalizeOptionalText(customerEntity.Township);
+            customerReason = NormalizeOptionalText(customerEntity.Reason);
+            customerSource = NormalizeOptionalText(customerEntity.Source);
+            customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
+            customerEmail = NormalizeOptionalText(customerEntity.Email);
         }
-
-        // 透過客戶主檔補齊姓名、聯絡電話等欄位，確保僅憑 UID 即可完成建檔。
-        var customerUid = NormalizeRequiredText(customerEntity.CustomerUid, "客戶識別碼");
-        var customerName = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
-        var customerPhone = NormalizeOptionalText(customerEntity.Phone);
-        var customerGender = NormalizeOptionalText(customerEntity.Gender);
-        var customerType = NormalizeOptionalText(customerEntity.CustomerType);
-        var customerCounty = NormalizeOptionalText(customerEntity.County);
-        var customerTownship = NormalizeOptionalText(customerEntity.Township);
-        var customerReason = NormalizeOptionalText(customerEntity.Reason);
-        var customerSource = NormalizeOptionalText(customerEntity.Source);
-        var customerRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
-        var customerEmail = NormalizeOptionalText(customerEntity.Email);
 
         var normalizedDamages = ExtractDamageList(request);
         var carBodyConfirmation = request.CarBodyConfirmation;
@@ -661,7 +705,7 @@ public class QuotationService : IQuotationService
         // 建立日期改由系統產生，減少前端填寫欄位。
         var createdAt = GetTaipeiNow();
         var quotationDate = DateOnly.FromDateTime(createdAt);
-        var phoneQuery = NormalizePhoneQuery(customerPhone);
+        var phoneQuery = customerPhone is not null ? NormalizePhoneQuery(customerPhone) : null;
 
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -679,7 +723,7 @@ public class QuotationService : IQuotationService
             normalizedDamages,
             legacyOtherFee,
             roundingDiscount,
-            legacyPercentageDiscount,
+            null,
             rawDiscountReason,
             requestedCategoryAdjustments,
             hasExplicitCategoryAdjustments,
@@ -995,7 +1039,6 @@ public class QuotationService : IQuotationService
                 // 金額欄位需同步維修單顯示，避免前端計算不一致。
                 Valuation = quotation.Valuation,
                 Discount = quotation.Discount,
-                DiscountPercent = quotation.DiscountPercent,
                 // Quatation 實體未直接提供 Amount 欄位，因此統一由服務層計算後回傳。
                 Amount = amount,
                 IncludeTax = quotation.IncludeTax,
@@ -1299,7 +1342,6 @@ public class QuotationService : IQuotationService
         var maintenanceRemark = plainRemark;
         decimal? legacyOtherFee = existingExtra?.OtherFee;
         decimal? roundingDiscount = quotation.Discount ?? existingExtra?.RoundingDiscount;
-        decimal? legacyPercentageDiscount = quotation.DiscountPercent ?? existingExtra?.PercentageDiscount;
         var rawDiscountReason = NormalizeOptionalText(existingExtra?.DiscountReason ?? quotation.DiscountReason);
         var columnCategoryAdjustments = ExtractCategoryAdjustments(quotation);
         var storedCategoryAdjustments = MergeCategoryAdjustments(existingExtra?.CategoryAdjustments, columnCategoryAdjustments);
@@ -1356,11 +1398,6 @@ public class QuotationService : IQuotationService
             if (maintenanceInfo.OtherFee.HasValue)
             {
                 legacyOtherFee = maintenanceInfo.OtherFee;
-            }
-
-            if (maintenanceInfo.PercentageDiscount.HasValue)
-            {
-                legacyPercentageDiscount = maintenanceInfo.PercentageDiscount;
             }
 
             if (maintenanceInfo.DiscountReason is not null)
@@ -1429,7 +1466,7 @@ public class QuotationService : IQuotationService
             effectiveDamages,
             legacyOtherFee,
             roundingDiscount,
-            legacyPercentageDiscount,
+            null,
             rawDiscountReason,
             requestedCategoryAdjustments,
             hasRequestedCategoryAdjustments,
@@ -1583,6 +1620,17 @@ public class QuotationService : IQuotationService
         if (quotation is null)
         {
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需標記估價完成的估價單。");
+        }
+
+        // 估價完成前必須驗證車輛和客戶信息已完整
+        if (string.IsNullOrWhiteSpace(quotation.CarUid) || string.IsNullOrWhiteSpace(quotation.CarNo))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "估價完成前請先補齊車輛資訊。");
+        }
+
+        if (string.IsNullOrWhiteSpace(quotation.CustomerUid) || string.IsNullOrWhiteSpace(quotation.Name))
+        {
+            throw new QuotationManagementException(HttpStatusCode.BadRequest, "估價完成前請先補齊客戶資訊。");
         }
 
         // 僅允許從 110(估價中) 或已是 180 狀態再標記為估價完成，避免破壞狀態流程。
@@ -2132,6 +2180,8 @@ public class QuotationService : IQuotationService
             CarNo = sourceQuotation.CarNo,
             CarNoInput = sourceQuotation.CarNoInput,
             CarNoInputGlobal = sourceQuotation.CarNoInputGlobal,
+            Brand = sourceQuotation.Brand,
+            Model = sourceQuotation.Model,
             BrandUid = sourceQuotation.BrandUid,
             ModelUid = sourceQuotation.ModelUid,
             Color = sourceQuotation.Color,
@@ -2166,6 +2216,7 @@ public class QuotationService : IQuotationService
             OtherDiscountReason = sourceQuotation.OtherDiscountReason,
 
             // 複製其他資訊
+            FixType = sourceQuotation.FixType,
             ToolTest = sourceQuotation.ToolTest,
             Coat = sourceQuotation.Coat,
             Envelope = sourceQuotation.Envelope,
@@ -2174,11 +2225,11 @@ public class QuotationService : IQuotationService
             IsTemporaryCustomer = sourceQuotation.IsTemporaryCustomer,
             IncludeTax = sourceQuotation.IncludeTax,
 
-            // 清除預約相關欄位（新估價單應無預約資訊）
-            BookDate = null,
-            BookMethod = null,
-            CarReserved = null,
-            FixDate = null,
+            // 複製預約相關欄位（新估價單應複製原值，允許前端修改）
+            BookDate = sourceQuotation.BookDate,
+            BookMethod = sourceQuotation.BookMethod,
+            CarReserved = sourceQuotation.CarReserved,  // ✅ 複製原值
+            FixDate = sourceQuotation.FixDate,
 
             // 設定新狀態為 110（估價中）
             Status = "110",
@@ -2224,6 +2275,7 @@ public class QuotationService : IQuotationService
                 PhotoShapeOther = sourcePhoto.PhotoShapeOther,
                 PhotoShapeShow = sourcePhoto.PhotoShapeShow,
                 Cost = sourcePhoto.Cost,
+                DismantlingFee = sourcePhoto.DismantlingFee,
                 FlagFinish = sourcePhoto.FlagFinish,
                 FinishCost = sourcePhoto.FinishCost,
                 MaintenanceProgress = sourcePhoto.MaintenanceProgress,
@@ -2234,12 +2286,24 @@ public class QuotationService : IQuotationService
             await _context.PhotoData.AddAsync(newPhoto, cancellationToken);
         }
 
+        // ---------- 複製 Remark（包含傷痕、車體確認、維修設定等） ----------
+        newQuotation.Remark = sourceQuotation.Remark;
+
         // ---------- 保存資料庫 ----------
+        await _context.SaveChangesAsync(cancellationToken);
+
+        // ---------- 複製金額資訊 ----------
+        // 複製金額和稅務資訊，確保新估價單與原估價單保持一致
+        newQuotation.Valuation = sourceQuotation.Valuation;  // ✅ 複製原 Valuation
+        newQuotation.Discount = sourceQuotation.Discount;    // ✅ 複製原 Discount (RoundingDiscount)
+        newQuotation.TaxAmount = sourceQuotation.TaxAmount;  // ✅ 複製原 TaxAmount
+        newQuotation.TotalWithTax = sourceQuotation.TotalWithTax;  // ✅ 複製原 TotalWithTax
+
         await _context.SaveChangesAsync(cancellationToken);
 
         // ---------- 記錄審計日誌 ----------
         _logger.LogInformation(
-            "操作人員 {Operator} 複製估價單 {SourceQuotationNo} ({SourceQuotationUid}) 至 {NewQuotationNo} ({NewQuotationUid})，共複製 {PhotoCount} 張照片。",
+            "操作人員 {Operator} 複製估價單 {SourceQuotationNo} ({SourceQuotationUid}) 至 {NewQuotationNo} ({NewQuotationUid})，共複製 {PhotoCount} 張照片與擴充資料。",
             operatorLabel,
             sourceQuotation.QuotationNo,
             sourceQuotation.QuotationUid,
@@ -2996,7 +3060,9 @@ public class QuotationService : IQuotationService
 
             if (adjustment.PercentageDiscount.HasValue && adjustment.PercentageDiscount.Value != 0m)
             {
-                var discountRate = adjustment.PercentageDiscount.Value / 100m;
+                // 折扣百分比代表保留的百分比，折扣金額 = 基數 × (100 - 百分比) / 100
+                // 例如: PercentageDiscount = 90 表示保留 90%，折扣 10% 的金額
+                var discountRate = (100m - adjustment.PercentageDiscount.Value) / 100m;
                 totalDiscountAmount += categoryBase * discountRate;
             }
         }
@@ -3017,14 +3083,9 @@ public class QuotationService : IQuotationService
         var netAmount = totalBase - totalDiscountAmount;
         var hasDiscount = totalDiscountAmount != 0m;
 
-        if (roundingDiscount.HasValue)
-        {
-            netAmount -= roundingDiscount.Value;
-            if (roundingDiscount.Value != 0m)
-            {
-                hasDiscount = true;
-            }
-        }
+        // 注意：RoundingDiscount 不計入 Valuation 計算，而是在 CalculateOrderAmount 中作為最終折扣處理
+        // Valuation = (DamageAmount + OtherFee) - CategoryDiscounts
+        // Amount = Valuation - RoundingDiscount
 
         decimal? valuation = netAmount;
         if (!hasBaseAmount && !hasDiscount)
@@ -3206,7 +3267,9 @@ public class QuotationService : IQuotationService
 
         foreach (var damage in damages)
         {
-            if (damage?.DisplayEstimatedAmount is not { } amount)
+            // 優先使用 ActualAmount，若無則使用 EstimatedAmount
+            var damageAmount = damage?.DisplayActualAmount ?? damage?.DisplayEstimatedAmount;
+            if (damageAmount is null or 0m)
             {
                 continue;
             }
@@ -3220,7 +3283,9 @@ public class QuotationService : IQuotationService
                 totals[normalizedKey] = 0m;
             }
 
-            totals[normalizedKey] += amount;
+            // 基數 = 損傷費用 + 拆裝費
+            var baseAmount = damageAmount.Value + (damage?.DisplayDismantlingFee ?? 0m);
+            totals[normalizedKey] += baseAmount;
         }
 
         return totals;
@@ -4409,6 +4474,7 @@ public class QuotationService : IQuotationService
                 DentStatusOther = NormalizeOptionalText(damage.DentStatusOther),
                 Description = NormalizeOptionalText(damage.Description),
                 EstimatedAmount = damage.EstimatedAmount,
+                DismantlingFee = damage.DismantlingFee,
                 FixType = NormalizeOptionalText(damage.FixType) ?? fixTypeKey,
                 FixTypeName = fixTypeName,
                 MaintenanceProgress = normalizedProgress,
@@ -4835,7 +4901,6 @@ public class QuotationService : IQuotationService
             NeedToolEvaluation = random.Next(2) == 0,
             OtherFee = dentOtherFee + paintOtherFee + otherOtherFee,
             RoundingDiscount = Math.Round((decimal)random.NextDouble() * 300m, 0),
-            PercentageDiscount = percentageDiscount,
             DiscountReason = percentageDiscount.HasValue && percentageDiscount.Value > 0
                 ? "測試折扣：系統隨機產生"
                 : null,
