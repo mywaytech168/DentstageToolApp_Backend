@@ -328,20 +328,47 @@ public class PhotoService : IPhotoService
         }
 
         var normalizedPhotoUids = NormalizePhotoUids(photoUids);
-        if (normalizedPhotoUids.Count == 0)
-        {
-            return;
-        }
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // ---------- 取得所有原本綁定到此估價單的照片 ----------
+        var existingBoundPhotos = await _context.PhotoData
+            .Where(photo => photo.QuotationUid == normalizedQuotationUid)
+            .ToListAsync(cancellationToken);
+
+        var existingBoundUids = new HashSet<string>(existingBoundPhotos.Select(p => p.PhotoUid), StringComparer.OrdinalIgnoreCase);
+        var newPhotoUidsSet = new HashSet<string>(normalizedPhotoUids, StringComparer.OrdinalIgnoreCase);
+
+        // ---------- 移除（解綁）不在新列表中的照片 ----------
+        var photosToUnbind = existingBoundPhotos
+            .Where(photo => !newPhotoUidsSet.Contains(photo.PhotoUid))
+            .ToList();
+
+        foreach (var photo in photosToUnbind)
+        {
+            photo.QuotationUid = null;
+            _logger.LogInformation("解綁照片 {PhotoUid} 從估價單 {QuotationUid}", photo.PhotoUid, normalizedQuotationUid);
+        }
+
+        if (normalizedPhotoUids.Count == 0)
+        {
+            // 若新列表為空，僅執行解綁動作
+            if (photosToUnbind.Count > 0)
+            {
+                await _context.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation("共解綁 {Count} 張照片從估價單 {QuotationUid}", photosToUnbind.Count, normalizedQuotationUid);
+            }
+            return;
+        }
+
+        // ---------- 取得並驗證新列表中的照片 ----------
         var photos = await _context.PhotoData
             .Where(photo => normalizedPhotoUids.Contains(photo.PhotoUid))
             .ToListAsync(cancellationToken);
 
-        var existingUids = new HashSet<string>(photos.Select(photo => photo.PhotoUid), StringComparer.OrdinalIgnoreCase);
+        var foundUids = new HashSet<string>(photos.Select(photo => photo.PhotoUid), StringComparer.OrdinalIgnoreCase);
         var missingUids = normalizedPhotoUids
-            .Where(uid => !existingUids.Contains(uid))
+            .Where(uid => !foundUids.Contains(uid))
             .ToList();
 
         if (missingUids.Count > 0)
@@ -350,13 +377,15 @@ public class PhotoService : IPhotoService
             throw new QuotationManagementException(HttpStatusCode.BadRequest, $"找不到以下圖片識別碼：{missingList}，請確認是否已上傳。");
         }
 
+        // ---------- 綁定（或更新）新列表中的照片 ----------
         foreach (var photo in photos)
         {
             photo.QuotationUid = normalizedQuotationUid;
         }
 
         await _context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("共綁定 {Count} 張照片至估價單 {QuotationUid}", photos.Count, normalizedQuotationUid);
+        _logger.LogInformation("共解綁 {UnbindCount} 張照片，綁定 {BindCount} 張照片至估價單 {QuotationUid}", 
+            photosToUnbind.Count, photos.Count, normalizedQuotationUid);
     }
 
     // ---------- 方法區 ----------

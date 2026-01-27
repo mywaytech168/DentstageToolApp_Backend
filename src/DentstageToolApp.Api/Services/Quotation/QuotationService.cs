@@ -3707,7 +3707,7 @@ public class QuotationService : IQuotationService
             return;
         }
 
-        var metadata = new List<(string PhotoUid, string? Position, string? PositionOther, string? DentStatus, string? DentStatusOther, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? AfterPhotoUid)>();
+        var metadata = new List<(string PhotoUid, string? Position, string? PositionOther, string? DentStatus, string? DentStatusOther, string? Description, decimal? EstimatedAmount, decimal? ActualAmount, decimal? Progress, string? FixTypeKey, string? FixTypeName, string? AfterPhotoUid, decimal? DismantlingFee)>();
         var normalizedSignatureUid = NormalizeOptionalText(signaturePhotoUid);
 
         foreach (var damage in damages)
@@ -3757,6 +3757,7 @@ public class QuotationService : IQuotationService
             }
 
             var beforePhotoUid = NormalizeOptionalText(damage.Photo);
+            var dismantlingFee = damage.DismantlingFee;
 
             // 使用 HashSet 移除重複的完工照片 UID，避免同一張照片被寫入多次。
             var afterPhotoUids = new List<string>();
@@ -3771,7 +3772,7 @@ public class QuotationService : IQuotationService
                 && (normalizedSignatureUid is null || !string.Equals(beforePhotoUid, normalizedSignatureUid, StringComparison.OrdinalIgnoreCase)))
             {
                 var mappedAfterPhotoUid = afterPhotoUids.Count > 0 ? afterPhotoUids[0] : null;
-                metadata.Add((beforePhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, mappedAfterPhotoUid));
+                metadata.Add((beforePhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, mappedAfterPhotoUid, dismantlingFee));
             }
 
             // 完工照片僅需帶入欄位資訊並清空 AfterPhotoUid，確保資料庫不會誤存舊值。
@@ -3782,7 +3783,7 @@ public class QuotationService : IQuotationService
                     continue;
                 }
 
-                metadata.Add((afterPhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, null));
+                metadata.Add((afterPhotoUid, position, positionOther, dentStatus, dentStatusOther, description, amount, actualAmount, progress, fixTypeCategory, fixTypeName, null, dismantlingFee));
             }
         }
 
@@ -3868,6 +3869,18 @@ public class QuotationService : IQuotationService
             else if (!info.ActualAmount.HasValue && info.EstimatedAmount.HasValue && photo.FinishCost != info.EstimatedAmount)
             {
                 photo.FinishCost = info.EstimatedAmount;
+                updated = true;
+            }
+
+            if (info.DismantlingFee.HasValue && photo.DismantlingFee != info.DismantlingFee)
+            {
+                photo.DismantlingFee = info.DismantlingFee;
+                updated = true;
+            }
+            // 當沒有提供 DismantlingFee 時，設置為 0
+            else if (!info.DismantlingFee.HasValue && photo.DismantlingFee != 0)
+            {
+                photo.DismantlingFee = 0;
                 updated = true;
             }
 
