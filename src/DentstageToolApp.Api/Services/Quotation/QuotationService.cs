@@ -130,9 +130,7 @@ public class QuotationService : IQuotationService
             },
             Car = new CreateQuotationCarInfo
             {
-                CarUid = car?.CarUid ?? BuildFallbackUid("Ca"),
-                BrandUid = null,
-                ModelUid = null
+                CarUid = car?.CarUid ?? BuildFallbackUid("Ca")
             },
             Customer = new CreateQuotationCustomerInfo
             {
@@ -558,7 +556,7 @@ public class QuotationService : IQuotationService
         var reservationDate = NormalizeOptionalDate(storeInfo.ReservationDate);
         var repairDate = NormalizeOptionalDate(storeInfo.RepairDate);
 
-        // 透過車輛主檔自動帶出車牌與品牌資訊，流程僅需車輛 UID 即可，先驗證識別碼後統一補齊細節。
+        // 透過車輛主檔自動帶出車牌與品牌資訊，流程僅需車輛 UID 即可。
         var requestCarUid = NormalizeOptionalText(carInfo?.CarUid);
         string carUid = null;
         string originalLicensePlate = null;
@@ -608,9 +606,8 @@ public class QuotationService : IQuotationService
             carRemark = NormalizeOptionalText(carEntity.CarRemark);
             carMileage = carEntity.Milage;
 
-            // 優先採用前端提供的品牌與車型 UID，若缺少則再依名稱回查主檔補齊。
-            brandUid = NormalizeOptionalText(carInfo?.BrandUid);
-            if (brandUid is null && brand is not null)
+            // 依車輛主檔的品牌與車型名稱回查主檔補齊 UID
+            if (brand is not null)
             {
                 var matchedBrandUid = await _context.Brands
                     .AsNoTracking()
@@ -621,8 +618,7 @@ public class QuotationService : IQuotationService
                 brandUid = NormalizeOptionalText(matchedBrandUid);
             }
 
-            modelUid = NormalizeOptionalText(carInfo?.ModelUid);
-            if (modelUid is null && model is not null)
+            if (model is not null)
             {
                 var modelQuery = _context.Models
                     .AsNoTracking()
@@ -638,12 +634,6 @@ public class QuotationService : IQuotationService
                     .FirstOrDefaultAsync(cancellationToken);
 
                 modelUid = NormalizeOptionalText(matchedModelUid);
-            }
-
-            if (carInfo?.Mileage.HasValue == true)
-            {
-                // 若前端提供即時里程數，優先覆寫車輛主檔的舊資料。
-                carMileage = carInfo.Mileage;
             }
         }
 
@@ -1134,8 +1124,8 @@ public class QuotationService : IQuotationService
         }
 
         var operatorLabel = NormalizeOperator(operatorName);
-        var carInfo = request.Car ?? new QuotationCarInfo();
-        var customerInfo = request.Customer ?? new QuotationCustomerInfo();
+        var carInfo = request.Car ?? new UpdateQuotationCarInfo();
+        var customerInfo = request.Customer ?? new UpdateQuotationCustomerInfo();
         var requestedDamages = request.Photos?.ToDamageList() ?? new List<QuotationDamageItem>();
         var (plainRemark, existingExtra) = ParseRemark(quotation.Remark);
         var maintenanceInfo = request.Maintenance;
@@ -1145,105 +1135,95 @@ public class QuotationService : IQuotationService
         var now = GetTaipeiNow();
 
         // ---------- 車輛資料同步 ----------
-        if (carInfo.LicensePlate is not null)
+        // 若前端提供 CarUid，則從資料庫查詢完整車輛資訊並更新估價單
+        var requestCarUid = NormalizeOptionalText(carInfo.CarUid);
+        if (requestCarUid is not null)
         {
-            var normalizedPlate = NormalizeOptionalText(carInfo.LicensePlate);
-            if (!string.IsNullOrWhiteSpace(normalizedPlate))
+            var carEntity = await GetCarEntityAsync(requestCarUid, cancellationToken);
+            if (carEntity is null)
             {
-                var plateWithSymbol = normalizedPlate.ToUpperInvariant();
-                quotation.CarNo = NormalizeLicensePlate(normalizedPlate);
-                quotation.CarNoInput = plateWithSymbol;
-                quotation.CarNoInputGlobal = plateWithSymbol;
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的車輛資料。");
             }
-        }
 
-        if (carInfo.Brand is not null)
-        {
-            quotation.Brand = NormalizeOptionalText(carInfo.Brand);
-        }
+            // 透過車輛主檔補齊車牌、品牌等欄位，並將車牌符號移除統一格式。
+            quotation.CarUid = NormalizeRequiredText(carEntity.CarUid, "車輛識別碼");
+            var originalLicensePlate = NormalizeRequiredText(carEntity.CarNo, "車牌號碼");
+            var licensePlateWithSymbol = originalLicensePlate.ToUpperInvariant();
+            quotation.CarNo = NormalizeLicensePlate(originalLicensePlate);
+            quotation.CarNoInput = licensePlateWithSymbol;
+            quotation.CarNoInputGlobal = licensePlateWithSymbol;
+            quotation.Brand = NormalizeOptionalText(carEntity.Brand);
+            quotation.Model = NormalizeOptionalText(carEntity.Model);
+            quotation.Color = NormalizeOptionalText(carEntity.Color);
+            quotation.CarRemark = NormalizeOptionalText(carEntity.CarRemark);
+            quotation.Milage = carEntity.Milage;
 
-        if (carInfo.Model is not null)
-        {
-            quotation.Model = NormalizeOptionalText(carInfo.Model);
-        }
+            // 依車輛主檔的品牌與車型名稱回查主檔補齊 UID
+            var brand = NormalizeOptionalText(carEntity.Brand);
+            var model = NormalizeOptionalText(carEntity.Model);
+            var brandUid = "";
+            var modelUid = "";
 
-        if (carInfo.BrandUid is not null)
-        {
-            quotation.BrandUid = NormalizeOptionalText(carInfo.BrandUid);
-        }
+            if (brand is not null)
+            {
+                var matchedBrandUid = await _context.Brands
+                    .AsNoTracking()
+                    .Where(entity => entity.BrandName == brand)
+                    .Select(entity => entity.BrandUid)
+                    .FirstOrDefaultAsync(cancellationToken);
 
-        if (carInfo.ModelUid is not null)
-        {
-            quotation.ModelUid = NormalizeOptionalText(carInfo.ModelUid);
+                brandUid = NormalizeOptionalText(matchedBrandUid);
+            }
+
+            if (model is not null)
+            {
+                var modelQuery = _context.Models
+                    .AsNoTracking()
+                    .Where(entity => entity.ModelName == model);
+
+                if (brandUid is not null)
+                {
+                    modelQuery = modelQuery.Where(entity => entity.BrandUid == brandUid);
+                }
+
+                var matchedModelUid = await modelQuery
+                    .Select(entity => entity.ModelUid)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                modelUid = NormalizeOptionalText(matchedModelUid);
+            }
+
+            quotation.BrandUid = brandUid;
+            quotation.ModelUid = modelUid;
         }
 
         quotation.BrandModel = BuildBrandModel(quotation.Brand, quotation.Model);
 
-        if (carInfo.Color is not null)
-        {
-            quotation.Color = NormalizeOptionalText(carInfo.Color);
-        }
-
-        if (carInfo.Remark is not null)
-        {
-            quotation.CarRemark = NormalizeOptionalText(carInfo.Remark);
-        }
-
-        if (carInfo.Mileage.HasValue)
-        {
-            // 里程數以最新值覆寫，維持估價與維修流程可共用同一筆數據。
-            quotation.Milage = carInfo.Mileage;
-        }
-
         // ---------- 客戶資料同步 ----------
-        quotation.Name = NormalizeOptionalText(customerInfo.Name) ?? quotation.Name;
-
-        if (customerInfo.Phone is not null)
+        // 若前端提供 CustomerUid，則從資料庫查詢完整客戶資訊並更新估價單
+        var requestCustomerUid = NormalizeOptionalText(customerInfo.CustomerUid);
+        if (requestCustomerUid is not null)
         {
-            quotation.Phone = NormalizeOptionalText(customerInfo.Phone);
+            var customerEntity = await GetCustomerEntityAsync(requestCustomerUid, cancellationToken);
+            if (customerEntity is null)
+            {
+                throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的客戶資料。");
+            }
+
+            // 透過客戶主檔補齊姓名、聯絡電話等欄位
+            quotation.CustomerUid = NormalizeRequiredText(customerEntity.CustomerUid, "客戶識別碼");
+            quotation.Name = NormalizeRequiredText(customerEntity.Name, "客戶名稱");
+            quotation.Phone = NormalizeOptionalText(customerEntity.Phone);
             quotation.PhoneInput = quotation.Phone;
             quotation.PhoneInputGlobal = quotation.Phone;
-        }
-
-        if (customerInfo.Email is not null)
-        {
-            // 若前端補齊電子郵件，優先以最新資料覆寫估價單欄位供後續聯繫。
-            quotation.Email = NormalizeOptionalText(customerInfo.Email);
-        }
-
-        if (customerInfo.Gender is not null)
-        {
-            quotation.Gender = NormalizeOptionalText(customerInfo.Gender);
-        }
-
-        if (customerInfo.CustomerType is not null)
-        {
-            quotation.CustomerType = NormalizeOptionalText(customerInfo.CustomerType);
-        }
-
-        if (customerInfo.County is not null)
-        {
-            quotation.County = NormalizeOptionalText(customerInfo.County);
-        }
-
-        if (customerInfo.Township is not null)
-        {
-            quotation.Township = NormalizeOptionalText(customerInfo.Township);
-        }
-
-        if (customerInfo.Reason is not null)
-        {
-            quotation.Reason = NormalizeOptionalText(customerInfo.Reason);
-        }
-
-        if (customerInfo.Source is not null)
-        {
-            quotation.Source = NormalizeOptionalText(customerInfo.Source);
-        }
-
-        if (customerInfo.Remark is not null)
-        {
-            quotation.ConnectRemark = NormalizeOptionalText(customerInfo.Remark);
+            quotation.Gender = NormalizeOptionalText(customerEntity.Gender);
+            quotation.CustomerType = NormalizeOptionalText(customerEntity.CustomerType);
+            quotation.County = NormalizeOptionalText(customerEntity.County);
+            quotation.Township = NormalizeOptionalText(customerEntity.Township);
+            quotation.Reason = NormalizeOptionalText(customerEntity.Reason);
+            quotation.Source = NormalizeOptionalText(customerEntity.Source);
+            quotation.ConnectRemark = NormalizeOptionalText(customerEntity.ConnectRemark);
+            quotation.Email = NormalizeOptionalText(customerEntity.Email);
         }
 
         // ---------- 店家與排程資料同步 ----------
@@ -1622,15 +1602,10 @@ public class QuotationService : IQuotationService
             throw new QuotationManagementException(HttpStatusCode.NotFound, "查無需標記估價完成的估價單。");
         }
 
-        // 估價完成前必須驗證車輛和客戶信息已完整
-        if (string.IsNullOrWhiteSpace(quotation.CarUid) || string.IsNullOrWhiteSpace(quotation.CarNo))
+        // 估價完成前必須驗證車輛已完整
+        if (string.IsNullOrWhiteSpace(quotation.CarUid))
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "估價完成前請先補齊車輛資訊。");
-        }
-
-        if (string.IsNullOrWhiteSpace(quotation.CustomerUid) || string.IsNullOrWhiteSpace(quotation.Name))
-        {
-            throw new QuotationManagementException(HttpStatusCode.BadRequest, "估價完成前請先補齊客戶資訊。");
         }
 
         // 僅允許從 110(估價中) 或已是 180 狀態再標記為估價完成，避免破壞狀態流程。

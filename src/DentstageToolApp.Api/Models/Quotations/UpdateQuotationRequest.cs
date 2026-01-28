@@ -6,19 +6,20 @@ namespace DentstageToolApp.Api.Models.Quotations;
 
 /// <summary>
 /// 編輯估價單所需的欄位，聚焦車輛、客戶與各類別備註。
+/// 注意：車輛與客戶資訊僅接收 UID 字段，其他詳細資訊由後端從資料庫自動查詢補齊。
 /// </summary>
 public class UpdateQuotationRequest : QuotationActionRequestBase
 {
 
     /// <summary>
-    /// 車輛資訊。
+    /// 車輛資訊，僅接收 UID、品牌 UID、車型 UID 與里程數，其他資訊由後端查詢補齊。
     /// </summary>
-    public QuotationCarInfo Car { get; set; } = new();
+    public UpdateQuotationCarInfo Car { get; set; } = new();
 
     /// <summary>
-    /// 客戶資訊。
+    /// 客戶資訊，僅接收 UID，其他資訊由後端查詢補齊。
     /// </summary>
-    public QuotationCustomerInfo Customer { get; set; } = new();
+    public UpdateQuotationCustomerInfo Customer { get; set; } = new();
 
     /// <summary>
     /// 店家與排程資訊，沿用建立估價單時的欄位以便前端共用表單。

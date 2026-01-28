@@ -140,20 +140,32 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             }
         }
 
-        // 品牌與車型識別碼僅存於估價資料，收集所有報價資訊後挑選第一筆有效值
-        var brandUid = ResolveFirstValue(
-            BuildCandidateList(
-                referenceOrder?.Quatation?.BrandUid,
-                referenceQuotation?.BrandUid,
-                orders.Select(o => o.Quatation?.BrandUid),
-                quotationCandidates.Select(quatation => quatation.BrandUid)));
+        // 嘗試根據品牌名稱從資料庫查詢
+        var brandUid = await ResolveBrandUidAsync(car.Brand, cancellationToken);
 
-        var modelUid = ResolveFirstValue(
-            BuildCandidateList(
-                referenceOrder?.Quatation?.ModelUid,
-                referenceQuotation?.ModelUid,
-                orders.Select(o => o.Quatation?.ModelUid),
-                quotationCandidates.Select(quatation => quatation.ModelUid)));
+        var modelUid = await ResolveModelUidAsync(car.Model, brandUid, cancellationToken);
+
+        // ---------- 客戶資訊整理區 ----------
+        // 依序優先級：工單客戶 > 估價單客戶
+        CarPlateRelatedCustomerInfo? primaryCustomer = null;
+
+        // 優先從工單取得客戶（工單為最新、最直接的客戶紀錄來源）
+        var referenceOrderForCustomer = orders.FirstOrDefault(o => !string.IsNullOrEmpty(o.CustomerUid));
+        if (referenceOrderForCustomer != null)
+        {
+            primaryCustomer = MapToRelatedCustomerInfo(referenceOrderForCustomer, isTemporaryCustomer: false);
+        }
+        else
+        {
+            // 若工單無客戶資訊，嘗試從估價單獲取
+            var referenceQuotationForCustomer = quotationCandidates
+                .FirstOrDefault(q => !string.IsNullOrEmpty(q.CustomerUid));
+            if (referenceQuotationForCustomer != null)
+            {
+                var isTemp = referenceQuotationForCustomer.IsTemporaryCustomer ?? false;
+                primaryCustomer = MapToRelatedCustomerInfo(referenceQuotationForCustomer, isTemporaryCustomer: isTemp);
+            }
+        }
         
         var response = new CarPlateRecognitionResponse
         {
@@ -170,6 +182,7 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             HasMaintenanceHistory = hasMaintenanceRecords,
             Milage = car?.Milage,
             CarRemark = car?.CarRemark,
+            Customer = primaryCustomer,
             Message = hasMaintenanceRecords
                 ? "查詢成功，已列出歷史維修資料。"
                 : car is null
@@ -320,40 +333,10 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
                 orders.Select(o => o.Quatation?.CarUid),
                 quotationCandidates.Select(quatation => quatation.CarUid)));
 
-        // 品牌與車型識別碼僅存於估價資料，因此收集所有工單估價資訊後挑選第一筆有效值。
-        var brandUid = ResolveFirstValue(
-            BuildCandidateList(
-                referenceOrder?.Quatation?.BrandUid,
-                referenceQuotation?.BrandUid,
-                orders.Select(o => o.Quatation?.BrandUid),
-                quotationCandidates.Select(quatation => quatation.BrandUid)));
+        // 嘗試根據品牌名稱從資料庫查詢
+        var brandUid = await ResolveBrandUidAsync(car.Brand, cancellationToken);
 
-        var modelUid = ResolveFirstValue(
-            BuildCandidateList(
-                referenceOrder?.Quatation?.ModelUid,
-                referenceQuotation?.ModelUid,
-                orders.Select(o => o.Quatation?.ModelUid),
-                quotationCandidates.Select(quatation => quatation.ModelUid)));
-
-        var brand = ResolveFirstValue(
-            BuildCandidateList(
-                car?.Brand,
-                referenceOrder?.Brand,
-                referenceOrder?.Quatation?.Brand,
-                referenceQuotation?.Brand,
-                orders.Select(order => order.Brand),
-                orders.Select(order => order.Quatation?.Brand),
-                quotationCandidates.Select(quatation => quatation.Brand)));
-
-        var model = ResolveFirstValue(
-            BuildCandidateList(
-                car?.Model,
-                referenceOrder?.Model,
-                referenceOrder?.Quatation?.Model,
-                referenceQuotation?.Model,
-                orders.Select(order => order.Model),
-                orders.Select(order => order.Quatation?.Model),
-                quotationCandidates.Select(quatation => quatation.Model)));
+        var modelUid = await ResolveModelUidAsync(car.Model, brandUid, cancellationToken);
 
         var color = ResolveFirstValue(
             BuildCandidateList(
@@ -419,8 +402,8 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             CarUid = carUid,
             BrandUid = brandUid,
             ModelUid = modelUid,
-            Brand = brand,
-            Model = model,
+            Brand = car?.Brand,
+            Model = car?.Model,
             Color = color,
             HasMaintenanceRecords = recordItems.Count > 0,
             Milage = milage,
@@ -858,6 +841,55 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
             WorkDate = order.WorkDate,
             Remark = order.Remark
         };
+    }
+
+    /// <summary>
+    /// 根據品牌名稱從資料庫查詢對應的品牌 UID。
+    /// </summary>
+    /// <param name="brandName">品牌名稱。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>若找到對應品牌則回傳 UID，否則回傳 null。</returns>
+    private async Task<string?> ResolveBrandUidAsync(string? brandName, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(brandName))
+        {
+            return null;
+        }
+
+        var brand = await _dbContext.Brands
+            .AsNoTracking()
+            .FirstOrDefaultAsync(b => b.BrandName == brandName, cancellationToken);
+
+        return brand?.BrandUid;
+    }
+
+    /// <summary>
+    /// 根據車型名稱與品牌 UID 從資料庫查詢對應的車型 UID。
+    /// </summary>
+    /// <param name="modelName">車型名稱。</param>
+    /// <param name="brandUid">所屬品牌的 UID。</param>
+    /// <param name="cancellationToken">取消權杖。</param>
+    /// <returns>若找到對應車型則回傳 UID，否則回傳 null。</returns>
+    private async Task<string?> ResolveModelUidAsync(string? modelName, string? brandUid, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            return null;
+        }
+
+        var query = _dbContext.Models
+            .AsNoTracking()
+            .Where(m => m.ModelName == modelName);
+
+        // 如果有品牌 UID，則進行精準比對；否則不加限制（相容舊資料）
+        if (!string.IsNullOrWhiteSpace(brandUid))
+        {
+            query = query.Where(m => m.BrandUid == brandUid);
+        }
+
+        var model = await query.FirstOrDefaultAsync(cancellationToken);
+
+        return model?.ModelUid;
     }
 
     /// <summary>
