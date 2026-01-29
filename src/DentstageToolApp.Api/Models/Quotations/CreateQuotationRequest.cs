@@ -511,25 +511,9 @@ public class QuotationPhotoRequestCollection
 public class CreateQuotationCarInfo
 {
     /// <summary>
-    /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌等細節。
+    /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌、型號、里程數等完整資訊。
     /// </summary>
     public string? CarUid { get; set; }
-
-    /// <summary>
-    /// 車輛品牌識別碼（選填），若提供將同步寫入估價單的 BrandUID 欄位。
-    /// </summary>
-    public string? BrandUid { get; set; }
-
-    /// <summary>
-    /// 車輛型號識別碼（選填），若提供將同步寫入估價單的 ModelUID 欄位。
-    /// </summary>
-    public string? ModelUid { get; set; }
-
-    /// <summary>
-    /// 車輛里程數（公里），若現場測量有新數值可一併回傳。
-    /// </summary>
-    [Range(0, int.MaxValue, ErrorMessage = "里程數必須為不小於 0 的整數。")]
-    public int? Mileage { get; set; }
 }
 
 /// <summary>
@@ -587,6 +571,32 @@ public class QuotationCarInfo
 /// 建立估價單時僅需提供客戶唯一識別碼的精簡輸入結構。
 /// </summary>
 public class CreateQuotationCustomerInfo
+{
+    /// <summary>
+    /// 客戶唯一識別碼，透過此欄位自動帶入客戶姓名與聯絡資訊。
+    /// </summary>
+    public string? CustomerUid { get; set; }
+}
+
+/// <summary>
+/// 編輯估價單時僅需提供車輛唯一識別碼的精簡輸入結構。
+/// 確保從前端接收的資料只含有 CarUid，其他資訊由後端從資料庫查詢補齊，
+/// 避免前端直接修改車牌、品牌等基本資訊。
+/// </summary>
+public class UpdateQuotationCarInfo
+{
+    /// <summary>
+    /// 車輛唯一識別碼，透過此欄位自動帶入車牌、品牌、型號、里程數等完整資訊。
+    /// </summary>
+    public string? CarUid { get; set; }
+}
+
+/// <summary>
+/// 編輯估價單時僅需提供客戶唯一識別碼的精簡輸入結構。
+/// 確保從前端接收的資料只含有 UID，其他資訊由後端從資料庫查詢補齊，
+/// 避免前端直接修改客戶姓名、電話等基本資訊。
+/// </summary>
+public class UpdateQuotationCustomerInfo
 {
     /// <summary>
     /// 客戶唯一識別碼，透過此欄位自動帶入客戶姓名與聯絡資訊。
