@@ -483,14 +483,18 @@ public class QuotationService : IQuotationService
         // 提取臨時客戶標記
         var isTemporaryCustomer = storeInfo.IsTemporaryCustomer;
 
-        // 僅透過技師識別碼即可反查門市資料，減少前端傳遞欄位。
-        var technicianEntity = await GetTechnicianEntityAsync(storeInfo.EstimationTechnicianUid, cancellationToken);
-        if (technicianEntity is null)
+        // 僅透過技師識別碼即可反查門市資料，估價技師為選填，若不提供則無法自動補齊門市資訊。
+        var estimationTechnicianUid = NormalizeOptionalText(storeInfo.EstimationTechnicianUid);
+        var technicianEntity = estimationTechnicianUid is not null
+            ? await GetTechnicianEntityAsync(estimationTechnicianUid, cancellationToken)
+            : null;
+        
+        if (estimationTechnicianUid is not null && technicianEntity is null)
         {
             throw new QuotationManagementException(HttpStatusCode.BadRequest, "請選擇有效的估價技師。");
         }
 
-        // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊。
+        // 透過技師關聯的門市主檔，自動補齊店鋪名稱等資訊（若技師存在）。
         var operatorStoreUid = NormalizeOptionalText(operatorContext.StoreUid);
         var storeEntity = await GetStoreEntityAsync(operatorStoreUid, technicianEntity, cancellationToken);
         var storeUid = NormalizeRequiredText(
@@ -513,8 +517,8 @@ public class QuotationService : IQuotationService
         }
 
         var operatorLabel = NormalizeOperator(operatorContext.OperatorName);
-        var estimatorUid = NormalizeRequiredText(technicianEntity.TechnicianUid, "估價技師識別碼");
-        var estimatorName = NormalizeOptionalText(technicianEntity.TechnicianName) ?? operatorLabel;
+        var estimatorUid = NormalizeOptionalText(technicianEntity?.TechnicianUid);
+        var estimatorName = NormalizeOptionalText(technicianEntity?.TechnicianName);
         var creatorTechnicianEntity = await GetTechnicianEntityAsync(storeInfo.CreatorTechnicianUid, cancellationToken);
         var creatorUid = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianUid) ?? estimatorUid;
         var creatorName = NormalizeOptionalText(creatorTechnicianEntity?.TechnicianName) ?? estimatorName;

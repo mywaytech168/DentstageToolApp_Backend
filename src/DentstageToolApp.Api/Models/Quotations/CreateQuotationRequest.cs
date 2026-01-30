@@ -49,9 +49,9 @@ public class CreateQuotationStoreInfo
 {
     /// <summary>
     /// 估價技師識別碼，改為以 UID 字串傳遞，可自動帶出所屬門市與技師名稱。
+    /// 選填欄位，若未提供則無法自動帶出門市與技師資訊。
     /// （後端仍保留舊欄位，待前端改版後可進一步移除。）
     /// </summary>
-    [Required(ErrorMessage = "請選擇估價技師。")]
     [StringLength(100, MinimumLength = 1, ErrorMessage = "請選擇有效的估價技師。")]
     public string? EstimationTechnicianUid { get; set; }
 
