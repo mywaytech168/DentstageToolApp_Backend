@@ -141,9 +141,10 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
         }
 
         // 嘗試根據品牌名稱從資料庫查詢
-        var brandUid = await ResolveBrandUidAsync(car.Brand, cancellationToken);
+        // 使用安全導航運算子 (?.) 避免 car 為 null 時拋出 NullReferenceException
+        var brandUid = await ResolveBrandUidAsync(car?.Brand, cancellationToken);
 
-        var modelUid = await ResolveModelUidAsync(car.Model, brandUid, cancellationToken);
+        var modelUid = await ResolveModelUidAsync(car?.Model, brandUid, cancellationToken);
 
         // ---------- 客戶資訊整理區 ----------
         // 依序優先級：工單客戶 > 估價單客戶
@@ -334,9 +335,10 @@ public class CarPlateRecognitionService : ICarPlateRecognitionService
                 quotationCandidates.Select(quatation => quatation.CarUid)));
 
         // 嘗試根據品牌名稱從資料庫查詢
-        var brandUid = await ResolveBrandUidAsync(car.Brand, cancellationToken);
+        // 使用安全導航運算子 (?.) 避免 car 為 null 時拋出 NullReferenceException
+        var brandUid = await ResolveBrandUidAsync(car?.Brand, cancellationToken);
 
-        var modelUid = await ResolveModelUidAsync(car.Model, brandUid, cancellationToken);
+        var modelUid = await ResolveModelUidAsync(car?.Model, brandUid, cancellationToken);
 
         var color = ResolveFirstValue(
             BuildCandidateList(
