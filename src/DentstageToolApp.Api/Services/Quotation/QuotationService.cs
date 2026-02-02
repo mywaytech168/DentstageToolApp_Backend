@@ -4258,11 +4258,6 @@ public class QuotationService : IQuotationService
                     damage.DisplayDentStatusOther = photo.PhotoShapeOther;
                 }
 
-                if (string.IsNullOrWhiteSpace(damage.DisplayDescription) && !string.IsNullOrWhiteSpace(photo.Comment))
-                {
-                    damage.DisplayDescription = photo.Comment;
-                }
-
                 if (!damage.DisplayEstimatedAmount.HasValue && photo.Cost.HasValue)
                 {
                     damage.DisplayEstimatedAmount = photo.Cost;
